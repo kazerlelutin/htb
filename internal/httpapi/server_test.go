@@ -23,8 +23,8 @@ func TestPublicPages(t *testing.T) {
 		if path == "/downloads" && !strings.Contains(w.Body.String(), "x=1&amp;y=2") {
 			t.Fatalf("download link is not escaped: %s", w.Body.String())
 		}
-		if path == "/downloads" && !strings.Contains(w.Body.String(), `-C "$HOME/.local/bin" htb`) {
-			t.Fatalf("download page does not install htb in the user PATH: %s", w.Body.String())
+		if path == "/downloads" && !strings.Contains(w.Body.String(), "/latest/download/install.sh") {
+			t.Fatalf("download page does not link to the installer: %s", w.Body.String())
 		}
 	}
 }
