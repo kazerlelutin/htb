@@ -23,6 +23,34 @@ type Server struct {
 	releaseURL   string
 	log          *slog.Logger
 }
+
+type commandReference struct {
+	Group, Syntax, Description string
+}
+
+var downloadCommands = []commandReference{
+	{"Help", "htb help [COMMAND]", "Show the full local guide. Pass a command path such as 'ticket create' for its options and examples."},
+	{"General", "htb version", "Show the installed CLI version when reporting an issue or checking an upgrade."},
+	{"Connection", "htb config set-server URL", "Save the HTB server URL used by all subsequent commands on this computer."},
+	{"Connection", "htb auth login [--issuer URL --client-id ID --audience ID]", "Open the browser sign-in flow. Normally the server provides the connection settings; the optional flags are only for an advanced manual setup."},
+	{"Connection", "htb auth status", "Show whether you are connected, the projects you can access, and the project currently selected."},
+	{"Projects", "htb project list", "List projects you can access. The star marks the current project."},
+	{"Projects", "htb project create --key KEY --name NAME [--description TEXT]", "Create a project and select it immediately. KEY identifies the project in commands and ticket references such as HTB-1; lowercase input is converted to uppercase."},
+	{"Projects", "htb project use KEY", "Select the project used when a command does not include --project."},
+	{"Roadmap", "htb feature create --key KEY --name NAME [--project KEY] [--description TEXT] [--due-date YYYY-MM-DD]", "Create a roadmap feature. It uses the current project unless --project is provided; --due-date is optional."},
+	{"Tickets", "htb ticket create --title TITLE [--type user_story|technical_task|bug|incident] [--project KEY] [--parent REF] [--related REF] [--feature KEY] [--description TEXT] [--priority low|normal|high|urgent] [--label TAG]", "Create a ticket in the current project by default. A technical task must use --parent with a user-story reference; repeat --label to attach several labels."},
+	{"Tickets", "htb ticket list [--project KEY] [--feature KEY] [--tree] [--json|--csv]", "List tickets from the current project. Filter by feature, include child tickets with --tree, or select JSON/CSV for scripts."},
+	{"Tickets", "htb ticket show REF", "Display one ticket, including its status, relationships, labels, and current version."},
+	{"Tickets", "htb ticket update --version N [--title TITLE] [--description TEXT] [--status open|in_progress|review|blocked|done] [--priority low|normal|high|urgent] [--feature KEY] REF", "Update a ticket safely. Use the version shown by 'htb ticket show REF' so concurrent changes are not overwritten."},
+	{"Tickets", "htb ticket comment REF TEXT", "Add a comment to a ticket."},
+	{"Tickets", "htb ticket claim REF", "Assign a ticket to yourself and move an open ticket to in progress."},
+	{"Tickets", "htb ticket release REF", "Remove your claim from a ticket so another person can take it."},
+	{"Tickets", "htb ticket versions REF", "List the saved revisions of a ticket."},
+	{"Tickets", "htb ticket restore --version N REF REVISION", "Restore a saved revision only when the ticket is still at version N, preventing accidental overwrites."},
+	{"Invitations", "htb invite create [--project KEY] [--role read|write|admin] [--expires-at RFC3339]", "Create a shareable invitation for the current project or --project. Choose the member role and an expiry time."},
+	{"Invitations", "htb invite accept CODE", "Accept an invitation code and gain access to its project."},
+}
+
 type actorKey struct{}
 type principalKey struct{}
 
@@ -68,7 +96,15 @@ func (s *Server) downloads(w http.ResponseWriter, r *http.Request) {
 		url = "#"
 	}
 	installationURL := url + "/latest/download/install.sh"
-	fmt.Fprintf(w, `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Download HTB</title><style>body{font:16px system-ui,sans-serif;max-width:900px;margin:2rem auto;padding:0 1rem;line-height:1.5}pre{background:#f4f4f4;padding:1rem;overflow:auto}table{border-collapse:collapse;width:100%%}th,td{border-bottom:1px solid #ddd;padding:.55rem;text-align:left}code{white-space:nowrap}</style></head><body><main><h1>Download HTB</h1><h2>Install on Linux</h2><p>This command installs the CLI, verifies its checksum, and configures your user PATH:</p><pre>curl -fsSL %s | sh</pre><p>Open a new terminal, then run <code>htb auth login</code>.</p><p><a href="%s">Archives, checksums, and all GitHub releases</a></p><h2>Command reference</h2><p>Use <code>htb help</code> or <code>htb help &lt;command&gt;</code> for complete local help.</p><table><caption>All supported commands</caption><thead><tr><th>Command</th><th>Purpose</th></tr></thead><tbody><tr><td><code>htb version</code></td><td>Show the CLI version.</td></tr><tr><td><code>htb config set-server URL</code></td><td>Set the HTB server.</td></tr><tr><td><code>htb auth login [--issuer URL --client-id ID --audience ID]</code></td><td>Sign in.</td></tr><tr><td><code>htb auth status</code></td><td>Show connection and current project.</td></tr><tr><td><code>htb project list</code></td><td>List accessible projects.</td></tr><tr><td><code>htb project create --key KEY --name NAME [--description TEXT]</code></td><td>Create a project. Keys are normalized to uppercase.</td></tr><tr><td><code>htb project use KEY</code></td><td>Set the current project.</td></tr><tr><td><code>htb feature create --key KEY --name NAME [--project KEY] [--description TEXT] [--due-date YYYY-MM-DD]</code></td><td>Create a roadmap feature.</td></tr><tr><td><code>htb ticket create --title TITLE [--type user_story|technical_task|bug|incident] [--project KEY] [--parent REF] [--related REF] [--feature KEY] [--description TEXT] [--priority low|normal|high|urgent] [--label TAG]</code></td><td>Create a ticket; repeat <code>--label</code> as needed.</td></tr><tr><td><code>htb ticket list [--project KEY] [--feature KEY] [--tree] [--json|--csv]</code></td><td>List tickets.</td></tr><tr><td><code>htb ticket show REF</code></td><td>Show a ticket.</td></tr><tr><td><code>htb ticket update --version N [--title TITLE] [--description TEXT] [--status open|in_progress|review|blocked|done] [--priority low|normal|high|urgent] [--feature KEY] REF</code></td><td>Update a ticket.</td></tr><tr><td><code>htb ticket comment REF TEXT</code></td><td>Add a comment.</td></tr><tr><td><code>htb ticket claim REF</code> / <code>htb ticket release REF</code></td><td>Claim or release a ticket.</td></tr><tr><td><code>htb ticket versions REF</code></td><td>List ticket revisions.</td></tr><tr><td><code>htb ticket restore --version N REF REVISION</code></td><td>Restore a revision.</td></tr><tr><td><code>htb invite create [--project KEY] [--role read|write|admin] [--expires-at RFC3339]</code></td><td>Create an invitation.</td></tr><tr><td><code>htb invite accept CODE</code></td><td>Accept an invitation.</td></tr></tbody></table></main></body></html>`, htmlText(installationURL), htmlText(url))
+	renderDownloadsPage(w, installationURL, url)
+}
+
+func renderDownloadsPage(w http.ResponseWriter, installationURL, releaseURL string) {
+	fmt.Fprintf(w, `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Download HTB</title><style>body{font:16px system-ui,sans-serif;max-width:1100px;margin:2rem auto;padding:0 1rem;line-height:1.5}pre{background:#f4f4f4;padding:1rem;overflow:auto}table{border-collapse:collapse;width:100%%}th,td{border-bottom:1px solid #ddd;padding:.75rem;text-align:left;vertical-align:top}code{white-space:normal;overflow-wrap:anywhere}</style></head><body><main><h1>Download HTB</h1><h2>Install on Linux</h2><p>This command installs the CLI, verifies its checksum, and configures your user PATH:</p><pre>curl -fsSL %s | sh</pre><p>Open a new terminal, then run <code>htb auth login</code>.</p><p><a href="%s">Archives, checksums, and all GitHub releases</a></p><h2>Complete command guide</h2><p>Each command below explains when to use it and how its options affect the result. Run <code>htb help</code> or <code>htb help &lt;command&gt;</code> for the same guidance in the terminal.</p><table><caption>All supported commands</caption><thead><tr><th>Area</th><th>Command</th><th>How to use it</th></tr></thead><tbody>`, htmlText(installationURL), htmlText(releaseURL))
+	for _, command := range downloadCommands {
+		fmt.Fprintf(w, "<tr><td>%s</td><td><code>%s</code></td><td>%s</td></tr>", htmlText(command.Group), htmlText(command.Syntax), htmlText(command.Description))
+	}
+	fmt.Fprint(w, "</tbody></table></main></body></html>")
 }
 
 func (s *Server) authenticated(next http.Handler) http.Handler {

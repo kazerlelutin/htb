@@ -3,7 +3,7 @@ Feature: Downloads page
     When a visitor opens "/downloads"
     Then the page is in English
     And it provides installation instructions
-    And it lists every supported CLI command and its syntax
+    And it explains when to use every command and its important options
 
   Scenario: The public page avoids irrelevant server implementation details
     When a visitor opens "/downloads"
