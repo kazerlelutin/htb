@@ -28,7 +28,7 @@ func TestPublicPages(t *testing.T) {
 		}
 		if path == "/downloads" {
 			for _, text := range []string{
-				`lang="en"`, "Command reference", "htb version", "htb config set-server URL", "htb auth login", "htb auth status",
+				`lang="en"`, "Complete command guide", "How to use it", "htb version", "htb config set-server URL", "htb auth login", "htb auth status",
 				"htb project list", "htb project create --key KEY --name NAME", "htb project use KEY", "htb feature create --key KEY --name NAME",
 				"htb ticket create --title TITLE", "htb ticket list", "htb ticket show REF", "htb ticket update --version N", "htb ticket comment REF TEXT", "htb ticket claim REF", "htb ticket versions REF", "htb ticket restore --version N REF REVISION",
 				"htb invite create", "htb invite accept CODE",
@@ -39,6 +39,13 @@ func TestPublicPages(t *testing.T) {
 			}
 			if strings.Contains(w.Body.String(), "Server version") || strings.Contains(w.Body.String(), "v1.2.3") {
 				t.Fatalf("download page exposes server version: %s", w.Body.String())
+			}
+			for _, explanation := range []string{
+				"Pass a command path", "KEY identifies the project", "A technical task must use --parent", "concurrent changes are not overwritten", "Choose the member role and an expiry time",
+			} {
+				if !strings.Contains(w.Body.String(), explanation) {
+					t.Fatalf("download page is missing an explanation: %q", explanation)
+				}
 			}
 		}
 	}
