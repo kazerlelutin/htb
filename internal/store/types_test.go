@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,13 @@ import (
 
 	"github.com/kazerlelutin/htb/internal/domain"
 )
+
+func TestCreateProjectRejectsInvalidKeyBeforeDatabaseAccess(t *testing.T) {
+	err := (&Store{}).CreateProject(context.Background(), Actor{}, Project{Key: "not-valid", Name: "Example"})
+	if err == nil || !strings.Contains(err.Error(), "project key") {
+		t.Fatalf("got %v", err)
+	}
+}
 
 func TestTicketSerializesDistinctRelationshipFields(t *testing.T) {
 	parent, related, feature := "SITE-1", "SITE-2", "onboarding"

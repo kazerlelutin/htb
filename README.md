@@ -6,20 +6,14 @@ identité Zitadel déjà connectée et gère les projets et leurs droits.
 
 ## Installer la CLI sous Linux
 
-L'archive contient les binaires, mais ne les installe pas automatiquement dans
-le `PATH`. Pour une installation utilisateur (sans `sudo`) :
+Une seule commande installe la CLI dans le `PATH` utilisateur, sans `sudo` :
 
 ```bash
-mkdir -p "$HOME/.local/bin"
-curl -fsSL https://github.com/kazerlelutin/htb/releases/latest/download/htb_linux_amd64.tar.gz \
-  | tar -xz -C "$HOME/.local/bin" htb
-export PATH="$HOME/.local/bin:$PATH"
-htb version
+curl -fsSL https://github.com/kazerlelutin/htb/releases/latest/download/install.sh | sh
 ```
 
-Pour conserver ce `PATH` avec Bash, ajouter
-`export PATH="$HOME/.local/bin:$PATH"` dans `~/.bashrc`, puis ouvrir un
-nouveau terminal.
+L'installateur vérifie le checksum, installe `htb` dans `~/.local/bin` et
+configure Bash ou Zsh si nécessaire. Ouvrir un nouveau terminal ensuite.
 
 ## Le parcours utilisateur
 

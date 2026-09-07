@@ -16,6 +16,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/kazerlelutin/htb/internal/domain"
 )
 
 var version = "dev"
@@ -101,50 +103,81 @@ func usage() {
 
 func isHelpFlag(value string) bool { return value == "--help" || value == "-h" }
 
-func printHelp(parts []string) {
+func printHelp(parts []string) { fmt.Print(helpText(parts)) }
+
+func helpText(parts []string) string {
 	command := strings.Join(parts, " ")
 	switch command {
 	case "", "htb":
-		fmt.Print(`HTB — Headless Ticket Board
+		return `HTB — Headless Ticket Board
 
-Usage: htb <commande> [options]
+Usage: htb <command> [options]
 
-Premiers pas:
-  htb config set-server URL       Configure le serveur HTB
-  htb auth login                  Ouvre la connexion Zitadel
-  htb auth status                 Affiche la connexion et le projet courant
+Getting started:
+  htb config set-server URL       Set the HTB server
+  htb auth login                  Sign in through the browser
+  htb auth status                 Show connection and current project
 
-Commandes:
-  project list | create | use     Gérer les projets
-  feature create                  Créer une fonctionnalité de roadmap
-  ticket create | list | show     Créer, parcourir ou consulter les tickets
-  ticket update | comment         Modifier ou commenter un ticket
-  ticket claim | release          Prendre ou libérer un ticket
-  ticket versions | restore       Consulter ou restaurer l'historique
-  invite create | accept          Inviter ou rejoindre un projet
+Commands:
+  version                         Show the CLI version
+  project list | create | use     Manage projects
+  feature create                  Create a roadmap feature
+  ticket create | list | show     Create, browse, or view tickets
+  ticket update | comment         Update or comment on a ticket
+  ticket claim | release          Claim or release a ticket
+  ticket versions | restore       View or restore history
+  invite create | accept          Invite or join a project
 
-Utilisez « htb help ticket create » ou « htb ticket create --help » pour le détail.
-`)
-	case "config":
-		fmt.Println("Usage: htb config set-server URL\n\nExemple: htb config set-server https://tickets.example.org")
+Use "htb help ticket create" or "htb ticket create --help" for command details.
+`
+	case "version":
+		return "Usage: htb version\n\nShow the installed CLI version.\n"
+	case "config", "config set-server":
+		return "Usage: htb config set-server URL\n\nSet the HTB server URL. Example: htb config set-server https://tickets.example.org\n"
 	case "auth":
-		fmt.Println("Usage: htb auth {login|status}\n\nlogin ouvre Zitadel dans le navigateur ; status affiche l'identité et le projet courant.")
+		return "Usage:\n  htb auth login [--issuer URL --client-id ID --audience ID]\n  htb auth status\n\nSign in or show your connection and current project.\n"
+	case "auth login":
+		return "Usage: htb auth login [--issuer URL --client-id ID --audience ID]\n\nOpen the browser sign-in flow. Advanced options override the server-provided connection settings.\n"
+	case "auth status":
+		return "Usage: htb auth status\n\nShow whether you are connected, your accessible projects, and the current project.\n"
 	case "project":
-		fmt.Println("Usage:\n  htb project list\n  htb project use KEY\n  htb project create --key KEY --name NAME [--description TEXTE]")
+		return "Usage:\n  htb project list\n  htb project use KEY\n  htb project create --key KEY --name NAME [--description TEXT]\n\nA project key is the short identifier used in commands and ticket references, for example HTB-1. Input is normalized to uppercase. It must be 2 to 20 characters, start with a letter, and contain only letters, digits, or underscores.\n"
+	case "project list":
+		return "Usage: htb project list\n\nList projects you can access.\n"
+	case "project use":
+		return "Usage: htb project use KEY\n\nSet the current project used by commands that do not specify --project.\n"
+	case "project create":
+		return "Usage: htb project create --key KEY --name NAME [--description TEXT]\n\nCreate a project and make it current. A project key is the short identifier used in commands and ticket references, for example HTB-1. Input is normalized to uppercase. It must be 2 to 20 characters, start with a letter, and contain only letters, digits, or underscores.\n"
 	case "feature", "feature create":
-		fmt.Println("Usage: htb feature create --key KEY --name NAME [--project KEY] [--description TEXTE] [--due-date YYYY-MM-DD]\n\nExemple: htb feature create --key newsletter --name Newsletter --due-date 2026-09-30")
+		return "Usage: htb feature create --key KEY --name NAME [--project KEY] [--description TEXT] [--due-date YYYY-MM-DD]\n\nCreate a roadmap feature. Example: htb feature create --key newsletter --name Newsletter --due-date 2026-09-30\n"
 	case "ticket":
-		fmt.Println("Usage:\n  htb ticket create [options]\n  htb ticket list [--project KEY] [--feature KEY] [--tree] [--json|--csv]\n  htb ticket show REF\n  htb ticket update --version N [options] REF\n  htb ticket comment REF TEXTE\n  htb ticket claim|release REF\n  htb ticket versions REF\n  htb ticket restore --version N REF REVISION")
+		return "Usage:\n  htb ticket create --title TITLE [options]\n  htb ticket list [--project KEY] [--feature KEY] [--tree] [--json|--csv]\n  htb ticket show REF\n  htb ticket update --version N [options] REF\n  htb ticket comment REF TEXT\n  htb ticket claim REF | htb ticket release REF\n  htb ticket versions REF\n  htb ticket restore --version N REF REVISION\n"
 	case "ticket create":
-		fmt.Println("Usage: htb ticket create --title TITRE [--type user_story|technical_task|bug|incident] [--project KEY] [--parent REF] [--feature KEY] [--priority low|normal|high|urgent] [--label TAG]\n\nUne tâche technique requiert --parent US-REF. Les labels peuvent être répétés.")
-	case "ticket update":
-		fmt.Println("Usage: htb ticket update --version N [--title TITRE] [--description TEXTE] [--status open|in_progress|review|blocked|done] [--priority PRIORITÉ] [--feature KEY] REF\n\nLa version affichée par « htb ticket show REF » évite d'écraser une modification concurrente. L'état d'une US est calculé depuis ses tâches.")
+		return "Usage: htb ticket create --title TITLE [--type user_story|technical_task|bug|incident] [--project KEY] [--parent REF] [--related REF] [--feature KEY] [--description TEXT] [--priority low|normal|high|urgent] [--label TAG]\n\nA technical task requires --parent STORY-REF. Repeat --label to add multiple labels.\n"
 	case "ticket list":
-		fmt.Println("Usage: htb ticket list [--project KEY] [--feature KEY] [--tree] [--json|--csv]\n\nSans option, la sortie est adaptée au terminal. --json et --csv sont destinés aux scripts.")
+		return "Usage: htb ticket list [--project KEY] [--feature KEY] [--tree] [--json|--csv]\n\nTerminal output is used by default. Use --json or --csv for scripts.\n"
+	case "ticket show":
+		return "Usage: htb ticket show REF\n\nShow a ticket and its current version.\n"
+	case "ticket update":
+		return "Usage: htb ticket update --version N [--title TITLE] [--description TEXT] [--status open|in_progress|review|blocked|done] [--priority low|normal|high|urgent] [--feature KEY] REF\n\nUse the version from " + `"htb ticket show REF"` + " to avoid overwriting a concurrent update. A user story status is calculated from its tasks.\n"
+	case "ticket comment":
+		return "Usage: htb ticket comment REF TEXT\n\nAdd a comment to a ticket.\n"
+	case "ticket claim":
+		return "Usage: htb ticket claim REF\n\nClaim a ticket for yourself.\n"
+	case "ticket release":
+		return "Usage: htb ticket release REF\n\nRelease your claim on a ticket.\n"
+	case "ticket versions":
+		return "Usage: htb ticket versions REF\n\nList a ticket's revisions.\n"
+	case "ticket restore":
+		return "Usage: htb ticket restore --version N REF REVISION\n\nRestore a revision when the ticket is still at version N.\n"
 	case "invite":
-		fmt.Println("Usage:\n  htb invite create [--project KEY] [--role read|write|admin] [--expires-at RFC3339]\n  htb invite accept CODE")
+		return "Usage:\n  htb invite create [--project KEY] [--role read|write|admin] [--expires-at RFC3339]\n  htb invite accept CODE\n"
+	case "invite create":
+		return "Usage: htb invite create [--project KEY] [--role read|write|admin] [--expires-at RFC3339]\n\nCreate an invitation for a project.\n"
+	case "invite accept":
+		return "Usage: htb invite accept CODE\n\nAccept a project invitation.\n"
 	default:
-		fmt.Printf("Aide indisponible pour « htb %s ». Lancez « htb help ».\n", command)
+		return fmt.Sprintf("Help is unavailable for \"htb %s\". Run \"htb help\".\n", command)
 	}
 }
 func configCommand(args []string) error {
@@ -166,9 +199,9 @@ func authCommand(args []string) error {
 }
 func deviceLogin(args []string) error {
 	fs := flag.NewFlagSet("auth login", flag.ContinueOnError)
-	issuer := fs.String("issuer", "", "Zitadel issuer")
-	clientID := fs.String("client-id", "", "Zitadel Device Code client ID")
-	audience := fs.String("audience", "", "HTB Zitadel project ID")
+	issuer := fs.String("issuer", "", "sign-in issuer URL")
+	clientID := fs.String("client-id", "", "device client ID")
+	audience := fs.String("audience", "", "HTB audience ID")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -201,7 +234,7 @@ func deviceLogin(args []string) error {
 		*audience = c.Audience
 	}
 	if *issuer == "" || *clientID == "" || *audience == "" {
-		return errors.New("--issuer, --client-id and --audience are required on first login")
+		return errors.New("connection settings are unavailable; configure the server or provide --issuer, --client-id, and --audience")
 	}
 	var discovery struct {
 		DeviceAuthorizationEndpoint string `json:"device_authorization_endpoint"`
@@ -231,9 +264,9 @@ func deviceLogin(args []string) error {
 	}
 	if device.VerificationURIComplete != "" {
 		if err := openBrowser(device.VerificationURIComplete); err == nil {
-			fmt.Fprintln(os.Stderr, "Ouverture de la page de connexion Zitadel…")
+			fmt.Fprintln(os.Stderr, "Opening sign-in page…")
 		} else {
-			fmt.Fprintln(os.Stderr, "Ouvrez cette adresse :", device.VerificationURIComplete)
+			fmt.Fprintln(os.Stderr, "Open this URL:", device.VerificationURIComplete)
 		}
 	} else {
 		fmt.Fprintln(os.Stderr, "Open:", device.VerificationURI, "and enter", device.UserCode)
@@ -332,12 +365,12 @@ func authStatus() error {
 	if me.Superadmin {
 		label += " (superadmin)"
 	}
-	fmt.Printf("Connecté : %s\nServeur : %s\n", label, c.Server)
+	fmt.Printf("Connected: %s\nServer: %s\n", label, c.Server)
 	if len(response.Projects) == 0 {
-		fmt.Println("Aucun projet accessible. Créez-en un avec ‘htb project create’ ou rejoignez-en un avec ‘htb invite accept CODE’. ")
+		fmt.Println("No accessible projects. Create one with 'htb project create' or join one with 'htb invite accept CODE'.")
 		return nil
 	}
-	fmt.Println("Projets :")
+	fmt.Println("Projects:")
 	for _, project := range response.Projects {
 		marker := " "
 		if project.Key == c.CurrentProject {
@@ -346,7 +379,7 @@ func authStatus() error {
 		fmt.Printf("%s %s — %s\n", marker, project.Key, project.Name)
 	}
 	if c.CurrentProject == "" {
-		fmt.Printf("Projet courant non défini. Utilisez ‘htb project use %s’.\n", response.Projects[0].Key)
+		fmt.Printf("No current project. Run 'htb project use %s'.\n", response.Projects[0].Key)
 	}
 	return nil
 }
@@ -415,7 +448,7 @@ func projectCommand(args []string) error {
 				if err := save(c); err != nil {
 					return err
 				}
-				fmt.Println("Projet courant :", wanted)
+				fmt.Println("Current project:", wanted)
 				return nil
 			}
 		}
@@ -429,14 +462,14 @@ func projectCommand(args []string) error {
 			return err
 		}
 		if len(response.Projects) == 0 {
-			fmt.Println("Aucun projet accessible.")
+			fmt.Println("No accessible projects.")
 			return nil
 		}
 		c, err := load()
 		if err != nil {
 			return err
 		}
-		fmt.Println("Projets accessibles :")
+		fmt.Println("Accessible projects:")
 		for _, project := range response.Projects {
 			marker := " "
 			if project.Key == c.CurrentProject {
@@ -456,20 +489,35 @@ func projectCommand(args []string) error {
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
+	normalizedKey, err := validateProjectCreation(*key, *name)
+	if err != nil {
+		return err
+	}
 	var created projectView
-	if err := call("POST", "/api/v1/projects", map[string]string{"key": *key, "name": *name, "description": *description}, &created); err != nil {
+	if err := call("POST", "/api/v1/projects", map[string]string{"key": normalizedKey, "name": *name, "description": *description}, &created); err != nil {
 		return err
 	}
 	c, err := load()
 	if err != nil {
 		return err
 	}
-	c.CurrentProject = strings.ToUpper(*key)
+	c.CurrentProject = normalizedKey
 	if err := save(c); err != nil {
 		return err
 	}
-	fmt.Printf("Projet %s créé : %s. Il est maintenant le projet courant.\n", created.Key, created.Name)
+	fmt.Printf("Project %s created: %s. It is now the current project.\n", created.Key, created.Name)
 	return nil
+}
+
+func validateProjectCreation(key, name string) (string, error) {
+	normalizedKey, err := domain.NormalizeProjectKey(key)
+	if err != nil {
+		return "", fmt.Errorf("%w. A project key identifies the project in commands and ticket references, for example HTB-1. Use 2 to 20 characters, starting with a letter; letters, digits, and underscores are allowed", err)
+	}
+	if strings.TrimSpace(name) == "" {
+		return "", errors.New("project name is required")
+	}
+	return normalizedKey, nil
 }
 
 func featureCommand(args []string) error {
@@ -506,9 +554,9 @@ func featureCommand(args []string) error {
 	}
 	due := ""
 	if created.DueDate != nil {
-		due = " Échéance : " + created.DueDate.Format("2006-01-02") + "."
+		due = " Due date: " + created.DueDate.Format("2006-01-02") + "."
 	}
-	fmt.Printf("Fonctionnalité %s créée : %s.%s\n", created.Key, created.Name, due)
+	fmt.Printf("Feature %s created: %s.%s\n", created.Key, created.Name, due)
 	return nil
 }
 func ticketCommand(args []string) error {
@@ -545,7 +593,7 @@ func ticketComment(args []string) error {
 	if err := call("POST", "/api/v1/tickets/"+args[0]+"/comments", map[string]string{"body": args[1]}, &struct{}{}); err != nil {
 		return err
 	}
-	fmt.Printf("Commentaire ajouté à %s.\n", strings.ToUpper(args[0]))
+	fmt.Printf("Comment added to %s.\n", strings.ToUpper(args[0]))
 	return nil
 }
 func ticketAction(args []string, action string) error {
@@ -556,14 +604,14 @@ func ticketAction(args []string, action string) error {
 		if err := call("POST", "/api/v1/tickets/"+args[0]+"/"+action, map[string]any{}, &struct{}{}); err != nil {
 			return err
 		}
-		fmt.Printf("Ticket %s libéré.\n", strings.ToUpper(args[0]))
+		fmt.Printf("Ticket %s released.\n", strings.ToUpper(args[0]))
 		return nil
 	}
 	var ticket ticketView
 	if err := call("POST", "/api/v1/tickets/"+args[0]+"/"+action, map[string]any{}, &ticket); err != nil {
 		return err
 	}
-	fmt.Printf("Ticket %s pris en charge.\n", ticket.Ref)
+	fmt.Printf("Ticket %s claimed.\n", ticket.Ref)
 	return nil
 }
 func ticketCreate(args []string) error {
@@ -592,7 +640,7 @@ func ticketCreate(args []string) error {
 	if err := call("POST", "/api/v1/tickets", map[string]any{"project": *project, "type": *kind, "parent_ref": *parent, "related_ref": *related, "feature_key": *feature, "title": *title, "description": *description, "priority": *priority, "labels": []string(labels)}, &ticket); err != nil {
 		return err
 	}
-	fmt.Printf("Ticket %s créé — %s [%s].\n", ticket.Ref, ticket.Title, ticket.Status)
+	fmt.Printf("Ticket %s created — %s [%s].\n", ticket.Ref, ticket.Title, ticket.Status)
 	return nil
 }
 func ticketList(args []string) error {
@@ -634,15 +682,15 @@ func ticketList(args []string) error {
 		return err
 	}
 	if len(response.Tickets) == 0 {
-		fmt.Printf("Aucun ticket dans le projet %s.\n", strings.ToUpper(*project))
+		fmt.Printf("No tickets in project %s.\n", strings.ToUpper(*project))
 		return nil
 	}
 	heading := "Tickets — " + strings.ToUpper(*project)
 	if *feature != "" {
-		heading += " / fonctionnalité " + *feature
+		heading += " / feature " + *feature
 	}
 	fmt.Println(heading)
-	fmt.Println("REF          ÉTAT           PROGRESSION       TYPE              TITRE")
+	fmt.Println("REF          STATUS         PROGRESS          TYPE              TITLE")
 	for _, ticket := range response.Tickets {
 		indent := ""
 		if ticket.ParentRef != nil {
@@ -697,7 +745,7 @@ func ticketUpdate(args []string) error {
 	if err := call("PATCH", "/api/v1/tickets/"+fs.Arg(0), body, &ticket); err != nil {
 		return err
 	}
-	fmt.Printf("Ticket %s mis à jour (version %d).\n", ticket.Ref, ticket.Version)
+	fmt.Printf("Ticket %s updated (version %d).\n", ticket.Ref, ticket.Version)
 	return nil
 }
 func ticketVersions(args []string) error {
@@ -723,7 +771,7 @@ func ticketRestore(args []string) error {
 	if err := call("POST", "/api/v1/tickets/"+fs.Arg(0)+"/versions/"+fs.Arg(1)+"/restore", map[string]int{"expected_version": *current}, &ticket); err != nil {
 		return err
 	}
-	fmt.Printf("Ticket %s restauré (version %d).\n", ticket.Ref, ticket.Version)
+	fmt.Printf("Ticket %s restored (version %d).\n", ticket.Ref, ticket.Version)
 	return nil
 }
 func inviteCommand(args []string) error {
@@ -734,7 +782,7 @@ func inviteCommand(args []string) error {
 		if err := call("POST", "/api/v1/invitations/"+args[1]+"/accept", map[string]any{}, &struct{}{}); err != nil {
 			return err
 		}
-		fmt.Println("Invitation acceptée. Le projet est maintenant accessible.")
+		fmt.Println("Invitation accepted. The project is now accessible.")
 		return nil
 	}
 	if args[0] == "create" {
@@ -758,7 +806,7 @@ func inviteCommand(args []string) error {
 		if err := call("POST", "/api/v1/invitations", map[string]string{"project": *project, "role": *role, "expires_at": *expires}, &response); err != nil {
 			return err
 		}
-		fmt.Printf("Code d'invitation créé : %s\nPartagez-le avec : htb invite accept %s\n", response.Code, response.Code)
+		fmt.Printf("Invitation code created: %s\nShare it with: htb invite accept %s\n", response.Code, response.Code)
 		return nil
 	}
 	return errors.New("usage: htb invite create --project KEY --role read --expires-at RFC3339 | htb invite accept CODE")
@@ -805,13 +853,25 @@ func call(method, path string, input any, output any) error {
 		return err
 	}
 	if resp.StatusCode >= 300 {
-		return fmt.Errorf("%s", strings.TrimSpace(string(data)))
+		return apiError(resp.Status, data)
 	}
 	if output != nil {
 		return json.Unmarshal(data, output)
 	}
 	_, err = os.Stdout.Write(data)
 	return err
+}
+
+func apiError(status string, data []byte) error {
+	var response struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(data, &response); err == nil && response.Error.Message != "" {
+		return errors.New(response.Error.Message)
+	}
+	return fmt.Errorf("request failed: %s", status)
 }
 func configPath() (string, error) {
 	base, err := os.UserConfigDir()
@@ -865,28 +925,28 @@ func printValue(v any) error {
 
 func archivedLabel(archived bool) string {
 	if archived {
-		return " (archivé)"
+		return " (archived)"
 	}
 	return ""
 }
 
 func printTicket(ticket ticketView) {
 	fmt.Printf("%s — %s\n", ticket.Ref, ticket.Title)
-	fmt.Printf("Projet : %s | Type : %s | État : %s | Priorité : %s | Version : %d\n", ticket.Project, ticket.Type, styledStatus(ticket.Status), ticket.Priority, ticket.Version)
+	fmt.Printf("Project: %s | Type: %s | Status: %s | Priority: %s | Version: %d\n", ticket.Project, ticket.Type, styledStatus(ticket.Status), ticket.Priority, ticket.Version)
 	if progress := ticketProgress(ticket); progress != "—" {
-		fmt.Println("Progression :", progress)
+		fmt.Println("Progress:", progress)
 	}
 	if ticket.ParentRef != nil {
-		fmt.Println("Ticket parent :", *ticket.ParentRef)
+		fmt.Println("Parent ticket:", *ticket.ParentRef)
 	}
 	if ticket.RelatedRef != nil {
-		fmt.Println("Ticket lié :", *ticket.RelatedRef)
+		fmt.Println("Related ticket:", *ticket.RelatedRef)
 	}
 	if ticket.FeatureKey != nil {
-		fmt.Println("Fonctionnalité :", *ticket.FeatureKey)
+		fmt.Println("Feature:", *ticket.FeatureKey)
 	}
 	if len(ticket.Labels) > 0 {
-		fmt.Println("Tags :", strings.Join(ticket.Labels, ", "))
+		fmt.Println("Labels:", strings.Join(ticket.Labels, ", "))
 	}
 	if ticket.Description != "" {
 		fmt.Printf("\n%s\n", ticket.Description)
@@ -898,7 +958,7 @@ func ticketProgress(ticket ticketView) string {
 		return "—"
 	}
 	percent := ticket.DoneChildren * 100 / ticket.ChildCount
-	return fmt.Sprintf("%d/%d tâches (%d%%)", ticket.DoneChildren, ticket.ChildCount, percent)
+	return fmt.Sprintf("%d/%d tasks (%d%%)", ticket.DoneChildren, ticket.ChildCount, percent)
 }
 
 func styledStatus(status string) string {

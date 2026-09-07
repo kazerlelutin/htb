@@ -37,7 +37,22 @@ const (
 	Done       Status = "done"
 )
 
-var ticketRef = regexp.MustCompile(`^([A-Z][A-Z0-9_]{1,19})-([1-9][0-9]*)$`)
+var (
+	projectKey = regexp.MustCompile(`^[A-Z][A-Z0-9_]{1,19}$`)
+	ticketRef  = regexp.MustCompile(`^([A-Z][A-Z0-9_]{1,19})-([1-9][0-9]*)$`)
+)
+
+// NormalizeProjectKey makes project identifiers consistent across the CLI and API.
+func NormalizeProjectKey(value string) (string, error) {
+	key := strings.ToUpper(strings.TrimSpace(value))
+	if key == "" {
+		return "", fmt.Errorf("project key is required")
+	}
+	if !projectKey.MatchString(key) {
+		return "", fmt.Errorf("project key must be 2 to 20 characters, start with a letter, and contain only letters, digits, or underscores")
+	}
+	return key, nil
+}
 
 func ParseReference(ref string) (string, int64, error) {
 	m := ticketRef.FindStringSubmatch(strings.ToUpper(ref))
@@ -82,13 +97,13 @@ func AggregateStoryStatus(children []Status) Status {
 func Template(kind TicketType) string {
 	switch kind {
 	case UserStory:
-		return "## Besoin\nEn tant que …\nJe veux …\nAfin de …\n\n## Critères d’acceptation\n- [ ] …\n"
+		return "## Need\nAs a …\nI want …\nSo that …\n\n## Acceptance criteria\n- [ ] …\n"
 	case TechnicalTask:
-		return "## Contexte\n\n## Approche technique\n\n## Définition de fini\n- [ ] …\n"
+		return "## Context\n\n## Technical approach\n\n## Definition of done\n- [ ] …\n"
 	case Bug:
-		return "## Constat\n\n## Résultat attendu\n\n## Reproduction\n1. …\n\n## Impact\n"
+		return "## Observed behavior\n\n## Expected behavior\n\n## Reproduction\n1. …\n\n## Impact\n"
 	case Incident:
-		return "## Détection\n\n## Systèmes affectés\n\n## Impact\n\n## Mesures de confinement\n\n## Éléments techniques\n"
+		return "## Detection\n\n## Affected systems\n\n## Impact\n\n## Containment actions\n\n## Technical details\n"
 	default:
 		return ""
 	}

@@ -28,6 +28,7 @@ jobs:
             if [ "$GOOS" = windows ]; then (cd "$stage" && zip "../htb_${GOOS}_${GOARCH}.zip" "htb$extension" "htbd$extension"); else tar -C "$stage" -czf "dist/htb_${GOOS}_${GOARCH}.tar.gz" "htb$extension" "htbd$extension"; fi
           done
           find dist -mindepth 1 -type d -exec rm -rf {} +
+          cp install.sh dist/install.sh
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}

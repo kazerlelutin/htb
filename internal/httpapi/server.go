@@ -17,17 +17,17 @@ import (
 )
 
 type Server struct {
-	store               *store.Store
-	verifier            auth.Verifier
-	deviceConfig        auth.DeviceConfig
-	version, releaseURL string
-	log                 *slog.Logger
+	store        *store.Store
+	verifier     auth.Verifier
+	deviceConfig auth.DeviceConfig
+	releaseURL   string
+	log          *slog.Logger
 }
 type actorKey struct{}
 type principalKey struct{}
 
-func New(s *store.Store, verifier auth.Verifier, deviceConfig auth.DeviceConfig, version, releaseURL string, log *slog.Logger) *Server {
-	return &Server{store: s, verifier: verifier, deviceConfig: deviceConfig, version: version, releaseURL: releaseURL, log: log}
+func New(s *store.Store, verifier auth.Verifier, deviceConfig auth.DeviceConfig, releaseURL string, log *slog.Logger) *Server {
+	return &Server{store: s, verifier: verifier, deviceConfig: deviceConfig, releaseURL: releaseURL, log: log}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -59,7 +59,7 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprint(w, "<!doctype html><html lang=\"fr\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>HTB — Headless Ticket Board</title></head><body><main><h1>Headless Ticket Board</h1><p>Un registre de travail partagé pour humains, scripts et agents.</p><p><a href=\"/downloads\">Télécharger HTB et voir les commandes d’installation</a></p></main></body></html>")
+	fmt.Fprint(w, "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>HTB — Headless Ticket Board</title></head><body><main><h1>Headless Ticket Board</h1><p>A shared work tracker for people, scripts, and agents.</p><p><a href=\"/downloads\">Download HTB and view installation commands</a></p></main></body></html>")
 }
 func (s *Server) downloads(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -67,10 +67,8 @@ func (s *Server) downloads(w http.ResponseWriter, r *http.Request) {
 	if url == "" {
 		url = "#"
 	}
-	fmt.Fprintf(w, `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Téléchargements HTB</title><style>body{font:16px system-ui,sans-serif;max-width:900px;margin:2rem auto;padding:0 1rem;line-height:1.5}pre{background:#f4f4f4;padding:1rem;overflow:auto}table{border-collapse:collapse;width:100%%}th,td{border-bottom:1px solid #ddd;padding:.55rem;text-align:left}code{white-space:nowrap}</style></head><body><main><h1>Téléchargements HTB</h1><p>Version serveur : <strong>%s</strong></p><h2>Installation Linux</h2><p>Installe la CLI dans le PATH utilisateur, sans sudo :</p><pre>mkdir -p "$HOME/.local/bin"
-curl -fsSL %s/latest/download/htb_linux_amd64.tar.gz | tar -xz -C "$HOME/.local/bin" htb
-export PATH="$HOME/.local/bin:$PATH"
-htb version</pre><p>Ajoute <code>export PATH="$HOME/.local/bin:$PATH"</code> à <code>~/.bashrc</code> pour conserver ce réglage.</p><p><a href="%s">Archives, checksums et toutes les versions GitHub</a></p><h2>Commandes essentielles</h2><p>La CLI embarque l'aide complète : <code>htb help</code> ou <code>htb help ticket create</code>.</p><table><thead><tr><th>Action</th><th>Commande</th></tr></thead><tbody><tr><td>État de connexion</td><td><code>htb auth status</code></td></tr><tr><td>Changer de projet</td><td><code>htb project use SITE</code></td></tr><tr><td>Créer une fonctionnalité</td><td><code>htb feature create --key newsletter --name Newsletter --due-date 2026-09-30</code></td></tr><tr><td>Créer une US</td><td><code>htb ticket create --type user_story --title "Titre"</code></td></tr><tr><td>Créer une tâche</td><td><code>htb ticket create --type technical_task --parent SITE-2 --title "Titre"</code></td></tr><tr><td>Voir les tickets</td><td><code>htb ticket list</code></td></tr><tr><td>Filtrer par fonctionnalité</td><td><code>htb ticket list --feature newsletter</code></td></tr><tr><td>Mettre à jour</td><td><code>htb ticket update --version 2 --status in_progress SITE-3</code></td></tr></tbody></table></main></body></html>`, htmlText(s.version), htmlText(url), htmlText(url))
+	installationURL := url + "/latest/download/install.sh"
+	fmt.Fprintf(w, `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Download HTB</title><style>body{font:16px system-ui,sans-serif;max-width:900px;margin:2rem auto;padding:0 1rem;line-height:1.5}pre{background:#f4f4f4;padding:1rem;overflow:auto}table{border-collapse:collapse;width:100%%}th,td{border-bottom:1px solid #ddd;padding:.55rem;text-align:left}code{white-space:nowrap}</style></head><body><main><h1>Download HTB</h1><h2>Install on Linux</h2><p>This command installs the CLI, verifies its checksum, and configures your user PATH:</p><pre>curl -fsSL %s | sh</pre><p>Open a new terminal, then run <code>htb auth login</code>.</p><p><a href="%s">Archives, checksums, and all GitHub releases</a></p><h2>Command reference</h2><p>Use <code>htb help</code> or <code>htb help &lt;command&gt;</code> for complete local help.</p><table><caption>All supported commands</caption><thead><tr><th>Command</th><th>Purpose</th></tr></thead><tbody><tr><td><code>htb version</code></td><td>Show the CLI version.</td></tr><tr><td><code>htb config set-server URL</code></td><td>Set the HTB server.</td></tr><tr><td><code>htb auth login [--issuer URL --client-id ID --audience ID]</code></td><td>Sign in.</td></tr><tr><td><code>htb auth status</code></td><td>Show connection and current project.</td></tr><tr><td><code>htb project list</code></td><td>List accessible projects.</td></tr><tr><td><code>htb project create --key KEY --name NAME [--description TEXT]</code></td><td>Create a project. Keys are normalized to uppercase.</td></tr><tr><td><code>htb project use KEY</code></td><td>Set the current project.</td></tr><tr><td><code>htb feature create --key KEY --name NAME [--project KEY] [--description TEXT] [--due-date YYYY-MM-DD]</code></td><td>Create a roadmap feature.</td></tr><tr><td><code>htb ticket create --title TITLE [--type user_story|technical_task|bug|incident] [--project KEY] [--parent REF] [--related REF] [--feature KEY] [--description TEXT] [--priority low|normal|high|urgent] [--label TAG]</code></td><td>Create a ticket; repeat <code>--label</code> as needed.</td></tr><tr><td><code>htb ticket list [--project KEY] [--feature KEY] [--tree] [--json|--csv]</code></td><td>List tickets.</td></tr><tr><td><code>htb ticket show REF</code></td><td>Show a ticket.</td></tr><tr><td><code>htb ticket update --version N [--title TITLE] [--description TEXT] [--status open|in_progress|review|blocked|done] [--priority low|normal|high|urgent] [--feature KEY] REF</code></td><td>Update a ticket.</td></tr><tr><td><code>htb ticket comment REF TEXT</code></td><td>Add a comment.</td></tr><tr><td><code>htb ticket claim REF</code> / <code>htb ticket release REF</code></td><td>Claim or release a ticket.</td></tr><tr><td><code>htb ticket versions REF</code></td><td>List ticket revisions.</td></tr><tr><td><code>htb ticket restore --version N REF REVISION</code></td><td>Restore a revision.</td></tr><tr><td><code>htb invite create [--project KEY] [--role read|write|admin] [--expires-at RFC3339]</code></td><td>Create an invitation.</td></tr><tr><td><code>htb invite accept CODE</code></td><td>Accept an invitation.</td></tr></tbody></table></main></body></html>`, htmlText(installationURL), htmlText(url))
 }
 
 func (s *Server) authenticated(next http.Handler) http.Handler {
@@ -131,6 +129,12 @@ func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &in) {
 		return
 	}
+	key, err := domain.NormalizeProjectKey(in.Key)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	in.Key = key
 	if err := s.store.CreateProject(r.Context(), actor(r), in); err != nil {
 		writeStoreError(w, err)
 		return
