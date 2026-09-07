@@ -2,6 +2,18 @@ package domain
 
 import "testing"
 
+func TestNormalizeProjectKey(t *testing.T) {
+	key, err := NormalizeProjectKey(" htb_2 ")
+	if err != nil || key != "HTB_2" {
+		t.Fatalf("got key=%q err=%v", key, err)
+	}
+	for _, value := range []string{"", "A", "HTB-key", "1HTB", "THIS_PROJECT_KEY_IS_TOO_LONG"} {
+		if _, err := NormalizeProjectKey(value); err == nil {
+			t.Fatalf("%q should be invalid", value)
+		}
+	}
+}
+
 func TestAggregateStoryStatus(t *testing.T) {
 	cases := []struct {
 		name     string

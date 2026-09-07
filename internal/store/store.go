@@ -159,6 +159,10 @@ func (s *Store) ResolveActor(ctx context.Context, subject, name, email string, s
 }
 
 func (s *Store) CreateProject(ctx context.Context, actor Actor, p Project) error {
+	key, err := domain.NormalizeProjectKey(p.Key)
+	if err != nil {
+		return err
+	}
 	if strings.TrimSpace(p.Name) == "" {
 		return fmt.Errorf("project name is required")
 	}
@@ -168,7 +172,7 @@ func (s *Store) CreateProject(ctx context.Context, actor Actor, p Project) error
 	}
 	defer tx.Rollback()
 	var projectID int64
-	if err = tx.QueryRowContext(ctx, `INSERT INTO projects(key,name,description) VALUES($1,$2,$3) RETURNING id`, strings.ToUpper(p.Key), p.Name, p.Description).Scan(&projectID); err != nil {
+	if err = tx.QueryRowContext(ctx, `INSERT INTO projects(key,name,description) VALUES($1,$2,$3) RETURNING id`, key, p.Name, p.Description).Scan(&projectID); err != nil {
 		return err
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO project_memberships(project_id,user_id,role) VALUES($1,$2,'admin')`, projectID, actor.UserID); err != nil {

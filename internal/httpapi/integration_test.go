@@ -47,10 +47,13 @@ func TestTicketLifecycleOverHTTP(t *testing.T) {
 	subject := "http-test-" + key
 	defer cleanupIntegrationData(t, db, key, subject)
 
-	server := New(data, integrationVerifier{subject: subject}, auth.DeviceConfig{}, "test", "", slog.Default())
-	project := requestJSON(t, server, http.MethodPost, "/api/v1/projects", `{"key":"`+key+`","name":"HTTP integration"}`)
+	server := New(data, integrationVerifier{subject: subject}, auth.DeviceConfig{}, "", slog.Default())
+	project := requestJSON(t, server, http.MethodPost, "/api/v1/projects", `{"key":"`+strings.ToLower(key)+`","name":"HTTP integration"}`)
 	if project.Code != http.StatusCreated {
 		t.Fatalf("create project: %d %s", project.Code, project.Body.String())
+	}
+	if !strings.Contains(project.Body.String(), `"key":"`+key+`"`) {
+		t.Fatalf("create project should normalize its key: %s", project.Body.String())
 	}
 	feature := requestJSON(t, server, http.MethodPost, "/api/v1/projects/"+key+"/features", `{"key":"newsletter","name":"Newsletter","due_date":"2026-09-30T00:00:00Z"}`)
 	if feature.Code != http.StatusCreated {

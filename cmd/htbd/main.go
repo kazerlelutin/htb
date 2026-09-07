@@ -46,7 +46,7 @@ func main() {
 		os.Exit(1)
 	}
 	deviceConfig := auth.DeviceConfig{Issuer: issuer, ClientID: os.Getenv("HTBD_ZITADEL_DEVICE_CLIENT_ID"), Audience: audience}
-	server := httpapi.New(store, verifier, deviceConfig, version, os.Getenv("HTBD_RELEASE_URL"), logger)
+	server := httpapi.New(store, verifier, deviceConfig, os.Getenv("HTBD_RELEASE_URL"), logger)
 	httpServer := &http.Server{Addr: valueOr("HTBD_LISTEN_ADDR", ":8080"), Handler: server.Handler(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second}
 	go func() {
 		logger.Info("server started", "address", httpServer.Addr, "version", version)
