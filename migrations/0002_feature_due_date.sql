@@ -1,0 +1,1 @@
+ALTER TABLE features ADD COLUMN IF NOT EXISTS due_date DATE;
