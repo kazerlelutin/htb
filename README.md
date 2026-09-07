@@ -4,6 +4,23 @@ HTB est un tableau de tickets pour terminal. Zitadel gère entièrement les
 comptes, l'inscription, la connexion et les mots de passe. HTB ne voit qu'une
 identité Zitadel déjà connectée et gère les projets et leurs droits.
 
+## Installer la CLI sous Linux
+
+L'archive contient les binaires, mais ne les installe pas automatiquement dans
+le `PATH`. Pour une installation utilisateur (sans `sudo`) :
+
+```bash
+mkdir -p "$HOME/.local/bin"
+curl -fsSL https://github.com/kazerlelutin/htb/releases/latest/download/htb_linux_amd64.tar.gz \
+  | tar -xz -C "$HOME/.local/bin" htb
+export PATH="$HOME/.local/bin:$PATH"
+htb version
+```
+
+Pour conserver ce `PATH` avec Bash, ajouter
+`export PATH="$HOME/.local/bin:$PATH"` dans `~/.bashrc`, puis ouvrir un
+nouveau terminal.
+
 ## Le parcours utilisateur
 
 ```bash
