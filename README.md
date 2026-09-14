@@ -47,7 +47,8 @@ htb ticket list          # utilise le projet courant
 
 Un projet courant est conservé dans le fichier de configuration local de la
 CLI. Les commandes acceptent encore `--project` pour agir explicitement sur un
-autre projet.
+autre projet. Les références de tickets sont numérotées indépendamment dans
+chaque projet, à partir de `KEY-1`.
 
 ## Référence CLI
 

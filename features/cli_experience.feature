@@ -24,3 +24,8 @@ Feature: CLI experience
     Given a current project containing tickets
     When a person runs "htb ticket list"
     Then the CLI displays references, statuses, types, and titles in a table
+
+  Scenario: Ticket references start at one in every project
+    Given an existing ticket in project "HTB"
+    When a person creates the first ticket in project "SITE"
+    Then its reference is "SITE-1"

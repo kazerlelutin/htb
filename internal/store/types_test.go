@@ -92,7 +92,7 @@ func (s valuesScanner) Scan(destinations ...any) error {
 
 func TestScanTicketDecodesLabelsAndFullRelations(t *testing.T) {
 	ticket, err := scanTicket(valuesScanner{values: []any{
-		int64(2), "SITE", string(domain.TechnicalTask), "SITE-1", "SITE-7", "newsletter",
+		int64(42), int64(2), "SITE", string(domain.TechnicalTask), "SITE-1", "SITE-7", "newsletter",
 		"Créer l'endpoint", "Description", string(domain.Open), "normal", 1, `["newsletter","site"]`, 0, 0,
 	}})
 	if err != nil {
