@@ -10,3 +10,6 @@ var InitialMigration string
 
 //go:embed migrations/0002_feature_due_date.sql
 var FeatureDueDateMigration string
+
+//go:embed migrations/0003_project_ticket_numbers.sql
+var ProjectTicketNumbersMigration string

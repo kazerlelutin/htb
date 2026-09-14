@@ -44,8 +44,9 @@ func TestTicketLifecycleOverHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	key := "E2E" + strings.ReplaceAll(time.Now().UTC().Format("150405.000000000"), ".", "")
+	otherKey := "ALT" + strings.ReplaceAll(time.Now().UTC().Format("150405.000000000"), ".", "")
 	subject := "http-test-" + key
-	defer cleanupIntegrationData(t, db, key, subject)
+	defer cleanupIntegrationData(t, db, []string{key, otherKey}, subject)
 
 	server := New(data, integrationVerifier{subject: subject}, auth.DeviceConfig{}, "", slog.Default())
 	project := requestJSON(t, server, http.MethodPost, "/api/v1/projects", `{"key":"`+strings.ToLower(key)+`","name":"HTTP integration"}`)
@@ -70,6 +71,9 @@ func TestTicketLifecycleOverHTTP(t *testing.T) {
 	}
 	if got, want := strings.Join(ticket.Labels, ","), "newsletter,site"; got != want {
 		t.Fatalf("create labels: got %q, want %q", got, want)
+	}
+	if want := key + "-1"; ticket.Ref != want {
+		t.Fatalf("first ticket ref = %q, want %q", ticket.Ref, want)
 	}
 
 	shown := requestJSON(t, server, http.MethodGet, "/api/v1/tickets/"+ticket.Ref, "")
@@ -97,6 +101,56 @@ func TestTicketLifecycleOverHTTP(t *testing.T) {
 	if linked.Code != http.StatusOK || !strings.Contains(linked.Body.String(), ticket.Ref) {
 		t.Fatalf("list linked tickets: %d %s", linked.Code, linked.Body.String())
 	}
+
+	otherProject := requestJSON(t, server, http.MethodPost, "/api/v1/projects", `{"key":"`+strings.ToLower(otherKey)+`","name":"Second HTTP integration"}`)
+	if otherProject.Code != http.StatusCreated {
+		t.Fatalf("create second project: %d %s", otherProject.Code, otherProject.Body.String())
+	}
+	otherTicket := requestJSON(t, server, http.MethodPost, "/api/v1/tickets", `{"project":"`+otherKey+`","type":"user_story","title":"First ticket in another project"}`)
+	if otherTicket.Code != http.StatusCreated {
+		t.Fatalf("create second-project ticket: %d %s", otherTicket.Code, otherTicket.Body.String())
+	}
+	var other store.Ticket
+	if err := json.Unmarshal(otherTicket.Body.Bytes(), &other); err != nil {
+		t.Fatalf("decode second-project ticket: %v", err)
+	}
+	if want := otherKey + "-1"; other.Ref != want {
+		t.Fatalf("first ticket in second project ref = %q, want %q", other.Ref, want)
+	}
+	shownOther := requestJSON(t, server, http.MethodGet, "/api/v1/tickets/"+other.Ref, "")
+	if shownOther.Code != http.StatusOK || !strings.Contains(shownOther.Body.String(), other.Ref) {
+		t.Fatalf("show second-project ticket: %d %s", shownOther.Code, shownOther.Body.String())
+	}
+	childResponse := requestJSON(t, server, http.MethodPost, "/api/v1/tickets", `{"project":"`+otherKey+`","type":"technical_task","parent_ref":"`+other.Ref+`","title":"Child ticket"}`)
+	if childResponse.Code != http.StatusCreated {
+		t.Fatalf("create child ticket: %d %s", childResponse.Code, childResponse.Body.String())
+	}
+	var child store.Ticket
+	if err := json.Unmarshal(childResponse.Body.Bytes(), &child); err != nil {
+		t.Fatalf("decode child ticket: %v", err)
+	}
+	if want := otherKey + "-2"; child.Ref != want || child.ParentRef == nil || *child.ParentRef != other.Ref {
+		t.Fatalf("unexpected child ticket: %#v", child)
+	}
+	if response := requestJSON(t, server, http.MethodPost, "/api/v1/tickets/"+child.Ref+"/comments", `{"body":"A comment"}`); response.Code != http.StatusCreated {
+		t.Fatalf("comment on child ticket: %d %s", response.Code, response.Body.String())
+	}
+	if response := requestJSON(t, server, http.MethodGet, "/api/v1/tickets/"+child.Ref+"/versions", ""); response.Code != http.StatusOK {
+		t.Fatalf("list child revisions: %d %s", response.Code, response.Body.String())
+	}
+	if response := requestJSON(t, server, http.MethodPost, "/api/v1/tickets/"+child.Ref+"/claim", `{}`); response.Code != http.StatusOK {
+		t.Fatalf("claim child ticket: %d %s", response.Code, response.Body.String())
+	}
+	updatedChild := requestJSON(t, server, http.MethodPatch, "/api/v1/tickets/"+child.Ref, `{"expected_version":2,"status":"done"}`)
+	if updatedChild.Code != http.StatusOK {
+		t.Fatalf("update child ticket: %d %s", updatedChild.Code, updatedChild.Body.String())
+	}
+	if response := requestJSON(t, server, http.MethodPost, "/api/v1/tickets/"+child.Ref+"/versions/1/restore", `{"expected_version":3}`); response.Code != http.StatusOK {
+		t.Fatalf("restore child ticket: %d %s", response.Code, response.Body.String())
+	}
+	if response := requestJSON(t, server, http.MethodPost, "/api/v1/tickets/"+child.Ref+"/release", `{}`); response.Code != http.StatusOK {
+		t.Fatalf("release child ticket: %d %s", response.Code, response.Body.String())
+	}
 }
 
 func requestJSON(t *testing.T, server *Server, method, path, body string) *httptest.ResponseRecorder {
@@ -109,7 +163,7 @@ func requestJSON(t *testing.T, server *Server, method, path, body string) *httpt
 	return response
 }
 
-func cleanupIntegrationData(t *testing.T, db *sql.DB, key, subject string) {
+func cleanupIntegrationData(t *testing.T, db *sql.DB, keys []string, subject string) {
 	t.Helper()
 	queries := []string{
 		`DELETE FROM activity_events WHERE project_id IN (SELECT id FROM projects WHERE key=$1)`,
@@ -120,15 +174,19 @@ func cleanupIntegrationData(t *testing.T, db *sql.DB, key, subject string) {
 		`DELETE FROM features WHERE project_id IN (SELECT id FROM projects WHERE key=$1)`,
 		`DELETE FROM project_memberships WHERE project_id IN (SELECT id FROM projects WHERE key=$1)`,
 		`DELETE FROM projects WHERE key=$1`,
+	}
+	for _, key := range keys {
+		for _, query := range queries {
+			if _, err := db.Exec(query, key); err != nil {
+				t.Errorf("cleanup integration data: %v", err)
+			}
+		}
+	}
+	for _, query := range []string{
 		`DELETE FROM credentials WHERE zitadel_subject=$1`,
 		`DELETE FROM users WHERE zitadel_subject=$1`,
-	}
-	for index, query := range queries {
-		argument := any(key)
-		if index >= 8 {
-			argument = subject
-		}
-		if _, err := db.Exec(query, argument); err != nil {
+	} {
+		if _, err := db.Exec(query, subject); err != nil {
 			t.Errorf("cleanup integration data: %v", err)
 		}
 	}

@@ -44,6 +44,7 @@ type Feature struct {
 }
 type Ticket struct {
 	ID           int64             `json:"id"`
+	Number       int64             `json:"-"`
 	Ref          string            `json:"ref"`
 	Project      string            `json:"project"`
 	Type         domain.TicketType `json:"type"`
@@ -100,6 +101,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 	}{
 		{"0001_initial", htb.InitialMigration},
 		{"0002_feature_due_date", htb.FeatureDueDateMigration},
+		{"0003_project_ticket_numbers", htb.ProjectTicketNumbersMigration},
 	}
 	for _, migration := range migrations {
 		var exists bool
@@ -266,8 +268,12 @@ func (s *Store) CreateTicket(ctx context.Context, actor Actor, in CreateTicket) 
 	if priority == "" {
 		priority = "normal"
 	}
-	var id int64
-	err = tx.QueryRowContext(ctx, `INSERT INTO tickets(project_id,parent_ticket_id,related_ticket_id,feature_id,type,title,description,priority,created_by_credential_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`, projectID, parentID, relatedID, featureID, in.Type, in.Title, in.Description, priority, actor.CredentialID).Scan(&id)
+	var id, number int64
+	err = tx.QueryRowContext(ctx, `UPDATE projects SET next_ticket_number=next_ticket_number+1 WHERE id=$1 RETURNING next_ticket_number-1`, projectID).Scan(&number)
+	if err != nil {
+		return result, err
+	}
+	err = tx.QueryRowContext(ctx, `INSERT INTO tickets(project_id,number,parent_ticket_id,related_ticket_id,feature_id,type,title,description,priority,created_by_credential_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`, projectID, number, parentID, relatedID, featureID, in.Type, in.Title, in.Description, priority, actor.CredentialID).Scan(&id)
 	if err != nil {
 		return result, err
 	}
@@ -299,8 +305,8 @@ func (s *Store) GetTicket(ctx context.Context, actor Actor, ref string) (Ticket,
 	if err = s.authorize(ctx, actor, project, domain.RoleRead); err != nil {
 		return result, err
 	}
-	project, id, _ := domain.ParseReference(ref)
-	row := s.DB.QueryRowContext(ctx, ticketSelect+` WHERE p.key=$1 AND t.id=$2`, project, id)
+	project, number, _ := domain.ParseReference(ref)
+	row := s.DB.QueryRowContext(ctx, ticketSelect+` WHERE p.key=$1 AND t.number=$2`, project, number)
 	return scanTicket(row)
 }
 
@@ -317,7 +323,7 @@ func (s *Store) ListTickets(ctx context.Context, actor Actor, project string, pa
 		query += ` AND f.key=$2`
 		arguments = append(arguments, featureKey)
 	}
-	query += ` ORDER BY t.id DESC`
+	query += ` ORDER BY t.number DESC`
 	rows, err := s.DB.QueryContext(ctx, query, arguments...)
 	if err != nil {
 		return nil, err
@@ -336,7 +342,7 @@ func (s *Store) ListTickets(ctx context.Context, actor Actor, project string, pa
 
 func (s *Store) UpdateTicket(ctx context.Context, actor Actor, ref string, in UpdateTicket) (Ticket, error) {
 	var result Ticket
-	project, id, err := domain.ParseReference(ref)
+	project, _, err := domain.ParseReference(ref)
 	if err != nil {
 		return result, err
 	}
@@ -351,6 +357,14 @@ func (s *Store) UpdateTicket(ctx context.Context, actor Actor, ref string, in Up
 		return result, err
 	}
 	defer tx.Rollback()
+	projectID, err := projectID(ctx, tx, project)
+	if err != nil {
+		return result, err
+	}
+	id, _, err := ticketID(ctx, tx, ref, projectID)
+	if err != nil {
+		return result, err
+	}
 	current, err := getTicket(ctx, tx, id)
 	if err != nil {
 		return result, err
@@ -420,11 +434,19 @@ func (s *Store) UpdateTicket(ctx context.Context, actor Actor, ref string, in Up
 }
 
 func (s *Store) Revisions(ctx context.Context, actor Actor, ref string) ([]Revision, error) {
-	project, id, err := domain.ParseReference(ref)
+	project, _, err := domain.ParseReference(ref)
 	if err != nil {
 		return nil, err
 	}
 	if err = s.authorize(ctx, actor, project, domain.RoleRead); err != nil {
+		return nil, err
+	}
+	projectID, err := projectID(ctx, s.DB, project)
+	if err != nil {
+		return nil, err
+	}
+	id, _, err := ticketID(ctx, s.DB, ref, projectID)
+	if err != nil {
 		return nil, err
 	}
 	rows, err := s.DB.QueryContext(ctx, `SELECT version,snapshot,reason,created_at FROM ticket_revisions WHERE ticket_id=$1 ORDER BY version DESC`, id)
@@ -445,7 +467,7 @@ func (s *Store) Revisions(ctx context.Context, actor Actor, ref string) ([]Revis
 
 func (s *Store) Restore(ctx context.Context, actor Actor, ref string, revision, expectedVersion int) (Ticket, error) {
 	var out Ticket
-	project, id, err := domain.ParseReference(ref)
+	project, _, err := domain.ParseReference(ref)
 	if err != nil {
 		return out, err
 	}
@@ -460,6 +482,14 @@ func (s *Store) Restore(ctx context.Context, actor Actor, ref string, revision, 
 		return out, err
 	}
 	defer tx.Rollback()
+	projectID, err := projectID(ctx, tx, project)
+	if err != nil {
+		return out, err
+	}
+	id, _, err := ticketID(ctx, tx, ref, projectID)
+	if err != nil {
+		return out, err
+	}
 	current, err := getTicket(ctx, tx, id)
 	if err != nil {
 		return out, err
@@ -508,7 +538,7 @@ func (s *Store) Restore(ctx context.Context, actor Actor, ref string, revision, 
 
 func (s *Store) AddComment(ctx context.Context, actor Actor, ref, body string) (Comment, error) {
 	var out Comment
-	project, id, err := domain.ParseReference(ref)
+	project, _, err := domain.ParseReference(ref)
 	if err != nil {
 		return out, err
 	}
@@ -523,6 +553,14 @@ func (s *Store) AddComment(ctx context.Context, actor Actor, ref, body string) (
 		return out, err
 	}
 	defer tx.Rollback()
+	projectID, err := projectID(ctx, tx, project)
+	if err != nil {
+		return out, err
+	}
+	id, _, err := ticketID(ctx, tx, ref, projectID)
+	if err != nil {
+		return out, err
+	}
 	err = tx.QueryRowContext(ctx, `INSERT INTO comments(ticket_id,body,author_credential_id) VALUES($1,$2,$3) RETURNING id,body,created_at`, id, body, actor.CredentialID).Scan(&out.ID, &out.Body, &out.CreatedAt)
 	if err != nil {
 		return out, err
@@ -535,7 +573,7 @@ func (s *Store) AddComment(ctx context.Context, actor Actor, ref, body string) (
 
 func (s *Store) Claim(ctx context.Context, actor Actor, ref string) (Ticket, error) {
 	var out Ticket
-	project, id, err := domain.ParseReference(ref)
+	project, _, err := domain.ParseReference(ref)
 	if err != nil {
 		return out, err
 	}
@@ -547,6 +585,14 @@ func (s *Store) Claim(ctx context.Context, actor Actor, ref string) (Ticket, err
 		return out, err
 	}
 	defer tx.Rollback()
+	projectID, err := projectID(ctx, tx, project)
+	if err != nil {
+		return out, err
+	}
+	id, _, err := ticketID(ctx, tx, ref, projectID)
+	if err != nil {
+		return out, err
+	}
 	result, err := tx.ExecContext(ctx, `UPDATE tickets SET claimed_by_credential_id=$1,claimed_at=now(),status=CASE WHEN status='open' THEN 'in_progress' ELSE status END,version=version+1,updated_at=now() WHERE id=$2 AND claimed_by_credential_id IS NULL`, actor.CredentialID, id)
 	if err != nil {
 		return out, err
@@ -580,7 +626,7 @@ func (s *Store) Claim(ctx context.Context, actor Actor, ref string) (Ticket, err
 }
 
 func (s *Store) Release(ctx context.Context, actor Actor, ref string) error {
-	project, id, err := domain.ParseReference(ref)
+	project, _, err := domain.ParseReference(ref)
 	if err != nil {
 		return err
 	}
@@ -592,6 +638,14 @@ func (s *Store) Release(ctx context.Context, actor Actor, ref string) error {
 		return err
 	}
 	defer tx.Rollback()
+	projectID, err := projectID(ctx, tx, project)
+	if err != nil {
+		return err
+	}
+	id, _, err := ticketID(ctx, tx, ref, projectID)
+	if err != nil {
+		return err
+	}
 	var owner sql.NullInt64
 	if err = tx.QueryRowContext(ctx, `SELECT claimed_by_credential_id FROM tickets WHERE id=$1 FOR UPDATE`, id).Scan(&owner); err != nil {
 		return err
@@ -691,18 +745,18 @@ func (s *Store) authorize(ctx context.Context, actor Actor, project string, requ
 
 type scanner interface{ Scan(...any) error }
 
-const ticketSelect = `SELECT t.id,p.key,t.type,CASE WHEN pt.id IS NULL THEN NULL ELSE pp.key || '-' || pt.id::text END,CASE WHEN rt.id IS NULL THEN NULL ELSE rtp.key || '-' || rt.id::text END,f.key,t.title,t.description,t.status,t.priority,t.version, COALESCE((SELECT json_agg(l.name ORDER BY l.name) FROM ticket_labels tl JOIN labels l ON l.id=tl.label_id WHERE tl.ticket_id=t.id),'[]'::json), (SELECT count(*) FROM tickets c WHERE c.parent_ticket_id=t.id), (SELECT count(*) FROM tickets c WHERE c.parent_ticket_id=t.id AND c.status='done') FROM tickets t JOIN projects p ON p.id=t.project_id LEFT JOIN tickets pt ON pt.id=t.parent_ticket_id LEFT JOIN projects pp ON pp.id=pt.project_id LEFT JOIN tickets rt ON rt.id=t.related_ticket_id LEFT JOIN projects rtp ON rtp.id=rt.project_id LEFT JOIN features f ON f.id=t.feature_id`
+const ticketSelect = `SELECT t.id,t.number,p.key,t.type,CASE WHEN pt.id IS NULL THEN NULL ELSE pp.key || '-' || pt.number::text END,CASE WHEN rt.id IS NULL THEN NULL ELSE rtp.key || '-' || rt.number::text END,f.key,t.title,t.description,t.status,t.priority,t.version, COALESCE((SELECT json_agg(l.name ORDER BY l.name) FROM ticket_labels tl JOIN labels l ON l.id=tl.label_id WHERE tl.ticket_id=t.id),'[]'::json), (SELECT count(*) FROM tickets c WHERE c.parent_ticket_id=t.id), (SELECT count(*) FROM tickets c WHERE c.parent_ticket_id=t.id AND c.status='done') FROM tickets t JOIN projects p ON p.id=t.project_id LEFT JOIN tickets pt ON pt.id=t.parent_ticket_id LEFT JOIN projects pp ON pp.id=pt.project_id LEFT JOIN tickets rt ON rt.id=t.related_ticket_id LEFT JOIN projects rtp ON rtp.id=rt.project_id LEFT JOIN features f ON f.id=t.feature_id`
 
 func scanTicket(row scanner) (Ticket, error) {
 	var t Ticket
 	var parent, related, feature sql.NullString
 	var labelsJSON []byte
 	var typ, status string
-	err := row.Scan(&t.ID, &t.Project, &typ, &parent, &related, &feature, &t.Title, &t.Description, &status, &t.Priority, &t.Version, &labelsJSON, &t.ChildCount, &t.DoneChildren)
+	err := row.Scan(&t.ID, &t.Number, &t.Project, &typ, &parent, &related, &feature, &t.Title, &t.Description, &status, &t.Priority, &t.Version, &labelsJSON, &t.ChildCount, &t.DoneChildren)
 	if err != nil {
 		return t, err
 	}
-	t.Ref = fmt.Sprintf("%s-%d", t.Project, t.ID)
+	t.Ref = fmt.Sprintf("%s-%d", t.Project, t.Number)
 	t.Type = domain.TicketType(typ)
 	t.Status = domain.Status(status)
 	if parent.Valid {
@@ -743,13 +797,14 @@ func projectID(ctx context.Context, q interface {
 }
 func ticketID(ctx context.Context, q interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
-}, ref string, project int64) (any, string, error) {
-	_, id, err := domain.ParseReference(ref)
+}, ref string, projectID int64) (int64, string, error) {
+	project, number, err := domain.ParseReference(ref)
 	if err != nil {
-		return nil, "", err
+		return 0, "", err
 	}
+	var id int64
 	var typ string
-	err = q.QueryRowContext(ctx, `SELECT id,type FROM tickets WHERE id=$1 AND project_id=$2`, id, project).Scan(&id, &typ)
+	err = q.QueryRowContext(ctx, `SELECT t.id,t.type FROM tickets t JOIN projects p ON p.id=t.project_id WHERE t.project_id=$1 AND p.key=$2 AND t.number=$3`, projectID, project, number).Scan(&id, &typ)
 	return id, typ, err
 }
 func setLabels(ctx context.Context, tx *sql.Tx, ticketID, projectID int64, labels []string) error {
@@ -793,7 +848,15 @@ func currentProjectID(ctx context.Context, tx *sql.Tx, id int64) int64 {
 	return project
 }
 func refreshStory(ctx context.Context, tx *sql.Tx, parentRef string, actor int64) error {
-	_, id, err := domain.ParseReference(parentRef)
+	project, _, err := domain.ParseReference(parentRef)
+	if err != nil {
+		return err
+	}
+	projectID, err := projectID(ctx, tx, project)
+	if err != nil {
+		return err
+	}
+	id, _, err := ticketID(ctx, tx, parentRef, projectID)
 	if err != nil {
 		return err
 	}
