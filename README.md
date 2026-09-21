@@ -60,6 +60,7 @@ Les commandes utiles au quotidien sont :
 ```bash
 htb auth status          # état de connexion, projets et projet courant
 htb project list         # projets accessibles
+htb project status       # avancement de tous les projets accessibles
 htb project use SITE     # change le projet courant
 htb ticket list          # utilise le projet courant
 ```
@@ -82,7 +83,7 @@ htb ticket update --help
 | Besoin | Commande |
 | --- | --- |
 | Configurer / se connecter | `htb config set-server URL`, `htb auth login`, `htb auth status` |
-| Gérer le projet | `htb project list`, `htb project create --key KEY --name NAME`, `htb project use KEY` |
+| Gérer le projet | `htb project list`, `htb project status`, `htb project create --key KEY --name NAME`, `htb project use KEY` |
 | Organiser la roadmap | `htb feature create --key KEY --name NAME --due-date YYYY-MM-DD` |
 | Créer un ticket | `htb ticket create --title TITRE --type user_story` |
 | Créer une tâche d'US | `htb ticket create --type technical_task --parent SITE-1 --title TITRE` |
@@ -96,10 +97,16 @@ htb ticket update --help
 La sortie est conçue pour le terminal. Pour automatiser une liste, utiliser
 `htb ticket list --json` ou `htb ticket list --csv`.
 
-Les US affichent leur progression à partir de leurs tâches techniques, par
-exemple `2/3 tâches (66%)`. Les états sont colorés automatiquement dans un
-terminal ; définir `NO_COLOR=1` ou `HTB_COLOR=never` pour les désactiver, et
-`HTB_COLOR=always` pour les forcer.
+`htb project status` offre une vue portefeuille : pour chaque projet accessible,
+il affiche une barre pour les US terminées, une autre pour tous les tickets
+terminés, ainsi que le nombre de tickets dans chaque état. Les US affichent la
+même barre de progression à partir de leurs tâches techniques, par exemple
+`[██████░░░░] 2/3 tâches (66%)`.
+
+Les titres, références, barres, états et messages d'erreur sont colorés
+automatiquement dans un terminal. Définir `NO_COLOR=1` ou `HTB_COLOR=never`
+pour les désactiver, et `HTB_COLOR=always` pour les forcer. Les sorties JSON et
+CSV ne contiennent jamais de couleurs.
 
 ## Mettre Zitadel en place
 

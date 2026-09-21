@@ -147,6 +147,26 @@ func TestTicketLifecycleOverHTTP(t *testing.T) {
 	if updatedChild.Code != http.StatusOK {
 		t.Fatalf("update child ticket: %d %s", updatedChild.Code, updatedChild.Body.String())
 	}
+	statuses := requestJSON(t, server, http.MethodGet, "/api/v1/projects/status", "")
+	if statuses.Code != http.StatusOK {
+		t.Fatalf("project status: %d %s", statuses.Code, statuses.Body.String())
+	}
+	var portfolio struct {
+		Projects []store.ProjectStatus `json:"projects"`
+	}
+	if err := json.Unmarshal(statuses.Body.Bytes(), &portfolio); err != nil {
+		t.Fatalf("decode project status: %v", err)
+	}
+	var otherStatus *store.ProjectStatus
+	for i := range portfolio.Projects {
+		if portfolio.Projects[i].Key == otherKey {
+			otherStatus = &portfolio.Projects[i]
+			break
+		}
+	}
+	if otherStatus == nil || otherStatus.UserStories.Total != 1 || otherStatus.UserStories.Done != 1 || otherStatus.Tickets.Total != 2 || otherStatus.Tickets.Done != 2 || otherStatus.Statuses.Done != 2 {
+		t.Fatalf("unexpected project status: %#v", otherStatus)
+	}
 	if response := requestJSON(t, server, http.MethodPost, "/api/v1/tickets/"+child.Ref+"/versions/1/restore", `{"expected_version":3}`); response.Code != http.StatusOK {
 		t.Fatalf("restore child ticket: %d %s", response.Code, response.Body.String())
 	}

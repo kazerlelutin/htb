@@ -16,6 +16,7 @@ import (
 	"runtime"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/kazerlelutin/htb/internal/domain"
 )
@@ -30,6 +31,26 @@ type config struct {
 type projectView struct {
 	Key, Name, Description string
 	Archived               bool
+}
+
+type progressView struct {
+	Total int `json:"total"`
+	Done  int `json:"done"`
+}
+
+type statusCountsView struct {
+	Open       int `json:"open"`
+	InProgress int `json:"in_progress"`
+	Review     int `json:"review"`
+	Blocked    int `json:"blocked"`
+	Done       int `json:"done"`
+}
+
+type projectStatusView struct {
+	projectView
+	UserStories progressView     `json:"user_stories"`
+	Tickets     progressView     `json:"tickets"`
+	Statuses    statusCountsView `json:"statuses"`
 }
 
 type featureView struct {
@@ -92,7 +113,7 @@ func main() {
 		err = errors.New("unknown command")
 	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "htb:", err)
+		fmt.Fprintln(os.Stderr, styledError("htb:"), err)
 		os.Exit(1)
 	}
 }
@@ -120,7 +141,7 @@ Getting started:
 
 Commands:
   version                         Show the CLI version
-  project list | create | use     Manage projects
+  project list | status | create | use     Manage projects
   feature create                  Create a roadmap feature
   ticket create | list | show     Create, browse, or view tickets
   ticket update | comment         Update or comment on a ticket
@@ -141,9 +162,11 @@ Use "htb help ticket create" or "htb ticket create --help" for command details.
 	case "auth status":
 		return "Usage: htb auth status\n\nShow whether you are connected, your accessible projects, and the current project.\n"
 	case "project":
-		return "Usage:\n  htb project list\n  htb project use KEY\n  htb project create --key KEY --name NAME [--description TEXT]\n\nA project key is the short identifier used in commands and ticket references, for example HTB-1. Input is normalized to uppercase. It must be 2 to 20 characters, start with a letter, and contain only letters, digits, or underscores.\n"
+		return "Usage:\n  htb project list\n  htb project status\n  htb project use KEY\n  htb project create --key KEY --name NAME [--description TEXT]\n\nA project key is the short identifier used in commands and ticket references, for example HTB-1. Input is normalized to uppercase. It must be 2 to 20 characters, start with a letter, and contain only letters, digits, or underscores.\n"
 	case "project list":
 		return "Usage: htb project list\n\nList projects you can access.\n"
+	case "project status":
+		return "Usage: htb project status\n\nShow user-story and ticket progress, plus the status breakdown, for every project you can access.\n"
 	case "project use":
 		return "Usage: htb project use KEY\n\nSet the current project used by commands that do not specify --project.\n"
 	case "project create":
@@ -428,6 +451,9 @@ func refreshAccessToken(c *config) error {
 	return save(*c)
 }
 func projectCommand(args []string) error {
+	if len(args) == 1 && args[0] == "status" {
+		return projectStatus()
+	}
 	if len(args) == 2 && args[0] == "use" {
 		var response struct {
 			Projects []struct {
@@ -469,18 +495,21 @@ func projectCommand(args []string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Println("Accessible projects:")
+		fmt.Println(styledHeading("Accessible projects:"))
 		for _, project := range response.Projects {
 			marker := " "
 			if project.Key == c.CurrentProject {
 				marker = "*"
 			}
-			fmt.Printf("%s %s — %s%s\n", marker, project.Key, project.Name, archivedLabel(project.Archived))
+			if marker == "*" {
+				marker = styledAccent(marker)
+			}
+			fmt.Printf("%s %s — %s%s\n", marker, styledReference(project.Key), project.Name, styledMuted(archivedLabel(project.Archived)))
 		}
 		return nil
 	}
 	if len(args) == 0 || args[0] != "create" {
-		return errors.New("usage: htb project {list|use KEY|create --key KEY --name NAME}")
+		return errors.New("usage: htb project {list|status|use KEY|create --key KEY --name NAME}")
 	}
 	fs := flag.NewFlagSet("project create", flag.ContinueOnError)
 	key := fs.String("key", "", "project key")
@@ -506,6 +535,35 @@ func projectCommand(args []string) error {
 		return err
 	}
 	fmt.Printf("Project %s created: %s. It is now the current project.\n", created.Key, created.Name)
+	return nil
+}
+
+func projectStatus() error {
+	var response struct {
+		Projects []projectStatusView `json:"projects"`
+	}
+	if err := call("GET", "/api/v1/projects/status", nil, &response); err != nil {
+		return err
+	}
+	if len(response.Projects) == 0 {
+		fmt.Println("No accessible projects.")
+		return nil
+	}
+	c, err := load()
+	if err != nil {
+		return err
+	}
+	fmt.Println(styledHeading("Project status"))
+	for _, project := range response.Projects {
+		marker := " "
+		if project.Key == c.CurrentProject {
+			marker = styledAccent("*")
+		}
+		fmt.Printf("%s %s — %s%s\n", marker, styledReference(project.Key), project.Name, styledMuted(archivedLabel(project.Archived)))
+		fmt.Printf("  User stories  %s\n", progressSummary(project.UserStories, "no user stories"))
+		fmt.Printf("  Tickets       %s\n", progressSummary(project.Tickets, "no tickets"))
+		fmt.Printf("  %s\n", statusBreakdown(project.Statuses))
+	}
 	return nil
 }
 
@@ -689,14 +747,14 @@ func ticketList(args []string) error {
 	if *feature != "" {
 		heading += " / feature " + *feature
 	}
-	fmt.Println(heading)
+	fmt.Println(styledHeading(heading))
 	fmt.Println("REF          STATUS         PROGRESS          TYPE              TITLE")
 	for _, ticket := range response.Tickets {
 		indent := ""
 		if ticket.ParentRef != nil {
 			indent = "↳ "
 		}
-		fmt.Printf("%-12s %s %-17s %-17s %s%s\n", ticket.Ref, paddedStatus(ticket.Status), ticketProgress(ticket), ticket.Type, indent, ticket.Title)
+		fmt.Printf("%s %s %s %-17s %s%s\n", paddedReference(ticket.Ref), paddedStatus(ticket.Status), paddedProgress(ticket), ticket.Type, indent, ticket.Title)
 	}
 	return nil
 }
@@ -931,10 +989,10 @@ func archivedLabel(archived bool) string {
 }
 
 func printTicket(ticket ticketView) {
-	fmt.Printf("%s — %s\n", ticket.Ref, ticket.Title)
+	fmt.Printf("%s — %s\n", styledReference(ticket.Ref), ticket.Title)
 	fmt.Printf("Project: %s | Type: %s | Status: %s | Priority: %s | Version: %d\n", ticket.Project, ticket.Type, styledStatus(ticket.Status), ticket.Priority, ticket.Version)
-	if progress := ticketProgress(ticket); progress != "—" {
-		fmt.Println("Progress:", progress)
+	if ticket.Type == "user_story" {
+		fmt.Println("Progress:", ticketProgress(ticket))
 	}
 	if ticket.ParentRef != nil {
 		fmt.Println("Parent ticket:", *ticket.ParentRef)
@@ -954,32 +1012,93 @@ func printTicket(ticket ticketView) {
 }
 
 func ticketProgress(ticket ticketView) string {
-	if ticket.Type != "user_story" || ticket.ChildCount == 0 {
+	if ticket.Type != "user_story" {
 		return "—"
 	}
+	if ticket.ChildCount == 0 {
+		return "— no tasks"
+	}
 	percent := ticket.DoneChildren * 100 / ticket.ChildCount
-	return fmt.Sprintf("%d/%d tasks (%d%%)", ticket.DoneChildren, ticket.ChildCount, percent)
+	return fmt.Sprintf("%s %d/%d tasks (%d%%)", progressBar(ticket.DoneChildren, ticket.ChildCount), ticket.DoneChildren, ticket.ChildCount, percent)
+}
+
+func paddedProgress(ticket ticketView) string {
+	progress := ticketProgress(ticket)
+	plain := progress
+	if ticket.Type == "user_story" && ticket.ChildCount > 0 {
+		percent := ticket.DoneChildren * 100 / ticket.ChildCount
+		plain = fmt.Sprintf("[██████████] %d/%d tasks (%d%%)", ticket.DoneChildren, ticket.ChildCount, percent)
+	}
+	return progress + strings.Repeat(" ", max(0, 31-utf8.RuneCountInString(plain)))
+}
+
+func progressSummary(progress progressView, empty string) string {
+	if progress.Total == 0 {
+		return styledMuted("— " + empty)
+	}
+	percent := progress.Done * 100 / progress.Total
+	return fmt.Sprintf("%s %d/%d (%d%%)", progressBar(progress.Done, progress.Total), progress.Done, progress.Total, percent)
+}
+
+func progressBar(done, total int) string {
+	if total == 0 {
+		return "—"
+	}
+	filled := done * 10 / total
+	return "[" + styledSuccess(strings.Repeat("█", filled)) + styledMuted(strings.Repeat("░", 10-filled)) + "]"
+}
+
+func statusBreakdown(counts statusCountsView) string {
+	return strings.Join([]string{
+		fmt.Sprintf("%s %d", styledStatus("open"), counts.Open),
+		fmt.Sprintf("%s %d", styledStatus("in_progress"), counts.InProgress),
+		fmt.Sprintf("%s %d", styledStatus("review"), counts.Review),
+		fmt.Sprintf("%s %d", styledStatus("blocked"), counts.Blocked),
+		fmt.Sprintf("%s %d", styledStatus("done"), counts.Done),
+	}, " · ")
 }
 
 func styledStatus(status string) string {
-	if !colorsEnabled() {
-		return status
-	}
 	color := map[string]string{
-		"open":        "\x1b[90m",
-		"in_progress": "\x1b[36m",
-		"review":      "\x1b[33m",
-		"blocked":     "\x1b[31m",
-		"done":        "\x1b[32m",
+		"open":        ansiMuted,
+		"in_progress": ansiAccent,
+		"review":      ansiWarning,
+		"blocked":     ansiError,
+		"done":        ansiSuccess,
 	}[status]
-	if color == "" {
-		return status
-	}
-	return color + status + "\x1b[0m"
+	return styled(status, color)
 }
+
+const (
+	ansiReset   = "\x1b[0m"
+	ansiBold    = "\x1b[1m"
+	ansiMuted   = "\x1b[90m"
+	ansiAccent  = "\x1b[36m"
+	ansiWarning = "\x1b[33m"
+	ansiError   = "\x1b[31m"
+	ansiSuccess = "\x1b[32m"
+)
+
+func styled(value, color string) string {
+	if value == "" || color == "" || !colorsEnabled() {
+		return value
+	}
+	return color + value + ansiReset
+}
+
+func styledHeading(value string) string   { return styled(value, ansiBold) }
+func styledReference(value string) string { return styled(value, ansiBold) }
+func styledMuted(value string) string     { return styled(value, ansiMuted) }
+func styledAccent(value string) string    { return styled(value, ansiAccent) }
+func styledError(value string) string     { return styled(value, ansiError) }
+func styledSuccess(value string) string   { return styled(value, ansiSuccess) }
 
 func paddedStatus(status string) string {
 	return styledStatus(status) + strings.Repeat(" ", max(0, 14-len(status)))
+}
+
+func paddedReference(ref string) string {
+	return styledReference(ref) + strings.Repeat(" ", max(0, 12-len(ref)))
 }
 
 func colorsEnabled() bool {

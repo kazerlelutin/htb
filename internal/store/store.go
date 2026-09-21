@@ -40,6 +40,23 @@ type Project struct {
 	Description string `json:"description"`
 	Archived    bool   `json:"archived"`
 }
+type Progress struct {
+	Total int `json:"total"`
+	Done  int `json:"done"`
+}
+type StatusCounts struct {
+	Open       int `json:"open"`
+	InProgress int `json:"in_progress"`
+	Review     int `json:"review"`
+	Blocked    int `json:"blocked"`
+	Done       int `json:"done"`
+}
+type ProjectStatus struct {
+	Project
+	UserStories Progress     `json:"user_stories"`
+	Tickets     Progress     `json:"tickets"`
+	Statuses    StatusCounts `json:"statuses"`
+}
 type Feature struct {
 	Key         string     `json:"key"`
 	Name        string     `json:"name"`
@@ -239,6 +256,47 @@ func (s *Store) ListProjects(ctx context.Context, actor Actor) ([]Project, error
 			return nil, err
 		}
 		projects = append(projects, p)
+	}
+	return projects, rows.Err()
+}
+
+// ListProjectStatuses returns each accessible project's ticket totals in one
+// query, so the CLI can render a portfolio view without an N+1 request loop.
+func (s *Store) ListProjectStatuses(ctx context.Context, actor Actor) ([]ProjectStatus, error) {
+	query := `SELECT p.key,p.name,p.description,p.archived_at IS NOT NULL,
+		count(t.id) FILTER (WHERE t.type='user_story'),
+		count(t.id) FILTER (WHERE t.type='user_story' AND t.status='done'),
+		count(t.id), count(t.id) FILTER (WHERE t.status='done'),
+		count(t.id) FILTER (WHERE t.status='open'),
+		count(t.id) FILTER (WHERE t.status='in_progress'),
+		count(t.id) FILTER (WHERE t.status='review'),
+		count(t.id) FILTER (WHERE t.status='blocked')
+		FROM projects p LEFT JOIN tickets t ON t.project_id=p.id`
+	args := []any{}
+	if !actor.Superadmin {
+		query += ` JOIN project_memberships pm ON pm.project_id=p.id WHERE pm.user_id=$1`
+		args = append(args, actor.UserID)
+	}
+	query += ` GROUP BY p.id,p.key,p.name,p.description,p.archived_at ORDER BY p.key`
+	rows, err := s.DB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var projects []ProjectStatus
+	for rows.Next() {
+		var project ProjectStatus
+		if err = rows.Scan(
+			&project.Key, &project.Name, &project.Description, &project.Archived,
+			&project.UserStories.Total, &project.UserStories.Done,
+			&project.Tickets.Total, &project.Tickets.Done,
+			&project.Statuses.Open, &project.Statuses.InProgress,
+			&project.Statuses.Review, &project.Statuses.Blocked,
+		); err != nil {
+			return nil, err
+		}
+		project.Statuses.Done = project.Tickets.Done
+		projects = append(projects, project)
 	}
 	return projects, rows.Err()
 }
