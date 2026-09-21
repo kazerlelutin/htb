@@ -45,8 +45,10 @@ func TestTicketLifecycleOverHTTP(t *testing.T) {
 	}
 	key := "E2E" + strings.ReplaceAll(time.Now().UTC().Format("150405.000000000"), ".", "")
 	otherKey := "ALT" + strings.ReplaceAll(time.Now().UTC().Format("150405.000000000"), ".", "")
+	limitKey := "LIM" + strings.ReplaceAll(time.Now().UTC().Format("150405.000000000"), ".", "")
+	blockedKey := "NO" + strings.ReplaceAll(time.Now().UTC().Format("150405.000000000"), ".", "")
 	subject := "http-test-" + key
-	defer cleanupIntegrationData(t, db, []string{key, otherKey}, subject)
+	defer cleanupIntegrationData(t, db, []string{key, otherKey, limitKey, blockedKey}, subject)
 
 	server := New(data, integrationVerifier{subject: subject}, auth.DeviceConfig{}, "", slog.Default())
 	project := requestJSON(t, server, http.MethodPost, "/api/v1/projects", `{"key":"`+strings.ToLower(key)+`","name":"HTTP integration"}`)
@@ -150,6 +152,17 @@ func TestTicketLifecycleOverHTTP(t *testing.T) {
 	}
 	if response := requestJSON(t, server, http.MethodPost, "/api/v1/tickets/"+child.Ref+"/release", `{}`); response.Code != http.StatusOK {
 		t.Fatalf("release child ticket: %d %s", response.Code, response.Body.String())
+	}
+
+	// The first two projects were created while enforcement was disabled. The
+	// Community plan allows three owned active projects when enforcement starts.
+	if response := requestJSON(t, server, http.MethodPost, "/api/v1/projects", `{"key":"`+limitKey+`","name":"Quota limit"}`); response.Code != http.StatusCreated {
+		t.Fatalf("create project up to quota: %d %s", response.Code, response.Body.String())
+	}
+	data.EnforceProjectLimits = true
+	blocked := requestJSON(t, server, http.MethodPost, "/api/v1/projects", `{"key":"`+blockedKey+`","name":"Over quota"}`)
+	if blocked.Code != http.StatusForbidden || !strings.Contains(blocked.Body.String(), `"project_limit_reached"`) {
+		t.Fatalf("project limit response: %d %s", blocked.Code, blocked.Body.String())
 	}
 }
 
