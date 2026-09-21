@@ -33,5 +33,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          sha256sum dist/* > dist/checksums.txt
+          (cd dist && sha256sum * > checksums.txt)
           gh release create "${{ github.ref_name }}" dist/* --generate-notes
