@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -21,6 +20,7 @@ type Server struct {
 	verifier     auth.Verifier
 	deviceConfig auth.DeviceConfig
 	releaseURL   string
+	publicURL    string
 	log          *slog.Logger
 }
 
@@ -55,7 +55,14 @@ type actorKey struct{}
 type principalKey struct{}
 
 func New(s *store.Store, verifier auth.Verifier, deviceConfig auth.DeviceConfig, releaseURL string, log *slog.Logger) *Server {
-	return &Server{store: s, verifier: verifier, deviceConfig: deviceConfig, releaseURL: releaseURL, log: log}
+	return &Server{store: s, verifier: verifier, deviceConfig: deviceConfig, releaseURL: releaseURL, publicURL: "https://htb.ben-to.fr", log: log}
+}
+
+// SetPublicURL configures canonical URLs displayed on public pages.
+func (s *Server) SetPublicURL(value string) {
+	if value != "" {
+		s.publicURL = strings.TrimRight(value, "/")
+	}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -63,6 +70,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /health", s.health)
 	mux.HandleFunc("GET /{$}", s.home)
 	mux.HandleFunc("GET /downloads", s.downloads)
+	mux.HandleFunc("GET /mentions-legales", s.legalNotice)
+	mux.HandleFunc("GET /cgu", s.terms)
+	mux.HandleFunc("GET /privacy", s.privacy)
+	mux.HandleFunc("GET /assets/public.css", s.publicStyles)
+	mux.HandleFunc("GET /assets/public.js", s.publicScript)
 	mux.HandleFunc("GET /auth/device-config", s.deviceConfiguration)
 	mux.Handle("/api/v1/", s.authenticated(http.HandlerFunc(s.api)))
 	return s.logging(mux)
@@ -81,30 +93,14 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
-func (s *Server) home(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		http.NotFound(w, r)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprint(w, "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>HTB — Headless Ticket Board</title></head><body><main><h1>Headless Ticket Board</h1><p>A shared work tracker for people, scripts, and agents.</p><p><a href=\"/downloads\">Download HTB and view installation commands</a></p></main></body></html>")
-}
 func (s *Server) downloads(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	url := s.releaseURL
 	if url == "" {
 		url = "#"
 	}
 	installationURL := url + "/latest/download/install.sh"
-	renderDownloadsPage(w, installationURL, url)
-}
-
-func renderDownloadsPage(w http.ResponseWriter, installationURL, releaseURL string) {
-	fmt.Fprintf(w, `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Download HTB</title><style>body{font:16px system-ui,sans-serif;max-width:1100px;margin:2rem auto;padding:0 1rem;line-height:1.5}pre{background:#f4f4f4;padding:1rem;overflow:auto}table{border-collapse:collapse;width:100%%}th,td{border-bottom:1px solid #ddd;padding:.75rem;text-align:left;vertical-align:top}code{white-space:normal;overflow-wrap:anywhere}</style></head><body><main><h1>Download HTB</h1><h2>Install on Linux</h2><p>This command installs the CLI, verifies its checksum, and configures your user PATH:</p><pre>curl -fsSL %s | sh</pre><p>Open a new terminal, then run <code>htb auth login</code>.</p><p><a href="%s">Archives, checksums, and all GitHub releases</a></p><h2>Complete command guide</h2><p>Each command below explains when to use it and how its options affect the result. Run <code>htb help</code> or <code>htb help &lt;command&gt;</code> for the same guidance in the terminal.</p><table><caption>All supported commands</caption><thead><tr><th>Area</th><th>Command</th><th>How to use it</th></tr></thead><tbody>`, htmlText(installationURL), htmlText(releaseURL))
-	for _, command := range downloadCommands {
-		fmt.Fprintf(w, "<tr><td>%s</td><td><code>%s</code></td><td>%s</td></tr>", htmlText(command.Group), htmlText(command.Syntax), htmlText(command.Description))
-	}
-	fmt.Fprint(w, "</tbody></table></main></body></html>")
+	language := publicLanguage(r)
+	s.renderPublicPage(w, r, localized(language, "Télécharger HTB", "Download HTB"), localized(language, "Installer la CLI HTB pour Linux.", "Install the HTB CLI for Linux."), downloadsBody(language, installationURL, url))
 }
 
 func (s *Server) authenticated(next http.Handler) http.Handler {
@@ -367,6 +363,8 @@ func writeStoreError(w http.ResponseWriter, err error) {
 		writeError(w, 404, "not_found", "Resource not found", nil)
 	case errors.Is(err, store.ErrConflict):
 		writeError(w, 409, "version_conflict", "Ticket has changed; fetch it and retry", nil)
+	case errors.Is(err, store.ErrProjectLimit):
+		writeError(w, 403, "project_limit_reached", "Your account has reached its project limit", nil)
 	default:
 		writeError(w, 422, "invalid_request", err.Error(), nil)
 	}
@@ -377,7 +375,4 @@ func (s *Server) logging(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 		s.log.Info("request", "method", r.Method, "path", r.URL.Path, "duration", time.Since(start).String())
 	})
-}
-func htmlText(v string) string {
-	return strings.NewReplacer("&", "&amp;", "<", "&lt;", "\"", "&quot;").Replace(v)
 }

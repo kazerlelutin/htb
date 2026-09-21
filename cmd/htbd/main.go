@@ -35,7 +35,7 @@ func main() {
 	db.SetConnMaxLifetime(30 * time.Minute)
 	db.SetMaxOpenConns(10)
 	db.SetMaxIdleConns(5)
-	store := &store.Store{DB: db}
+	store := &store.Store{DB: db, EnforceProjectLimits: os.Getenv("HTBD_ENFORCE_PROJECT_LIMITS") == "true"}
 	if err := store.Migrate(ctx); err != nil {
 		logger.Error("migrate database", "error", err)
 		os.Exit(1)
@@ -47,6 +47,7 @@ func main() {
 	}
 	deviceConfig := auth.DeviceConfig{Issuer: issuer, ClientID: os.Getenv("HTBD_ZITADEL_DEVICE_CLIENT_ID"), Audience: audience}
 	server := httpapi.New(store, verifier, deviceConfig, os.Getenv("HTBD_RELEASE_URL"), logger)
+	server.SetPublicURL(valueOr("HTBD_PUBLIC_URL", "https://htb.ben-to.fr"))
 	httpServer := &http.Server{Addr: valueOr("HTBD_LISTEN_ADDR", ":8080"), Handler: server.Handler(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second}
 	go func() {
 		logger.Info("server started", "address", httpServer.Addr, "version", version)

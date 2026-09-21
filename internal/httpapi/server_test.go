@@ -13,22 +13,28 @@ import (
 
 func TestPublicPages(t *testing.T) {
 	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "https://github.example/releases?x=1&y=2", slog.Default())
-	for _, path := range []string{"/", "/downloads"} {
+	for _, path := range []string{"/", "/downloads?lang=en", "/mentions-legales", "/cgu", "/privacy"} {
 		r := httptest.NewRequest(http.MethodGet, path, nil)
 		w := httptest.NewRecorder()
 		s.Handler().ServeHTTP(w, r)
 		if w.Code != http.StatusOK {
 			t.Fatalf("%s: got status %d", path, w.Code)
 		}
-		if path == "/downloads" && !strings.Contains(w.Body.String(), "x=1&amp;y=2") {
+		if path == "/downloads?lang=en" && !strings.Contains(w.Body.String(), "x=1&amp;y=2") {
 			t.Fatalf("download link is not escaped: %s", w.Body.String())
 		}
-		if path == "/downloads" && !strings.Contains(w.Body.String(), "/latest/download/install.sh") {
+		if path == "/downloads?lang=en" && !strings.Contains(w.Body.String(), "/latest/download/install.sh") {
 			t.Fatalf("download page does not link to the installer: %s", w.Body.String())
 		}
-		if path == "/downloads" {
+		if !strings.Contains(w.Header().Get("Content-Security-Policy"), "analytics.ben-to.fr") {
+			t.Fatalf("%s: public CSP does not permit the consented analytics script", path)
+		}
+		if strings.Contains(w.Body.String(), "https://analytics.ben-to.fr/script.js") {
+			t.Fatalf("%s: analytics must not be loaded in the initial HTML", path)
+		}
+		if path == "/downloads?lang=en" {
 			for _, text := range []string{
-				`lang="en"`, "Complete command guide", "How to use it", "htb version", "htb config set-server URL", "htb auth login", "htb auth status",
+				`lang="en"`, "Command guide", "How to use it", "htb version", "htb config set-server URL", "htb auth login", "htb auth status",
 				"htb project list", "htb project create --key KEY --name NAME", "htb project use KEY", "htb feature create --key KEY --name NAME",
 				"htb ticket create --title TITLE", "htb ticket list", "htb ticket show REF", "htb ticket update --version N", "htb ticket comment REF TEXT", "htb ticket claim REF", "htb ticket versions REF", "htb ticket restore --version N REF REVISION",
 				"htb invite create", "htb invite accept CODE",
@@ -48,6 +54,18 @@ func TestPublicPages(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func TestPublicAssetsDescribeConsentWithoutPreloadingAnalytics(t *testing.T) {
+	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "", slog.Default())
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/assets/public.js", nil))
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "htb.analytics-consent") || !strings.Contains(w.Body.String(), "dataset.websiteId") {
+		t.Fatalf("unexpected consent script: %d %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Header().Get("Content-Type"), "text/javascript") {
+		t.Fatalf("unexpected content type: %s", w.Header().Get("Content-Type"))
 	}
 }
 

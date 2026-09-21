@@ -18,12 +18,16 @@ import (
 )
 
 var (
-	ErrNotFound  = errors.New("not found")
-	ErrForbidden = errors.New("forbidden")
-	ErrConflict  = errors.New("conflict")
+	ErrNotFound     = errors.New("not found")
+	ErrForbidden    = errors.New("forbidden")
+	ErrConflict     = errors.New("conflict")
+	ErrProjectLimit = errors.New("project limit reached")
 )
 
-type Store struct{ DB *sql.DB }
+type Store struct {
+	DB                   *sql.DB
+	EnforceProjectLimits bool
+}
 type Actor struct {
 	CredentialID int64  `json:"credential_id"`
 	UserID       int64  `json:"user_id"`
@@ -102,6 +106,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 		{"0001_initial", htb.InitialMigration},
 		{"0002_feature_due_date", htb.FeatureDueDateMigration},
 		{"0003_project_ticket_numbers", htb.ProjectTicketNumbersMigration},
+		{"0004_account_project_limits", htb.AccountProjectLimitsMigration},
 	}
 	for _, migration := range migrations {
 		var exists bool
@@ -173,14 +178,46 @@ func (s *Store) CreateProject(ctx context.Context, actor Actor, p Project) error
 		return err
 	}
 	defer tx.Rollback()
+	if s.EnforceProjectLimits {
+		if err = s.checkProjectLimit(ctx, tx, actor.UserID); err != nil {
+			return err
+		}
+	}
 	var projectID int64
-	if err = tx.QueryRowContext(ctx, `INSERT INTO projects(key,name,description) VALUES($1,$2,$3) RETURNING id`, key, p.Name, p.Description).Scan(&projectID); err != nil {
+	if err = tx.QueryRowContext(ctx, `INSERT INTO projects(key,name,description,owner_user_id) VALUES($1,$2,$3,$4) RETURNING id`, key, p.Name, p.Description, actor.UserID).Scan(&projectID); err != nil {
 		return err
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO project_memberships(project_id,user_id,role) VALUES($1,$2,'admin')`, projectID, actor.UserID); err != nil {
 		return err
 	}
 	return tx.Commit()
+}
+
+// checkProjectLimit serializes project creation for one account, so concurrent
+// requests cannot both pass the quota check.
+func (s *Store) checkProjectLimit(ctx context.Context, tx *sql.Tx, userID int64) error {
+	if _, err := tx.ExecContext(ctx, `SELECT id FROM users WHERE id=$1 FOR UPDATE`, userID); err != nil {
+		return err
+	}
+	var limit sql.NullInt64
+	err := tx.QueryRowContext(ctx, `
+		SELECT max_projects FROM plans
+		WHERE code=COALESCE((SELECT plan_code FROM user_plans WHERE user_id=$1), 'community')
+	`, userID).Scan(&limit)
+	if err != nil {
+		return err
+	}
+	if !limit.Valid {
+		return nil
+	}
+	var owned int64
+	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM projects WHERE owner_user_id=$1 AND archived_at IS NULL`, userID).Scan(&owned); err != nil {
+		return err
+	}
+	if owned >= limit.Int64 {
+		return ErrProjectLimit
+	}
+	return nil
 }
 
 func (s *Store) ListProjects(ctx context.Context, actor Actor) ([]Project, error) {

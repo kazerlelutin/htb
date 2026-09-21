@@ -13,3 +13,6 @@ var FeatureDueDateMigration string
 
 //go:embed migrations/0003_project_ticket_numbers.sql
 var ProjectTicketNumbersMigration string
+
+//go:embed migrations/0004_account_project_limits.sql
+var AccountProjectLimitsMigration string

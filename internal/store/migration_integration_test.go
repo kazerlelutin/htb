@@ -50,6 +50,9 @@ func TestProjectTicketNumbersMigrationBackfillsEachProject(t *testing.T) {
 	if _, err = db.ExecContext(context.Background(), `INSERT INTO projects(key,name) VALUES ('HTB','HTB'), ('BENTO','Ben-to')`); err != nil {
 		t.Fatal(err)
 	}
+	if _, err = db.ExecContext(context.Background(), `INSERT INTO users(zitadel_subject,name) VALUES ('migration-owner','Migration owner'); INSERT INTO project_memberships(project_id,user_id,role) VALUES (1,1,'admin')`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err = db.ExecContext(context.Background(), `INSERT INTO tickets(project_id,type,title) VALUES (1,'bug','First HTB ticket'), (1,'bug','Second HTB ticket'), (2,'bug','First BENTO ticket')`); err != nil {
 		t.Fatal(err)
 	}
@@ -90,5 +93,16 @@ func TestProjectTicketNumbersMigrationBackfillsEachProject(t *testing.T) {
 		if next != assertion.want {
 			t.Fatalf("next number for %s = %d, want %d", assertion.project, next, assertion.want)
 		}
+	}
+	var ownerID, projectLimit int
+	if err = db.QueryRowContext(context.Background(), `SELECT owner_user_id FROM projects WHERE key='HTB'`).Scan(&ownerID); err != nil || ownerID != 1 {
+		t.Fatalf("project owner backfill = %d, %v; want 1", ownerID, err)
+	}
+	if err = db.QueryRowContext(context.Background(), `SELECT max_projects FROM plans WHERE code='community'`).Scan(&projectLimit); err != nil || projectLimit != 3 {
+		t.Fatalf("community project limit = %d, %v; want 3", projectLimit, err)
+	}
+	var plan string
+	if err = db.QueryRowContext(context.Background(), `SELECT plan_code FROM user_plans WHERE user_id=1`).Scan(&plan); err != nil || plan != "community" {
+		t.Fatalf("migrated user plan = %q, %v; want community", plan, err)
 	}
 }
