@@ -35,6 +35,7 @@ var downloadCommands = []commandReference{
 	{"Connection", "htb auth login [--issuer URL --client-id ID --audience ID]", "Open the browser sign-in flow. Normally the server provides the connection settings; the optional flags are only for an advanced manual setup."},
 	{"Connection", "htb auth status", "Show whether you are connected, the projects you can access, and the project currently selected."},
 	{"Projects", "htb project list", "List projects you can access. The star marks the current project."},
+	{"Projects", "htb project status", "Show progress for every accessible project, including user stories, all tickets, and their status breakdown."},
 	{"Projects", "htb project create --key KEY --name NAME [--description TEXT]", "Create a project and select it immediately. KEY identifies the project in commands and ticket references such as HTB-1; lowercase input is converted to uppercase."},
 	{"Projects", "htb project use KEY", "Select the project used when a command does not include --project."},
 	{"Roadmap", "htb feature create --key KEY --name NAME [--project KEY] [--description TEXT] [--due-date YYYY-MM-DD]", "Create a roadmap feature. It uses the current project unless --project is provided; --due-date is optional."},
@@ -139,6 +140,8 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 		s.createProject(w, r)
 	case r.Method == "GET" && path == "projects":
 		s.listProjects(w, r)
+	case r.Method == "GET" && path == "projects/status":
+		s.listProjectStatuses(w, r)
 	case r.Method == "POST" && strings.HasPrefix(path, "projects/") && strings.HasSuffix(path, "/features"):
 		s.createFeature(w, r, strings.TrimSuffix(strings.TrimPrefix(path, "projects/"), "/features"))
 	case r.Method == "GET" && path == "tickets":
@@ -175,6 +178,14 @@ func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) listProjects(w http.ResponseWriter, r *http.Request) {
 	projects, err := s.store.ListProjects(r.Context(), actor(r))
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"projects": projects})
+}
+func (s *Server) listProjectStatuses(w http.ResponseWriter, r *http.Request) {
+	projects, err := s.store.ListProjectStatuses(r.Context(), actor(r))
 	if err != nil {
 		writeStoreError(w, err)
 		return

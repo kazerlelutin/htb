@@ -44,11 +44,45 @@ func TestTicketViewDecodesRelationshipFields(t *testing.T) {
 }
 
 func TestTicketProgress(t *testing.T) {
-	if got := ticketProgress(ticketView{Type: "user_story", ChildCount: 3, DoneChildren: 2}); got != "2/3 tasks (66%)" {
+	if got := ticketProgress(ticketView{Type: "user_story", ChildCount: 3, DoneChildren: 2}); got != "[██████░░░░] 2/3 tasks (66%)" {
+		t.Fatalf("got %q", got)
+	}
+	if got := ticketProgress(ticketView{Type: "user_story"}); got != "— no tasks" {
 		t.Fatalf("got %q", got)
 	}
 	if got := ticketProgress(ticketView{Type: "bug"}); got != "—" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+func TestProgressBarAndColorsRespectConfiguration(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	t.Setenv("HTB_COLOR", "always")
+	if got := progressBar(1, 2); got != "[█████░░░░░]" {
+		t.Fatalf("uncolored bar = %q", got)
+	}
+	if got := progressSummary(progressView{Done: 0, Total: 0}, "no tickets"); got != "— no tickets" {
+		t.Fatalf("empty progress = %q", got)
+	}
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("HTB_COLOR", "always")
+	if got := progressBar(1, 2); !strings.Contains(got, ansiSuccess) || !strings.Contains(got, ansiMuted) {
+		t.Fatalf("colored bar = %q", got)
+	}
+	if got := styledStatus("blocked"); !strings.Contains(got, ansiError) {
+		t.Fatalf("blocked status = %q", got)
+	}
+}
+
+func TestProjectStatusViewDecodesAggregate(t *testing.T) {
+	var response struct {
+		Projects []projectStatusView `json:"projects"`
+	}
+	if err := json.Unmarshal([]byte(`{"projects":[{"key":"SITE","name":"Site","user_stories":{"total":3,"done":2},"tickets":{"total":5,"done":3},"statuses":{"open":1,"in_progress":1,"review":0,"blocked":0,"done":3}}]}`), &response); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Projects) != 1 || response.Projects[0].Key != "SITE" || response.Projects[0].UserStories.Done != 2 || response.Projects[0].Statuses.InProgress != 1 {
+		t.Fatalf("unexpected project status: %#v", response.Projects)
 	}
 }
 
@@ -70,7 +104,7 @@ func TestProjectCreationValidationExplainsAndNormalizesKey(t *testing.T) {
 func TestHelpIsDetailedForEveryCommand(t *testing.T) {
 	commands := [][]string{
 		{"version"}, {"config", "set-server"}, {"auth", "login"}, {"auth", "status"},
-		{"project", "list"}, {"project", "use"}, {"project", "create"}, {"feature", "create"},
+		{"project", "list"}, {"project", "status"}, {"project", "use"}, {"project", "create"}, {"feature", "create"},
 		{"ticket", "create"}, {"ticket", "list"}, {"ticket", "show"}, {"ticket", "update"}, {"ticket", "comment"}, {"ticket", "claim"}, {"ticket", "release"}, {"ticket", "versions"}, {"ticket", "restore"},
 		{"invite", "create"}, {"invite", "accept"},
 	}
