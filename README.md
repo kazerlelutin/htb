@@ -4,6 +4,25 @@ HTB est un tableau de tickets pour terminal. Zitadel gère entièrement les
 comptes, l'inscription, la connexion et les mots de passe. HTB ne voit qu'une
 identité Zitadel déjà connectée et gère les projets et leurs droits.
 
+## Site public, confidentialité et futures offres
+
+Le site public est servi par HTB, avec une landing en français et anglais, le
+guide de téléchargement, les [mentions légales](/mentions-legales), les
+[CGU](/cgu) et la [politique de confidentialité](/privacy). La mesure
+d'audience Ben-to ne se charge qu'après un consentement explicite dans le
+bandeau de préférences ; le choix peut être modifié depuis le pied de page.
+
+Les données de compte et de projet sont traitées par HTB et l'authentification
+reste déléguée à Zitadel. Les coordonnées juridiques publiées doivent être
+vérifiées avant toute mise en production.
+
+Le schéma prépare des offres par compte avec un plafond de projets possédés.
+La limite Community est initialisée à trois projets, mais aucune restriction
+n'est appliquée tant que `HTBD_ENFORCE_PROJECT_LIMITS=false`. Lorsque cette
+variable sera activée, le contrôle est effectué côté serveur sur chaque
+création de projet ; un projet simplement rejoint par invitation ne compte pas
+dans le quota.
+
 ## Installer la CLI sous Linux
 
 Une seule commande installe la CLI dans le `PATH` utilisateur, sans `sudo` :
@@ -118,6 +137,8 @@ Reporter ensuite les trois valeurs relevées dans la configuration CapRover :
 HTBD_ZITADEL_ISSUER=https://<votre-instance-zitadel>
 HTBD_ZITADEL_AUDIENCE=<Project ID de HTB>
 HTBD_ZITADEL_DEVICE_CLIENT_ID=<Client ID de HTB CLI>
+HTBD_PUBLIC_URL=https://htb.ben-to.fr
+HTBD_ENFORCE_PROJECT_LIMITS=false
 ```
 
 ## Configurer et lancer HTB

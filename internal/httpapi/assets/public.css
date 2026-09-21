@@ -1,0 +1,366 @@
+:root {
+	color-scheme: dark;
+	--bg: #101414;
+	--surface: #172020;
+	--line: #31403e;
+	--text: #eff5ed;
+	--muted: #9ba9a5;
+	--lime: #c8ff6b;
+	--coral: #ff896b;
+}
+* {
+	box-sizing: border-box;
+}
+html {
+	scroll-behavior: smooth;
+}
+body {
+	margin: 0;
+	background: var(--bg);
+	color: var(--text);
+	font:
+		16px / 1.6 ui-monospace,
+		SFMono-Regular,
+		Menlo,
+		monospace;
+}
+a {
+	color: inherit;
+}
+a:focus-visible,
+button:focus-visible {
+	outline: 3px solid var(--lime);
+	outline-offset: 3px;
+}
+.skip-link {
+	position: absolute;
+	left: 1rem;
+	top: -5rem;
+	background: var(--lime);
+	color: #101414;
+	padding: 0.5rem 1rem;
+	z-index: 3;
+}
+.skip-link:focus {
+	top: 1rem;
+}
+.site-header,
+.site-footer {
+	max-width: 1180px;
+	margin: auto;
+	padding: 1.25rem 1.5rem;
+	display: flex;
+	align-items: center;
+	gap: 1.5rem;
+}
+.site-header {
+	justify-content: space-between;
+	border-bottom: 1px solid var(--line);
+}
+.wordmark {
+	text-decoration: none;
+	font-weight: 800;
+	letter-spacing: 0.08em;
+}
+.wordmark span,
+.eyebrow,
+.success {
+	color: var(--lime);
+}
+nav {
+	display: flex;
+	gap: 1rem;
+	align-items: center;
+}
+nav a,
+.link-button {
+	color: var(--muted);
+	text-decoration: none;
+	font: inherit;
+	font-size: 0.82rem;
+}
+.languages {
+	margin-left: auto;
+}
+.link-button {
+	border: 0;
+	background: transparent;
+	cursor: pointer;
+	padding: 0;
+}
+.site-footer {
+	border-top: 1px solid var(--line);
+	justify-content: space-between;
+	font-size: 0.78rem;
+	color: var(--muted);
+	flex-wrap: wrap;
+}
+main {
+	max-width: 1180px;
+	margin: auto;
+	padding: 0 1.5rem;
+}
+.hero {
+	padding: 7rem 0 4rem;
+}
+.eyebrow {
+	font-size: 0.75rem;
+	letter-spacing: 0.13em;
+	font-weight: bold;
+}
+.hero h1 {
+	font:
+		clamp(2.75rem, 8vw, 6.6rem) / 0.96 ui-monospace,
+		SFMono-Regular,
+		monospace;
+	letter-spacing: -0.08em;
+	margin: 0.6rem 0 1.5rem;
+	max-width: 1000px;
+}
+.hero h1 em {
+	color: var(--lime);
+	font-style: normal;
+}
+.lede {
+	max-width: 650px;
+	color: var(--muted);
+	font-size: 1.1rem;
+}
+.actions {
+	display: flex;
+	gap: 1rem;
+	flex-wrap: wrap;
+	margin: 2rem 0 3.5rem;
+}
+.button {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+	background: var(--lime);
+	color: #101414;
+	text-decoration: none;
+	border: 1px solid var(--lime);
+	padding: 0.75rem 1rem;
+	font:
+		700 0.9rem ui-monospace,
+		SFMono-Regular,
+		monospace;
+	cursor: pointer;
+}
+.button.secondary {
+	background: transparent;
+	color: var(--text);
+	border-color: var(--line);
+}
+.terminal {
+	background: #0a0e0e;
+	border: 1px solid var(--line);
+	max-width: 760px;
+	box-shadow: 10px 10px 0 #26322e;
+}
+.terminal-bar {
+	display: flex;
+	gap: 0.4rem;
+	align-items: center;
+	padding: 0.65rem 0.8rem;
+	border-bottom: 1px solid var(--line);
+	color: var(--muted);
+	font-size: 0.75rem;
+}
+.terminal-bar span {
+	width: 0.6rem;
+	height: 0.6rem;
+	border-radius: 50%;
+	background: var(--coral);
+}
+.terminal-bar span:nth-child(2) {
+	background: #f4cc68;
+}
+.terminal-bar span:nth-child(3) {
+	background: var(--lime);
+}
+.terminal-bar code {
+	margin-left: 0.4rem;
+}
+.terminal pre {
+	padding: 1.2rem;
+	overflow: auto;
+	margin: 0;
+	line-height: 1.8;
+}
+.terminal b {
+	color: var(--lime);
+}
+.muted {
+	color: var(--muted);
+}
+.features {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	border-top: 1px solid var(--line);
+	border-bottom: 1px solid var(--line);
+}
+.features article {
+	padding: 2.5rem 1.75rem;
+	border-right: 1px solid var(--line);
+}
+.features article:last-child {
+	border: 0;
+}
+.features span {
+	color: var(--coral);
+	font-weight: bold;
+}
+.features h2 {
+	font-size: 1.25rem;
+}
+.features p,
+.workflow p,
+.difference p {
+	color: var(--muted);
+}
+.workflow,
+.difference {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 4rem;
+	padding: 6rem 0;
+}
+.workflow h2,
+.difference h2,
+.legal h1,
+.downloads h1 {
+	font-size: clamp(2rem, 5vw, 4rem);
+	line-height: 1.05;
+	letter-spacing: -0.05em;
+}
+.workflow ol {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	display: grid;
+	gap: 1rem;
+}
+.workflow li {
+	background: var(--surface);
+	padding: 1rem;
+	overflow: auto;
+}
+.difference {
+	border-top: 1px solid var(--line);
+	display: block;
+	max-width: 850px;
+}
+.text-link {
+	color: var(--lime);
+	font-weight: bold;
+}
+.legal,
+.downloads {
+	max-width: 820px;
+	padding: 5rem 0;
+}
+.legal h2,
+.downloads h2 {
+	margin-top: 2.5rem;
+	font-size: 1.2rem;
+}
+.legal p {
+	color: var(--muted);
+}
+.downloads table {
+	border-collapse: collapse;
+	width: 100%;
+	font-size: 0.85rem;
+}
+.downloads th,
+.downloads td {
+	border-bottom: 1px solid var(--line);
+	padding: 0.8rem;
+	text-align: left;
+	vertical-align: top;
+}
+.downloads code {
+	overflow-wrap: anywhere;
+}
+.install {
+	background: #0a0e0e;
+	border: 1px solid var(--line);
+	padding: 1rem;
+	overflow: auto;
+}
+.consent {
+	position: fixed;
+	bottom: 1rem;
+	left: 50%;
+	transform: translateX(-50%);
+	width: min(680px, calc(100% - 2rem));
+	background: #eef5eb;
+	color: #101414;
+	padding: 1.25rem;
+	box-shadow: 8px 8px 0 var(--coral);
+	display: flex;
+	gap: 1.5rem;
+	align-items: flex-end;
+	z-index: 2;
+}
+.consent[hidden] {
+	display: none;
+}
+.consent h2 {
+	margin: 0;
+	font-size: 1.1rem;
+}
+.consent p {
+	margin: 0.35rem 0;
+	font:
+		0.85rem / 1.5 system-ui,
+		sans-serif;
+}
+.consent-actions {
+	display: flex;
+	gap: 0.6rem;
+	white-space: nowrap;
+}
+.consent .secondary {
+	color: #101414;
+	border-color: #74817a;
+}
+@media (max-width: 700px) {
+	.site-header {
+		gap: 0.75rem;
+		flex-wrap: wrap;
+	}
+	.site-header nav {
+		order: 3;
+		width: 100%;
+	}
+	.languages {
+		margin-left: 0;
+	}
+	.hero {
+		padding-top: 4rem;
+	}
+	.features,
+	.workflow {
+		grid-template-columns: 1fr;
+	}
+	.features article {
+		border-right: 0;
+		border-bottom: 1px solid var(--line);
+	}
+	.workflow,
+	.difference {
+		gap: 1.5rem;
+		padding: 4rem 0;
+	}
+	.consent {
+		display: block;
+	}
+	.consent-actions {
+		margin-top: 1rem;
+	}
+	.site-footer nav {
+		flex-wrap: wrap;
+	}
+}
