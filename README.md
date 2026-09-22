@@ -84,6 +84,7 @@ htb ticket update --help
 | --- | --- |
 | Configurer / se connecter | `htb config set-server URL`, `htb auth login`, `htb auth status` |
 | Gérer le projet | `htb project list`, `htb project status`, `htb project create --key KEY --name NAME`, `htb project use KEY` |
+| Gérer l’équipe | `htb project members`, `htb project member set-role --user ID --role write`, `htb project member remove --user ID` |
 | Organiser la roadmap | `htb feature create --key KEY --name NAME --due-date YYYY-MM-DD` |
 | Créer un ticket | `htb ticket create --title TITRE --type user_story` |
 | Créer une tâche d'US | `htb ticket create --type technical_task --parent SITE-1 --title TITRE` |
@@ -92,7 +93,7 @@ htb ticket update --help
 | Mettre à jour | `htb ticket update --version 2 --status in_progress SITE-2` |
 | Collaborer | `htb ticket comment SITE-2 "Texte"`, `htb ticket claim SITE-2`, `htb ticket release SITE-2` |
 | Historique | `htb ticket versions SITE-2`, `htb ticket restore --version 3 SITE-2 1` |
-| Invitations | `htb invite create --role write`, `htb invite accept CODE` |
+| Invitations | `htb invite create --role write`, `htb invite list`, `htb invite revoke ID`, `htb invite accept CODE` |
 
 La sortie est conçue pour le terminal. Pour automatiser une liste, utiliser
 `htb ticket list --json` ou `htb ticket list --csv`.

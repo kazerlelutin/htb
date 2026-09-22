@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -48,7 +49,8 @@ func TestTicketLifecycleOverHTTP(t *testing.T) {
 	limitKey := "LIM" + strings.ReplaceAll(time.Now().UTC().Format("150405.000000000"), ".", "")
 	blockedKey := "NO" + strings.ReplaceAll(time.Now().UTC().Format("150405.000000000"), ".", "")
 	subject := "http-test-" + key
-	defer cleanupIntegrationData(t, db, []string{key, otherKey, limitKey, blockedKey}, subject)
+	memberSubject := "http-member-" + key
+	defer cleanupIntegrationData(t, db, []string{key, otherKey, limitKey, blockedKey}, []string{subject, memberSubject})
 
 	server := New(data, integrationVerifier{subject: subject}, auth.DeviceConfig{}, "", slog.Default())
 	project := requestJSON(t, server, http.MethodPost, "/api/v1/projects", `{"key":"`+strings.ToLower(key)+`","name":"HTTP integration"}`)
@@ -57,6 +59,57 @@ func TestTicketLifecycleOverHTTP(t *testing.T) {
 	}
 	if !strings.Contains(project.Body.String(), `"key":"`+key+`"`) {
 		t.Fatalf("create project should normalize its key: %s", project.Body.String())
+	}
+	members := requestJSON(t, server, http.MethodGet, "/api/v1/projects/"+key+"/members", "")
+	if members.Code != http.StatusOK || !strings.Contains(members.Body.String(), `"owner":true`) {
+		t.Fatalf("list project members: %d %s", members.Code, members.Body.String())
+	}
+	var roster struct {
+		Members []store.ProjectMember `json:"members"`
+	}
+	if err := json.Unmarshal(members.Body.Bytes(), &roster); err != nil || len(roster.Members) != 1 || !roster.Members[0].Owner {
+		t.Fatalf("decode owner roster: %#v, %v", roster, err)
+	}
+	if response := requestJSON(t, server, http.MethodPatch, "/api/v1/projects/"+key+"/members/"+strconv.FormatInt(roster.Members[0].UserID, 10), `{"role":"write"}`); response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("demote owner: %d %s", response.Code, response.Body.String())
+	}
+	memberInvitation := requestJSON(t, server, http.MethodPost, "/api/v1/invitations", `{"project":"`+key+`","role":"read","expires_at":"`+time.Now().Add(time.Hour).Format(time.RFC3339)+`"}`)
+	if memberInvitation.Code != http.StatusCreated {
+		t.Fatalf("create member invitation: %d %s", memberInvitation.Code, memberInvitation.Body.String())
+	}
+	var invitationCode struct {
+		Code string `json:"code"`
+	}
+	if err := json.Unmarshal(memberInvitation.Body.Bytes(), &invitationCode); err != nil || invitationCode.Code == "" {
+		t.Fatalf("decode member invitation: %v %s", err, memberInvitation.Body.String())
+	}
+	if err := data.AcceptInvitation(ctx, memberSubject, "HTTP member", "member@example.test", invitationCode.Code); err != nil {
+		t.Fatalf("accept member invitation: %v", err)
+	}
+	members = requestJSON(t, server, http.MethodGet, "/api/v1/projects/"+key+"/members", "")
+	if err := json.Unmarshal(members.Body.Bytes(), &roster); err != nil || len(roster.Members) != 2 {
+		t.Fatalf("list accepted member: %v %s", err, members.Body.String())
+	}
+	memberID := roster.Members[1].UserID
+	if response := requestJSON(t, server, http.MethodPatch, "/api/v1/projects/"+key+"/members/"+strconv.FormatInt(memberID, 10), `{"role":"write"}`); response.Code != http.StatusNoContent {
+		t.Fatalf("update member role: %d %s", response.Code, response.Body.String())
+	}
+	if response := requestJSON(t, server, http.MethodDelete, "/api/v1/projects/"+key+"/members/"+strconv.FormatInt(memberID, 10), ""); response.Code != http.StatusNoContent {
+		t.Fatalf("remove member: %d %s", response.Code, response.Body.String())
+	}
+	pending := requestJSON(t, server, http.MethodPost, "/api/v1/invitations", `{"project":"`+key+`","role":"read","expires_at":"`+time.Now().Add(time.Hour).Format(time.RFC3339)+`"}`)
+	if pending.Code != http.StatusCreated {
+		t.Fatalf("create pending invitation: %d %s", pending.Code, pending.Body.String())
+	}
+	invitations := requestJSON(t, server, http.MethodGet, "/api/v1/projects/"+key+"/invitations", "")
+	var pendingList struct {
+		Invitations []store.Invitation `json:"invitations"`
+	}
+	if invitations.Code != http.StatusOK || strings.Contains(invitations.Body.String(), `"code"`) || json.Unmarshal(invitations.Body.Bytes(), &pendingList) != nil || len(pendingList.Invitations) != 1 {
+		t.Fatalf("list pending invitations: %d %s", invitations.Code, invitations.Body.String())
+	}
+	if response := requestJSON(t, server, http.MethodDelete, "/api/v1/projects/"+key+"/invitations/"+strconv.FormatInt(pendingList.Invitations[0].ID, 10), ""); response.Code != http.StatusNoContent {
+		t.Fatalf("revoke invitation: %d %s", response.Code, response.Body.String())
 	}
 	feature := requestJSON(t, server, http.MethodPost, "/api/v1/projects/"+key+"/features", `{"key":"newsletter","name":"Newsletter","due_date":"2026-09-30T00:00:00Z"}`)
 	if feature.Code != http.StatusCreated {
@@ -196,10 +249,11 @@ func requestJSON(t *testing.T, server *Server, method, path, body string) *httpt
 	return response
 }
 
-func cleanupIntegrationData(t *testing.T, db *sql.DB, keys []string, subject string) {
+func cleanupIntegrationData(t *testing.T, db *sql.DB, keys, subjects []string) {
 	t.Helper()
 	queries := []string{
 		`DELETE FROM activity_events WHERE project_id IN (SELECT id FROM projects WHERE key=$1)`,
+		`DELETE FROM invitations WHERE project_id IN (SELECT id FROM projects WHERE key=$1)`,
 		`DELETE FROM ticket_revisions WHERE ticket_id IN (SELECT id FROM tickets WHERE project_id IN (SELECT id FROM projects WHERE key=$1))`,
 		`DELETE FROM comments WHERE ticket_id IN (SELECT id FROM tickets WHERE project_id IN (SELECT id FROM projects WHERE key=$1))`,
 		`DELETE FROM tickets WHERE project_id IN (SELECT id FROM projects WHERE key=$1)`,
@@ -215,12 +269,14 @@ func cleanupIntegrationData(t *testing.T, db *sql.DB, keys []string, subject str
 			}
 		}
 	}
-	for _, query := range []string{
-		`DELETE FROM credentials WHERE zitadel_subject=$1`,
-		`DELETE FROM users WHERE zitadel_subject=$1`,
-	} {
-		if _, err := db.Exec(query, subject); err != nil {
-			t.Errorf("cleanup integration data: %v", err)
+	for _, subject := range subjects {
+		for _, query := range []string{
+			`DELETE FROM credentials WHERE zitadel_subject=$1`,
+			`DELETE FROM users WHERE zitadel_subject=$1`,
+		} {
+			if _, err := db.Exec(query, subject); err != nil {
+				t.Errorf("cleanup integration data: %v", err)
+			}
 		}
 	}
 }

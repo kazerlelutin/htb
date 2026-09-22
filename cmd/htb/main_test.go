@@ -104,9 +104,9 @@ func TestProjectCreationValidationExplainsAndNormalizesKey(t *testing.T) {
 func TestHelpIsDetailedForEveryCommand(t *testing.T) {
 	commands := [][]string{
 		{"version"}, {"config", "set-server"}, {"auth", "login"}, {"auth", "status"},
-		{"project", "list"}, {"project", "status"}, {"project", "use"}, {"project", "create"}, {"feature", "create"},
+		{"project", "list"}, {"project", "status"}, {"project", "use"}, {"project", "create"}, {"project", "members"}, {"project", "member"}, {"feature", "create"},
 		{"ticket", "create"}, {"ticket", "list"}, {"ticket", "show"}, {"ticket", "update"}, {"ticket", "comment"}, {"ticket", "claim"}, {"ticket", "release"}, {"ticket", "versions"}, {"ticket", "restore"},
-		{"invite", "create"}, {"invite", "accept"},
+		{"invite", "create"}, {"invite", "accept"}, {"invite", "list"}, {"invite", "revoke"},
 	}
 	for _, command := range commands {
 		help := helpText(command)

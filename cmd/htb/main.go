@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -56,6 +57,18 @@ type projectStatusView struct {
 type featureView struct {
 	Key, Name, Description string
 	DueDate                *time.Time `json:"due_date"`
+}
+type memberView struct {
+	UserID int64  `json:"user_id"`
+	Name   string `json:"name"`
+	Email  string `json:"email"`
+	Role   string `json:"role"`
+	Owner  bool   `json:"owner"`
+}
+type invitationView struct {
+	ID        int64     `json:"id"`
+	Role      string    `json:"role"`
+	ExpiresAt time.Time `json:"expires_at"`
 }
 
 type ticketView struct {
@@ -141,13 +154,13 @@ Getting started:
 
 Commands:
   version                         Show the CLI version
-  project list | status | create | use     Manage projects
+  project list | status | create | use | members | member     Manage projects and access
   feature create                  Create a roadmap feature
   ticket create | list | show     Create, browse, or view tickets
   ticket update | comment         Update or comment on a ticket
   ticket claim | release          Claim or release a ticket
   ticket versions | restore       View or restore history
-  invite create | accept          Invite or join a project
+  invite create | list | revoke | accept     Invite or join a project
 
 Use "htb help ticket create" or "htb ticket create --help" for command details.
 `
@@ -162,7 +175,7 @@ Use "htb help ticket create" or "htb ticket create --help" for command details.
 	case "auth status":
 		return "Usage: htb auth status\n\nShow whether you are connected, your accessible projects, and the current project.\n"
 	case "project":
-		return "Usage:\n  htb project list\n  htb project status\n  htb project use KEY\n  htb project create --key KEY --name NAME [--description TEXT]\n\nA project key is the short identifier used in commands and ticket references, for example HTB-1. Input is normalized to uppercase. It must be 2 to 20 characters, start with a letter, and contain only letters, digits, or underscores.\n"
+		return "Usage:\n  htb project list | status | use KEY\n  htb project create --key KEY --name NAME [--description TEXT]\n  htb project members [--project KEY]\n  htb project member set-role --user ID --role read|write|admin [--project KEY]\n  htb project member remove --user ID [--project KEY]\n\nA project key is the short identifier used in commands and ticket references, for example HTB-1. Input is normalized to uppercase. It must be 2 to 20 characters, start with a letter, and contain only letters, digits, or underscores.\n"
 	case "project list":
 		return "Usage: htb project list\n\nList projects you can access.\n"
 	case "project status":
@@ -171,6 +184,10 @@ Use "htb help ticket create" or "htb ticket create --help" for command details.
 		return "Usage: htb project use KEY\n\nSet the current project used by commands that do not specify --project.\n"
 	case "project create":
 		return "Usage: htb project create --key KEY --name NAME [--description TEXT]\n\nCreate a project and make it current. A project key is the short identifier used in commands and ticket references, for example HTB-1. Input is normalized to uppercase. It must be 2 to 20 characters, start with a letter, and contain only letters, digits, or underscores.\n"
+	case "project members":
+		return "Usage: htb project members [--project KEY]\n\nList project members. Administrators can use member IDs to change a role or remove access.\n"
+	case "project member":
+		return "Usage:\n  htb project member set-role --user ID --role read|write|admin [--project KEY]\n  htb project member remove --user ID [--project KEY]\n\nManage a non-owner project member. The project owner cannot be removed or demoted.\n"
 	case "feature", "feature create":
 		return "Usage: htb feature create --key KEY --name NAME [--project KEY] [--description TEXT] [--due-date YYYY-MM-DD]\n\nCreate a roadmap feature. Example: htb feature create --key newsletter --name Newsletter --due-date 2026-09-30\n"
 	case "ticket":
@@ -194,11 +211,15 @@ Use "htb help ticket create" or "htb ticket create --help" for command details.
 	case "ticket restore":
 		return "Usage: htb ticket restore --version N REF REVISION\n\nRestore a revision when the ticket is still at version N.\n"
 	case "invite":
-		return "Usage:\n  htb invite create [--project KEY] [--role read|write|admin] [--expires-at RFC3339]\n  htb invite accept CODE\n"
+		return "Usage:\n  htb invite create [--project KEY] [--role read|write|admin] [--expires-at RFC3339]\n  htb invite accept CODE\n  htb invite list [--project KEY]\n  htb invite revoke ID [--project KEY]\n"
 	case "invite create":
 		return "Usage: htb invite create [--project KEY] [--role read|write|admin] [--expires-at RFC3339]\n\nCreate an invitation for a project.\n"
 	case "invite accept":
 		return "Usage: htb invite accept CODE\n\nAccept a project invitation.\n"
+	case "invite list":
+		return "Usage: htb invite list [--project KEY]\n\nList active invitations without exposing their codes.\n"
+	case "invite revoke":
+		return "Usage: htb invite revoke ID [--project KEY]\n\nRevoke an active invitation.\n"
 	default:
 		return fmt.Sprintf("Help is unavailable for \"htb %s\". Run \"htb help\".\n", command)
 	}
@@ -451,6 +472,12 @@ func refreshAccessToken(c *config) error {
 	return save(*c)
 }
 func projectCommand(args []string) error {
+	if len(args) > 0 && args[0] == "members" {
+		return projectMembers(args[1:])
+	}
+	if len(args) > 0 && args[0] == "member" {
+		return projectMember(args[1:])
+	}
 	if len(args) == 1 && args[0] == "status" {
 		return projectStatus()
 	}
@@ -509,7 +536,7 @@ func projectCommand(args []string) error {
 		return nil
 	}
 	if len(args) == 0 || args[0] != "create" {
-		return errors.New("usage: htb project {list|status|use KEY|create --key KEY --name NAME}")
+		return errors.New("usage: htb project {list|status|use KEY|create|members|member}")
 	}
 	fs := flag.NewFlagSet("project create", flag.ContinueOnError)
 	key := fs.String("key", "", "project key")
@@ -535,6 +562,83 @@ func projectCommand(args []string) error {
 		return err
 	}
 	fmt.Printf("Project %s created: %s. It is now the current project.\n", created.Key, created.Name)
+	return nil
+}
+
+func projectMembers(args []string) error {
+	fs := flag.NewFlagSet("project members", flag.ContinueOnError)
+	project := fs.String("project", "", "project")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *project == "" {
+		var err error
+		*project, err = currentProject()
+		if err != nil {
+			return err
+		}
+	}
+	var response struct {
+		Members []memberView `json:"members"`
+	}
+	if err := call("GET", "/api/v1/projects/"+*project+"/members", nil, &response); err != nil {
+		return err
+	}
+	if len(response.Members) == 0 {
+		fmt.Println("No project members.")
+		return nil
+	}
+	fmt.Println(styledHeading("Project members"))
+	for _, member := range response.Members {
+		owner := ""
+		if member.Owner {
+			owner = " owner"
+		}
+		email := ""
+		if member.Email != "" {
+			email = " <" + member.Email + ">"
+		}
+		fmt.Printf("%d  %s%s — %s%s\n", member.UserID, member.Name, email, member.Role, styledMuted(owner))
+	}
+	return nil
+}
+
+func projectMember(args []string) error {
+	if len(args) == 0 || (args[0] != "set-role" && args[0] != "remove") {
+		return errors.New("usage: htb project member {set-role|remove} --user ID [--project KEY]")
+	}
+	fs := flag.NewFlagSet("project member "+args[0], flag.ContinueOnError)
+	project := fs.String("project", "", "project")
+	userID := fs.Int64("user", 0, "member ID")
+	role := fs.String("role", "", "read|write|admin")
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	if *userID < 1 {
+		return errors.New("--user must be a member ID from htb project members")
+	}
+	if *project == "" {
+		var err error
+		*project, err = currentProject()
+		if err != nil {
+			return err
+		}
+	}
+	path := fmt.Sprintf("/api/v1/projects/%s/members/%d", *project, *userID)
+	if args[0] == "set-role" {
+		if *role != "read" && *role != "write" && *role != "admin" {
+			return errors.New("--role must be read, write, or admin")
+		}
+		if err := call("PATCH", path, map[string]string{"role": *role}, &struct{}{}); err != nil {
+			return err
+		}
+		fmt.Printf("Member %d role set to %s.\n", *userID, *role)
+		return nil
+	}
+	if err := call("DELETE", path, nil, &struct{}{}); err != nil {
+		return err
+	}
+	fmt.Printf("Member %d removed.\n", *userID)
 	return nil
 }
 
@@ -867,7 +971,61 @@ func inviteCommand(args []string) error {
 		fmt.Printf("Invitation code created: %s\nShare it with: htb invite accept %s\n", response.Code, response.Code)
 		return nil
 	}
-	return errors.New("usage: htb invite create --project KEY --role read --expires-at RFC3339 | htb invite accept CODE")
+	if args[0] == "list" {
+		fs := flag.NewFlagSet("invite list", flag.ContinueOnError)
+		project := fs.String("project", "", "project")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *project == "" {
+			var err error
+			*project, err = currentProject()
+			if err != nil {
+				return err
+			}
+		}
+		var response struct {
+			Invitations []invitationView `json:"invitations"`
+		}
+		if err := call("GET", "/api/v1/projects/"+*project+"/invitations", nil, &response); err != nil {
+			return err
+		}
+		if len(response.Invitations) == 0 {
+			fmt.Println("No active invitations.")
+			return nil
+		}
+		fmt.Println(styledHeading("Active invitations"))
+		for _, invitation := range response.Invitations {
+			fmt.Printf("%d  %s — expires %s\n", invitation.ID, invitation.Role, invitation.ExpiresAt.Format(time.RFC3339))
+		}
+		return nil
+	}
+	if args[0] == "revoke" {
+		fs := flag.NewFlagSet("invite revoke", flag.ContinueOnError)
+		project := fs.String("project", "", "project")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() != 1 {
+			return errors.New("usage: htb invite revoke ID [--project KEY]")
+		}
+		invitationID, err := strconv.ParseInt(fs.Arg(0), 10, 64)
+		if err != nil || invitationID < 1 {
+			return errors.New("invitation ID must be numeric")
+		}
+		if *project == "" {
+			*project, err = currentProject()
+			if err != nil {
+				return err
+			}
+		}
+		if err = call("DELETE", fmt.Sprintf("/api/v1/projects/%s/invitations/%d", *project, invitationID), nil, &struct{}{}); err != nil {
+			return err
+		}
+		fmt.Printf("Invitation %d revoked.\n", invitationID)
+		return nil
+	}
+	return errors.New("usage: htb invite {create|accept|list|revoke}")
 }
 
 func call(method, path string, input any, output any) error {
@@ -912,6 +1070,9 @@ func call(method, path string, input any, output any) error {
 	}
 	if resp.StatusCode >= 300 {
 		return apiError(resp.Status, data)
+	}
+	if resp.StatusCode == http.StatusNoContent {
+		return nil
 	}
 	if output != nil {
 		return json.Unmarshal(data, output)
