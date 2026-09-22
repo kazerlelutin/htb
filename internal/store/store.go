@@ -63,6 +63,19 @@ type Feature struct {
 	Description string     `json:"description"`
 	DueDate     *time.Time `json:"due_date,omitempty"`
 }
+type ProjectMember struct {
+	UserID int64       `json:"user_id"`
+	Name   string      `json:"name"`
+	Email  string      `json:"email"`
+	Role   domain.Role `json:"role"`
+	Owner  bool        `json:"owner"`
+}
+type Invitation struct {
+	ID        int64       `json:"id"`
+	Role      domain.Role `json:"role"`
+	ExpiresAt time.Time   `json:"expires_at"`
+	CreatedAt time.Time   `json:"created_at"`
+}
 type Ticket struct {
 	ID           int64             `json:"id"`
 	Number       int64             `json:"-"`
@@ -816,6 +829,158 @@ func (s *Store) AcceptInvitation(ctx context.Context, subject, name, email, code
 	return tx.Commit()
 }
 
+func (s *Store) ListProjectMembers(ctx context.Context, actor Actor, project string) ([]ProjectMember, error) {
+	if err := s.authorize(ctx, actor, project, domain.RoleAdmin); err != nil {
+		return nil, err
+	}
+	rows, err := s.DB.QueryContext(ctx, `SELECT u.id,u.name,COALESCE(u.email,''),pm.role,p.owner_user_id=u.id FROM project_memberships pm JOIN projects p ON p.id=pm.project_id JOIN users u ON u.id=pm.user_id WHERE p.key=$1 ORDER BY p.owner_user_id=u.id DESC,u.name,u.id`, strings.ToUpper(project))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	members := []ProjectMember{}
+	for rows.Next() {
+		var member ProjectMember
+		var role string
+		if err = rows.Scan(&member.UserID, &member.Name, &member.Email, &role, &member.Owner); err != nil {
+			return nil, err
+		}
+		member.Role = domain.Role(role)
+		members = append(members, member)
+	}
+	return members, rows.Err()
+}
+
+func (s *Store) UpdateProjectMemberRole(ctx context.Context, actor Actor, project string, userID int64, role domain.Role) error {
+	if err := s.authorize(ctx, actor, project, domain.RoleAdmin); err != nil {
+		return err
+	}
+	if !role.Allows(domain.RoleRead) {
+		return fmt.Errorf("invalid member role")
+	}
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	projectID, ownerID, err := projectAdministration(ctx, tx, project)
+	if err != nil {
+		return err
+	}
+	if userID == ownerID {
+		return fmt.Errorf("the project owner role cannot be changed")
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE project_memberships SET role=$1 WHERE project_id=$2 AND user_id=$3`, role, projectID, userID)
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return ErrNotFound
+	}
+	if err = writeProjectEvent(ctx, tx, projectID, actor.CredentialID, "member_role_updated", map[string]any{"user_id": userID, "role": role}); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Store) RemoveProjectMember(ctx context.Context, actor Actor, project string, userID int64) error {
+	if err := s.authorize(ctx, actor, project, domain.RoleAdmin); err != nil {
+		return err
+	}
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	projectID, ownerID, err := projectAdministration(ctx, tx, project)
+	if err != nil {
+		return err
+	}
+	if userID == ownerID {
+		return fmt.Errorf("the project owner cannot be removed")
+	}
+	result, err := tx.ExecContext(ctx, `DELETE FROM project_memberships WHERE project_id=$1 AND user_id=$2`, projectID, userID)
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return ErrNotFound
+	}
+	if err = writeProjectEvent(ctx, tx, projectID, actor.CredentialID, "member_removed", map[string]any{"user_id": userID}); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Store) ListPendingInvitations(ctx context.Context, actor Actor, project string) ([]Invitation, error) {
+	if err := s.authorize(ctx, actor, project, domain.RoleAdmin); err != nil {
+		return nil, err
+	}
+	rows, err := s.DB.QueryContext(ctx, `SELECT i.id,i.role,i.expires_at,i.created_at FROM invitations i JOIN projects p ON p.id=i.project_id WHERE p.key=$1 AND i.accepted_at IS NULL AND i.expires_at>now() ORDER BY i.expires_at,i.id`, strings.ToUpper(project))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	invitations := []Invitation{}
+	for rows.Next() {
+		var invitation Invitation
+		var role string
+		if err = rows.Scan(&invitation.ID, &role, &invitation.ExpiresAt, &invitation.CreatedAt); err != nil {
+			return nil, err
+		}
+		invitation.Role = domain.Role(role)
+		invitations = append(invitations, invitation)
+	}
+	return invitations, rows.Err()
+}
+
+func (s *Store) RevokeInvitation(ctx context.Context, actor Actor, project string, invitationID int64) error {
+	if err := s.authorize(ctx, actor, project, domain.RoleAdmin); err != nil {
+		return err
+	}
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	projectID, _, err := projectAdministration(ctx, tx, project)
+	if err != nil {
+		return err
+	}
+	result, err := tx.ExecContext(ctx, `DELETE FROM invitations WHERE id=$1 AND project_id=$2 AND accepted_at IS NULL AND expires_at>now()`, invitationID, projectID)
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return ErrNotFound
+	}
+	if err = writeProjectEvent(ctx, tx, projectID, actor.CredentialID, "invitation_revoked", map[string]any{"invitation_id": invitationID}); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func projectAdministration(ctx context.Context, tx *sql.Tx, project string) (int64, int64, error) {
+	var projectID, ownerID int64
+	err := tx.QueryRowContext(ctx, `SELECT id,owner_user_id FROM projects WHERE key=$1 FOR UPDATE`, strings.ToUpper(project)).Scan(&projectID, &ownerID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, 0, ErrNotFound
+	}
+	return projectID, ownerID, err
+}
+
 func (s *Store) authorize(ctx context.Context, actor Actor, project string, required domain.Role) error {
 	if actor.Superadmin {
 		return nil
@@ -935,6 +1100,14 @@ func writeEvent(ctx context.Context, tx *sql.Tx, project, ticket, actor int64, a
 		return err
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO activity_events(project_id,ticket_id,action,payload,actor_credential_id) VALUES($1,$2,$3,$4,$5)`, project, ticket, action, b, actor)
+	return err
+}
+func writeProjectEvent(ctx context.Context, tx *sql.Tx, project, actor int64, action string, payload any) error {
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO activity_events(project_id,ticket_id,action,payload,actor_credential_id) VALUES($1,NULL,$2,$3,$4)`, project, action, b, actor)
 	return err
 }
 func currentProjectID(ctx context.Context, tx *sql.Tx, id int64) int64 {

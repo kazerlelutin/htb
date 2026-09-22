@@ -38,6 +38,9 @@ var downloadCommands = []commandReference{
 	{"Projects", "htb project status", "Show progress for every accessible project, including user stories, all tickets, and their status breakdown."},
 	{"Projects", "htb project create --key KEY --name NAME [--description TEXT]", "Create a project and select it immediately. KEY identifies the project in commands and ticket references such as HTB-1; lowercase input is converted to uppercase."},
 	{"Projects", "htb project use KEY", "Select the project used when a command does not include --project."},
+	{"Projects", "htb project members [--project KEY]", "List project members. Administrators can use member IDs to change roles or remove access."},
+	{"Projects", "htb project member set-role --user ID --role read|write|admin [--project KEY]", "Change a non-owner member role. The project owner cannot be demoted."},
+	{"Projects", "htb project member remove --user ID [--project KEY]", "Remove a non-owner member from a project."},
 	{"Roadmap", "htb feature create --key KEY --name NAME [--project KEY] [--description TEXT] [--due-date YYYY-MM-DD]", "Create a roadmap feature. It uses the current project unless --project is provided; --due-date is optional."},
 	{"Tickets", "htb ticket create --title TITLE [--type user_story|technical_task|bug|incident] [--project KEY] [--parent REF] [--related REF] [--feature KEY] [--description TEXT] [--priority low|normal|high|urgent] [--label TAG]", "Create a ticket in the current project by default. A technical task must use --parent with a user-story reference; repeat --label to attach several labels."},
 	{"Tickets", "htb ticket list [--project KEY] [--feature KEY] [--tree] [--json|--csv]", "List tickets from the current project. Filter by feature, include child tickets with --tree, or select JSON/CSV for scripts."},
@@ -50,6 +53,8 @@ var downloadCommands = []commandReference{
 	{"Tickets", "htb ticket restore --version N REF REVISION", "Restore a saved revision only when the ticket is still at version N, preventing accidental overwrites."},
 	{"Invitations", "htb invite create [--project KEY] [--role read|write|admin] [--expires-at RFC3339]", "Create a shareable invitation for the current project or --project. Choose the member role and an expiry time."},
 	{"Invitations", "htb invite accept CODE", "Accept an invitation code and gain access to its project."},
+	{"Invitations", "htb invite list [--project KEY]", "List active invitations without exposing their codes."},
+	{"Invitations", "htb invite revoke ID [--project KEY]", "Revoke an active invitation."},
 }
 
 type actorKey struct{}
@@ -145,6 +150,8 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 		s.listProjectStatuses(w, r)
 	case r.Method == "POST" && strings.HasPrefix(path, "projects/") && strings.HasSuffix(path, "/features"):
 		s.createFeature(w, r, strings.TrimSuffix(strings.TrimPrefix(path, "projects/"), "/features"))
+	case strings.HasPrefix(path, "projects/"):
+		s.projectAdministration(w, r, strings.TrimPrefix(path, "projects/"))
 	case r.Method == "GET" && path == "tickets":
 		s.listTickets(w, r)
 	case r.Method == "POST" && path == "tickets":
@@ -203,6 +210,65 @@ func (s *Server) createFeature(w http.ResponseWriter, r *http.Request, project s
 		return
 	}
 	writeJSON(w, 201, in)
+}
+func (s *Server) projectAdministration(w http.ResponseWriter, r *http.Request, path string) {
+	parts := strings.Split(path, "/")
+	if len(parts) == 2 && parts[1] == "members" && r.Method == http.MethodGet {
+		members, err := s.store.ListProjectMembers(r.Context(), actor(r), parts[0])
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"members": members})
+		return
+	}
+	if len(parts) == 3 && parts[1] == "members" && (r.Method == http.MethodPatch || r.Method == http.MethodDelete) {
+		userID, err := strconv.ParseInt(parts[2], 10, 64)
+		if err != nil || userID < 1 {
+			writeError(w, http.StatusBadRequest, "invalid_request", "Member ID must be numeric", nil)
+			return
+		}
+		if r.Method == http.MethodPatch {
+			var in struct {
+				Role domain.Role `json:"role"`
+			}
+			if !decode(w, r, &in) {
+				return
+			}
+			err = s.store.UpdateProjectMemberRole(r.Context(), actor(r), parts[0], userID, in.Role)
+		} else {
+			err = s.store.RemoveProjectMember(r.Context(), actor(r), parts[0], userID)
+		}
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if len(parts) == 2 && parts[1] == "invitations" && r.Method == http.MethodGet {
+		invitations, err := s.store.ListPendingInvitations(r.Context(), actor(r), parts[0])
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"invitations": invitations})
+		return
+	}
+	if len(parts) == 3 && parts[1] == "invitations" && r.Method == http.MethodDelete {
+		invitationID, err := strconv.ParseInt(parts[2], 10, 64)
+		if err != nil || invitationID < 1 {
+			writeError(w, http.StatusBadRequest, "invalid_request", "Invitation ID must be numeric", nil)
+			return
+		}
+		if err = s.store.RevokeInvitation(r.Context(), actor(r), parts[0], invitationID); err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	writeError(w, http.StatusNotFound, "not_found", "Route not found", nil)
 }
 func (s *Server) listTickets(w http.ResponseWriter, r *http.Request) {
 	project := r.URL.Query().Get("project")
