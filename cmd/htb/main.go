@@ -195,7 +195,7 @@ Use "htb help ticket create" or "htb ticket create --help" for command details.
 	case "ticket create":
 		return "Usage: htb ticket create --title TITLE [--type user_story|technical_task|bug|incident] [--project KEY] [--parent REF] [--related REF] [--feature KEY] [--description TEXT] [--priority low|normal|high|urgent] [--label TAG]\n\nA technical task requires --parent STORY-REF. Repeat --label to add multiple labels.\n"
 	case "ticket list":
-		return "Usage: htb ticket list [--project KEY] [--feature KEY] [--tree] [--json|--csv]\n\nTerminal output is used by default. Use --json or --csv for scripts.\n"
+		return "Usage: htb ticket list [--project KEY] [--feature KEY] [--status STATUS] [--priority PRIORITY] [--label LABEL] [--query TEXT] [--tree] [--json|--csv]\n\nFilter daily work by status, priority, label, or text in a title or description. Terminal output is used by default; use --json or --csv for scripts.\n"
 	case "ticket show":
 		return "Usage: htb ticket show REF\n\nShow a ticket and its current version.\n"
 	case "ticket update":
@@ -810,6 +810,10 @@ func ticketList(args []string) error {
 	project := fs.String("project", "", "project")
 	tree := fs.Bool("tree", false, "include child tickets")
 	feature := fs.String("feature", "", "feature key")
+	status := fs.String("status", "", "open|in_progress|review|blocked|done")
+	priority := fs.String("priority", "", "low|normal|high|urgent")
+	label := fs.String("label", "", "label")
+	search := fs.String("query", "", "text in title or description")
 	csvOutput := fs.Bool("csv", false, "csv output")
 	jsonOutput := fs.Bool("json", false, "JSON output")
 	if err := fs.Parse(args); err != nil {
@@ -825,6 +829,18 @@ func ticketList(args []string) error {
 	query := url.Values{"project": {*project}, "tree": {fmt.Sprint(*tree)}}
 	if *feature != "" {
 		query.Set("feature", *feature)
+	}
+	if *status != "" {
+		query.Set("status", *status)
+	}
+	if *priority != "" {
+		query.Set("priority", *priority)
+	}
+	if *label != "" {
+		query.Set("label", *label)
+	}
+	if *search != "" {
+		query.Set("query", *search)
 	}
 	path := "/api/v1/tickets?" + query.Encode()
 	if *csvOutput || *jsonOutput {
@@ -850,6 +866,18 @@ func ticketList(args []string) error {
 	heading := "Tickets — " + strings.ToUpper(*project)
 	if *feature != "" {
 		heading += " / feature " + *feature
+	}
+	if *status != "" {
+		heading += " / " + *status
+	}
+	if *priority != "" {
+		heading += " / " + *priority
+	}
+	if *label != "" {
+		heading += " / label " + *label
+	}
+	if *search != "" {
+		heading += " / “" + *search + "”"
 	}
 	fmt.Println(styledHeading(heading))
 	fmt.Println("REF          STATUS         PROGRESS          TYPE              TITLE")

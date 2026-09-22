@@ -46,6 +46,25 @@ func TestTicketLabelJSONDecodes(t *testing.T) {
 	}
 }
 
+func TestTicketFilterValuesAreValidated(t *testing.T) {
+	for _, status := range []domain.Status{domain.Open, domain.InProgress, domain.Review, domain.Blocked, domain.Done} {
+		if !validStatus(status) {
+			t.Fatalf("status %q should be valid", status)
+		}
+	}
+	if validStatus("later") {
+		t.Fatal("unknown status should be invalid")
+	}
+	for _, priority := range []string{"low", "normal", "high", "urgent"} {
+		if !validPriority(priority) {
+			t.Fatalf("priority %q should be valid", priority)
+		}
+	}
+	if validPriority("immediate") {
+		t.Fatal("unknown priority should be invalid")
+	}
+}
+
 func TestTicketPayloadDecodesSnakeCaseFields(t *testing.T) {
 	var create CreateTicket
 	if err := json.Unmarshal([]byte(`{"project":"SITE","type":"technical_task","parent_ref":"SITE-1","feature_key":"newsletter"}`), &create); err != nil {

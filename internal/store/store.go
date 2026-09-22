@@ -105,6 +105,14 @@ type CreateTicket struct {
 	Priority    string            `json:"priority"`
 	Labels      []string          `json:"labels"`
 }
+type TicketFilter struct {
+	ParentOnly bool
+	FeatureKey string
+	Status     domain.Status
+	Priority   string
+	Label      string
+	Query      string
+}
 type UpdateTicket struct {
 	Title           *string   `json:"title"`
 	Description     *string   `json:"description"`
@@ -418,18 +426,39 @@ func (s *Store) GetTicket(ctx context.Context, actor Actor, ref string) (Ticket,
 	return scanTicket(row)
 }
 
-func (s *Store) ListTickets(ctx context.Context, actor Actor, project string, parentOnly bool, featureKey string) ([]Ticket, error) {
+func (s *Store) ListTickets(ctx context.Context, actor Actor, project string, filter TicketFilter) ([]Ticket, error) {
 	if err := s.authorize(ctx, actor, project, domain.RoleRead); err != nil {
 		return nil, err
 	}
+	if filter.Status != "" && !validStatus(filter.Status) {
+		return nil, fmt.Errorf("invalid ticket status")
+	}
+	if filter.Priority != "" && !validPriority(filter.Priority) {
+		return nil, fmt.Errorf("invalid ticket priority")
+	}
 	query := ticketSelect + ` WHERE p.key=$1`
 	arguments := []any{strings.ToUpper(project)}
-	if parentOnly {
+	nextArgument := func(value any) string {
+		arguments = append(arguments, value)
+		return fmt.Sprintf("$%d", len(arguments))
+	}
+	if filter.ParentOnly {
 		query += ` AND t.parent_ticket_id IS NULL`
 	}
-	if featureKey != "" {
-		query += ` AND f.key=$2`
-		arguments = append(arguments, featureKey)
+	if filter.FeatureKey != "" {
+		query += ` AND f.key=` + nextArgument(filter.FeatureKey)
+	}
+	if filter.Status != "" {
+		query += ` AND t.status=` + nextArgument(filter.Status)
+	}
+	if filter.Priority != "" {
+		query += ` AND t.priority=` + nextArgument(filter.Priority)
+	}
+	if filter.Label != "" {
+		query += ` AND EXISTS (SELECT 1 FROM ticket_labels tl JOIN labels l ON l.id=tl.label_id WHERE tl.ticket_id=t.id AND l.name=` + nextArgument(filter.Label) + `)`
+	}
+	if filter.Query != "" {
+		query += ` AND (t.title ILIKE '%' || ` + nextArgument(filter.Query) + ` || '%' OR t.description ILIKE '%' || ` + nextArgument(filter.Query) + ` || '%')`
 	}
 	query += ` ORDER BY t.number DESC`
 	rows, err := s.DB.QueryContext(ctx, query, arguments...)
@@ -446,6 +475,14 @@ func (s *Store) ListTickets(ctx context.Context, actor Actor, project string, pa
 		result = append(result, ticket)
 	}
 	return result, rows.Err()
+}
+
+func validStatus(status domain.Status) bool {
+	return status == domain.Open || status == domain.InProgress || status == domain.Review || status == domain.Blocked || status == domain.Done
+}
+
+func validPriority(priority string) bool {
+	return priority == "low" || priority == "normal" || priority == "high" || priority == "urgent"
 }
 
 func (s *Store) UpdateTicket(ctx context.Context, actor Actor, ref string, in UpdateTicket) (Ticket, error) {

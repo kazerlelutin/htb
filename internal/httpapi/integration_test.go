@@ -156,6 +156,13 @@ func TestTicketLifecycleOverHTTP(t *testing.T) {
 	if linked.Code != http.StatusOK || !strings.Contains(linked.Body.String(), ticket.Ref) {
 		t.Fatalf("list linked tickets: %d %s", linked.Code, linked.Body.String())
 	}
+	filtered := requestJSON(t, server, http.MethodGet, "/api/v1/tickets?project="+key+"&status=open&priority=high&label=newsletter&query=avec+tags", "")
+	if filtered.Code != http.StatusOK || !strings.Contains(filtered.Body.String(), ticket.Ref) {
+		t.Fatalf("list filtered tickets: %d %s", filtered.Code, filtered.Body.String())
+	}
+	if response := requestJSON(t, server, http.MethodGet, "/api/v1/tickets?project="+key+"&status=unknown", ""); response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("invalid status filter: %d %s", response.Code, response.Body.String())
+	}
 
 	otherProject := requestJSON(t, server, http.MethodPost, "/api/v1/projects", `{"key":"`+strings.ToLower(otherKey)+`","name":"Second HTTP integration"}`)
 	if otherProject.Code != http.StatusCreated {
