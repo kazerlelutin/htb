@@ -87,6 +87,14 @@ type ticketView struct {
 	ChildCount   int      `json:"child_count"`
 	DoneChildren int      `json:"done_children"`
 }
+type commentView struct {
+	Body, Author string
+	CreatedAt    time.Time `json:"created_at"`
+}
+type activityView struct {
+	Action, Actor string
+	CreatedAt     time.Time `json:"created_at"`
+}
 
 func main() {
 	if len(os.Args) < 2 {
@@ -191,7 +199,7 @@ Use "htb help ticket create" or "htb ticket create --help" for command details.
 	case "feature", "feature create":
 		return "Usage: htb feature create --key KEY --name NAME [--project KEY] [--description TEXT] [--due-date YYYY-MM-DD]\n\nCreate a roadmap feature. Example: htb feature create --key newsletter --name Newsletter --due-date 2026-09-30\n"
 	case "ticket":
-		return "Usage:\n  htb ticket create --title TITLE [options]\n  htb ticket list [--project KEY] [--feature KEY] [--tree] [--json|--csv]\n  htb ticket show REF\n  htb ticket update --version N [options] REF\n  htb ticket comment REF TEXT\n  htb ticket claim REF | htb ticket release REF\n  htb ticket versions REF\n  htb ticket restore --version N REF REVISION\n"
+		return "Usage:\n  htb ticket create --title TITLE [options]\n  htb ticket list [options]\n  htb ticket show REF | comments REF | activity REF\n  htb ticket update --version N [options] REF\n  htb ticket comment REF TEXT\n  htb ticket claim REF | htb ticket release REF\n  htb ticket versions REF | restore --version N REF REVISION\n"
 	case "ticket create":
 		return "Usage: htb ticket create --title TITLE [--type user_story|technical_task|bug|incident] [--project KEY] [--parent REF] [--related REF] [--feature KEY] [--description TEXT] [--priority low|normal|high|urgent] [--label TAG]\n\nA technical task requires --parent STORY-REF. Repeat --label to add multiple labels.\n"
 	case "ticket list":
@@ -202,6 +210,10 @@ Use "htb help ticket create" or "htb ticket create --help" for command details.
 		return "Usage: htb ticket update --version N [--title TITLE] [--description TEXT] [--status open|in_progress|review|blocked|done] [--priority low|normal|high|urgent] [--feature KEY] REF\n\nUse the version from " + `"htb ticket show REF"` + " to avoid overwriting a concurrent update. A user story status is calculated from its tasks.\n"
 	case "ticket comment":
 		return "Usage: htb ticket comment REF TEXT\n\nAdd a comment to a ticket.\n"
+	case "ticket comments":
+		return "Usage: htb ticket comments REF\n\nList a ticket conversation.\n"
+	case "ticket activity":
+		return "Usage: htb ticket activity REF\n\nList the ticket audit activity.\n"
 	case "ticket claim":
 		return "Usage: htb ticket claim REF\n\nClaim a ticket for yourself.\n"
 	case "ticket release":
@@ -740,6 +752,10 @@ func ticketCommand(args []string) error {
 		return ticketRestore(args[1:])
 	case "comment":
 		return ticketComment(args[1:])
+	case "comments":
+		return ticketComments(args[1:])
+	case "activity":
+		return ticketActivity(args[1:])
 	case "claim":
 		return ticketAction(args[1:], "claim")
 	case "release":
@@ -756,6 +772,44 @@ func ticketComment(args []string) error {
 		return err
 	}
 	fmt.Printf("Comment added to %s.\n", strings.ToUpper(args[0]))
+	return nil
+}
+func ticketComments(args []string) error {
+	if len(args) != 1 {
+		return errors.New("usage: htb ticket comments REF")
+	}
+	var response struct {
+		Comments []commentView `json:"comments"`
+	}
+	if err := call("GET", "/api/v1/tickets/"+args[0]+"/comments", nil, &response); err != nil {
+		return err
+	}
+	if len(response.Comments) == 0 {
+		fmt.Println("No comments.")
+		return nil
+	}
+	for _, comment := range response.Comments {
+		fmt.Printf("%s — %s\n%s\n\n", comment.CreatedAt.Format(time.RFC3339), comment.Author, comment.Body)
+	}
+	return nil
+}
+func ticketActivity(args []string) error {
+	if len(args) != 1 {
+		return errors.New("usage: htb ticket activity REF")
+	}
+	var response struct {
+		Activity []activityView `json:"activity"`
+	}
+	if err := call("GET", "/api/v1/tickets/"+args[0]+"/activity", nil, &response); err != nil {
+		return err
+	}
+	if len(response.Activity) == 0 {
+		fmt.Println("No activity.")
+		return nil
+	}
+	for _, item := range response.Activity {
+		fmt.Printf("%s  %s — %s\n", item.CreatedAt.Format(time.RFC3339), item.Actor, item.Action)
+	}
 	return nil
 }
 func ticketAction(args []string, action string) error {
