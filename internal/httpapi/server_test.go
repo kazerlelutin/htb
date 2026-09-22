@@ -13,7 +13,7 @@ import (
 
 func TestPublicPages(t *testing.T) {
 	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "https://github.example/releases?x=1&y=2", slog.Default())
-	for _, path := range []string{"/", "/downloads?lang=en", "/mentions-legales", "/cgu", "/privacy"} {
+	for _, path := range []string{"/", "/downloads?lang=en", "/commands?lang=en", "/mentions-legales", "/cgu", "/privacy"} {
 		r := httptest.NewRequest(http.MethodGet, path, nil)
 		w := httptest.NewRecorder()
 		s.Handler().ServeHTTP(w, r)
@@ -32,6 +32,15 @@ func TestPublicPages(t *testing.T) {
 		if path == "/downloads?lang=en" && !strings.Contains(w.Body.String(), "/latest/download/install.sh") {
 			t.Fatalf("download page does not link to the installer: %s", w.Body.String())
 		}
+		if path == "/downloads?lang=en" && (!strings.Contains(w.Body.String(), "/commands?lang=en") || strings.Contains(w.Body.String(), `class="command-guide"`)) {
+			t.Fatalf("download page does not focus on installation and link to the command guide: %s", w.Body.String())
+		}
+		if path == "/commands?lang=en" && (!strings.Contains(w.Body.String(), `class="command-guide"`) || !strings.Contains(w.Body.String(), `class="command-entry"`) || strings.Contains(w.Body.String(), "/latest/download/install.sh")) {
+			t.Fatalf("command page does not focus on readable command entries: %s", w.Body.String())
+		}
+		if path == "/commands?lang=en" && (!strings.Contains(w.Body.String(), `<span class="command-option">[--project KEY]</span>`) || !strings.Contains(w.Body.String(), `class="copy-command"`) || !strings.Contains(w.Body.String(), `data-copy-command=`)) {
+			t.Fatalf("command page does not highlight options and provide copy buttons: %s", w.Body.String())
+		}
 		if !strings.Contains(w.Header().Get("Content-Security-Policy"), "analytics.ben-to.fr") {
 			t.Fatalf("%s: public CSP does not permit the consented analytics script", path)
 		}
@@ -41,7 +50,10 @@ func TestPublicPages(t *testing.T) {
 		if path == "/" && (!strings.Contains(w.Body.String(), `id="simulateur"`) || !strings.Contains(w.Body.String(), `data-simulator-tab="simulator-track"`)) {
 			t.Fatalf("home page is missing the accessible simulator: %s", w.Body.String())
 		}
-		if path == "/downloads?lang=en" {
+		if path == "/" && !strings.Contains(w.Body.String(), `href="/commands">Lire le guide complet des commandes`) {
+			t.Fatalf("home page does not link to the command guide: %s", w.Body.String())
+		}
+		if path == "/commands?lang=en" {
 			for _, text := range []string{
 				`lang="en"`, "Command guide", "How to use it", "htb version", "htb config set-server URL", "htb auth login", "htb auth status",
 				"htb project list", "htb project create --key KEY --name NAME", "htb project use KEY", "htb feature create --key KEY --name NAME",
@@ -63,6 +75,17 @@ func TestPublicPages(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func TestCommandSyntaxHighlightsOptionalArgumentsWithoutChangingText(t *testing.T) {
+	got := string(commandSyntaxHTML(`htb ticket list [--project KEY] [--json|--csv]`))
+	want := `htb ticket list <span class="command-option">[--project KEY]</span> <span class="command-option">[--json|--csv]</span>`
+	if got != want {
+		t.Fatalf("unexpected command syntax: got %q, want %q", got, want)
+	}
+	if got := string(commandSyntaxHTML(`htb command [--value <unsafe>]`)); !strings.Contains(got, `&lt;unsafe&gt;`) {
+		t.Fatalf("command syntax does not escape option content: %q", got)
 	}
 }
 
@@ -109,7 +132,7 @@ func TestPublicAssetsDescribeConsentWithoutPreloadingAnalytics(t *testing.T) {
 	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "", slog.Default())
 	w := httptest.NewRecorder()
 	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/assets/public.js", nil))
-	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "htb.analytics-consent") || !strings.Contains(w.Body.String(), "dataset.websiteId") || !strings.Contains(w.Body.String(), "data-simulator-tab") {
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "htb.analytics-consent") || !strings.Contains(w.Body.String(), "dataset.websiteId") || !strings.Contains(w.Body.String(), "data-simulator-tab") || !strings.Contains(w.Body.String(), "data-copy-command") || !strings.Contains(w.Body.String(), "navigator.clipboard") {
 		t.Fatalf("unexpected consent script: %d %s", w.Code, w.Body.String())
 	}
 	if !strings.Contains(w.Header().Get("Content-Type"), "text/javascript") {
@@ -121,7 +144,7 @@ func TestPublicStylesAnimateCursorWithReducedMotionFallback(t *testing.T) {
 	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "", slog.Default())
 	w := httptest.NewRecorder()
 	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/assets/public.css", nil))
-	for _, rule := range []string{".wordmark .cursor", "@keyframes cursor-blink", "prefers-reduced-motion: reduce", "animation: none", ".simulator-tabs", ".simulator-panel[hidden]"} {
+	for _, rule := range []string{".wordmark .cursor", "@keyframes cursor-blink", "prefers-reduced-motion: reduce", "animation: none", ".simulator-tabs", ".simulator-panel[hidden]", ".command-guide", ".command-entry", ".command-option", ".copy-command"} {
 		if !strings.Contains(w.Body.String(), rule) {
 			t.Fatalf("public styles are missing %q", rule)
 		}

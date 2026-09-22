@@ -28,7 +28,7 @@ var publicLayout = template.Must(template.New("public").Parse(`<!doctype html>
 <meta name="description" content="{{.Description}}"><link rel="canonical" href="{{.Canonical}}"><meta name="theme-color" content="#101414">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="stylesheet" href="/assets/public.css"><title>{{.Title}}</title></head><body>
 <a class="skip-link" href="#main">{{if eq .Language "fr"}}Aller au contenu{{else}}Skip to content{{end}}</a>
-<header class="site-header"><a class="wordmark" href="/?lang={{.Language}}" aria-label="HTB home"><span aria-hidden="true">&gt;</span><span class="cursor" aria-hidden="true">_</span> HTB</a><nav aria-label="{{if eq .Language "fr"}}Navigation principale{{else}}Main navigation{{end}}"><a href="/downloads?lang={{.Language}}">{{if eq .Language "fr"}}Télécharger{{else}}Download{{end}}</a><a href="/cgu?lang={{.Language}}">{{if eq .Language "fr"}}CGU{{else}}Terms{{end}}</a></nav><nav class="languages" aria-label="Language"><a href="{{.FrenchURL}}" lang="fr" hreflang="fr">FR</a><span aria-hidden="true">/</span><a href="{{.EnglishURL}}" lang="en" hreflang="en">EN</a></nav></header>
+<header class="site-header"><a class="wordmark" href="/?lang={{.Language}}" aria-label="HTB home"><span aria-hidden="true">&gt;</span><span class="cursor" aria-hidden="true">_</span> HTB</a><nav aria-label="{{if eq .Language "fr"}}Navigation principale{{else}}Main navigation{{end}}"><a href="/commands?lang={{.Language}}">{{if eq .Language "fr"}}Commandes{{else}}Commands{{end}}</a><a href="/downloads?lang={{.Language}}">{{if eq .Language "fr"}}Télécharger{{else}}Download{{end}}</a><a href="/cgu?lang={{.Language}}">{{if eq .Language "fr"}}CGU{{else}}Terms{{end}}</a></nav><nav class="languages" aria-label="Language"><a href="{{.FrenchURL}}" lang="fr" hreflang="fr">FR</a><span aria-hidden="true">/</span><a href="{{.EnglishURL}}" lang="en" hreflang="en">EN</a></nav></header>
 <main id="main">{{.Body}}</main>
 <footer class="site-footer"><span>HTB — Headless Ticket Board</span><nav aria-label="{{if eq .Language "fr"}}Informations légales{{else}}Legal information{{end}}"><a href="/mentions-legales?lang={{.Language}}">{{if eq .Language "fr"}}Mentions légales{{else}}Legal notice{{end}}</a><a href="/privacy?lang={{.Language}}">{{if eq .Language "fr"}}Confidentialité{{else}}Privacy{{end}}</a><button class="link-button" type="button" data-open-consent>{{if eq .Language "fr"}}Préférences de mesure{{else}}Analytics preferences{{end}}</button></nav></footer>
 <section class="consent" id="consent" aria-label="{{if eq .Language "fr"}}Préférences de mesure{{else}}Analytics preferences{{end}}" role="dialog" aria-modal="false" hidden><div><h2>{{if eq .Language "fr"}}Votre vie privée{{else}}Your privacy{{end}}</h2><p>{{if eq .Language "fr"}}Avec votre accord, HTB utilise une mesure d’audience hébergée par Ben-to pour améliorer le site. Vous pouvez refuser sans conséquence.{{else}}With your permission, HTB uses Ben-to-hosted analytics to improve this site. You can refuse without any consequence.{{end}}</p><p><a href="/privacy?lang={{.Language}}">{{if eq .Language "fr"}}En savoir plus{{else}}Learn more{{end}}</a></p></div><div class="consent-actions"><button class="button secondary" type="button" data-consent="rejected">{{if eq .Language "fr"}}Refuser{{else}}Reject{{end}}</button><button class="button" type="button" data-consent="accepted">{{if eq .Language "fr"}}Accepter{{else}}Accept{{end}}</button></div></section>
@@ -113,6 +113,12 @@ func (s *Server) privacy(w http.ResponseWriter, r *http.Request) {
 }
 
 func homeBody(language string) template.HTML {
+	body := homeBodyContent(language)
+	body = template.HTML(strings.ReplaceAll(string(body), `href="/downloads">Read the complete command guide`, `href="/commands">Read the complete command guide`))
+	return template.HTML(strings.ReplaceAll(string(body), `href="/downloads">Lire le guide complet des commandes`, `href="/commands">Lire le guide complet des commandes`))
+}
+
+func homeBodyContent(language string) template.HTML {
 	if language == "en" {
 		return template.HTML(`<section class="hero"><p class="eyebrow">TERMINAL-FIRST ISSUE TRACKING</p><h1>Keep work moving,<br><em>without leaving your terminal.</em></h1><p class="lede">HTB gives people, scripts, and agents one durable ticket board. Create, query, automate, and keep the history.</p><div class="actions"><a class="button" href="/downloads">Download HTB <span aria-hidden="true">→</span></a><a class="button secondary" href="#workflow">See a workflow</a></div><div class="terminal" aria-label="HTB command example"><div class="terminal-bar"><span></span><span></span><span></span><code>~/work</code></div><pre><code><b>$</b> htb project create --key SITE --name "Website"
 <span class="success">Project SITE created. It is now current.</span>
@@ -195,12 +201,50 @@ func privacyBody(language string) template.HTML {
 
 func downloadsBody(language, installationURL, releaseURL string) template.HTML {
 	installationURL, releaseURL = html.EscapeString(installationURL), html.EscapeString(releaseURL)
+	commandsURL := "/commands?lang=" + language
+	return template.HTML(fmt.Sprintf(`<article class="downloads"><p class="eyebrow">%s</p><h1>%s</h1><p class="lede">%s</p><pre class="install"><code>curl -fsSL %s | sh</code></pre><p><a class="text-link" href="%s">%s <span aria-hidden="true">→</span></a></p><p><a class="text-link" href="%s">%s <span aria-hidden="true">→</span></a></p></article>`,
+		html.EscapeString(localized(language, "INSTALLATION", "INSTALLATION")), html.EscapeString(localized(language, "Télécharger HTB", "Download HTB")), html.EscapeString(localized(language, "Installez la CLI Linux, puis connectez-vous avec htb auth login.", "Install the HTB CLI, then sign in with htb auth login.")), installationURL, releaseURL, html.EscapeString(localized(language, "Archives, sommes de contrôle et releases", "Archives, checksums, and releases")), commandsURL, html.EscapeString(localized(language, "Consulter le guide des commandes", "Browse the command guide"))))
+}
+
+func commandsBody(language string) template.HTML {
 	var out strings.Builder
-	fmt.Fprintf(&out, `<article class="downloads"><p class="eyebrow">%s</p><h1>%s</h1><p class="lede">%s</p><pre class="install"><code>curl -fsSL %s | sh</code></pre><p><a class="text-link" href="%s">%s <span aria-hidden="true">→</span></a></p><h2>%s</h2><table><caption>%s</caption><thead><tr><th>%s</th><th>%s</th><th>%s</th></tr></thead><tbody>`,
-		html.EscapeString(localized(language, "INSTALLATION", "INSTALLATION")), html.EscapeString(localized(language, "Télécharger HTB", "Download HTB")), html.EscapeString(localized(language, "Installez la CLI Linux, puis connectez-vous avec htb auth login.", "Install the Linux CLI, then sign in with htb auth login.")), installationURL, releaseURL, html.EscapeString(localized(language, "Archives, sommes de contrôle et releases", "Archives, checksums, and releases")), html.EscapeString(localized(language, "Guide des commandes", "Command guide")), html.EscapeString(localized(language, "Toutes les commandes disponibles", "All supported commands")), html.EscapeString(localized(language, "Catégorie", "Area")), html.EscapeString(localized(language, "Commande", "Command")), html.EscapeString(localized(language, "Utilisation", "How to use it")))
+	fmt.Fprintf(&out, `<article class="commands"><p class="eyebrow">%s</p><h1>%s</h1><p class="lede command-guide-intro">%s</p><div class="command-guide">`,
+		html.EscapeString(localized(language, "RÉFÉRENCE CLI", "CLI REFERENCE")), html.EscapeString(localized(language, "Guide des commandes", "Command guide")), html.EscapeString(localized(language, "Utilisation : chaque syntaxe et son usage", "How to use it: each command syntax and its use")))
+	group := ""
 	for _, command := range downloadCommands {
-		fmt.Fprintf(&out, "<tr><td>%s</td><td><code>%s</code></td><td>%s</td></tr>", html.EscapeString(command.Group), html.EscapeString(command.Syntax), html.EscapeString(command.Description))
+		if command.Group != group {
+			if group != "" {
+				out.WriteString("</dl></section>")
+			}
+			group = command.Group
+			fmt.Fprintf(&out, `<section class="command-group"><h3>%s</h3><dl class="command-list">`, html.EscapeString(command.Group))
+		}
+		fmt.Fprintf(&out, `<div class="command-entry"><dt><code>%s</code><button class="copy-command" type="button" data-copy-command="%s" data-copy-success="%s" data-copy-error="%s">%s</button><span class="copy-status" aria-live="polite"></span></dt><dd>%s</dd></div>`, commandSyntaxHTML(command.Syntax), html.EscapeString(command.Syntax), html.EscapeString(localized(language, "Copié", "Copied")), html.EscapeString(localized(language, "Copie impossible", "Copy failed")), html.EscapeString(localized(language, "Copier", "Copy")), html.EscapeString(command.Description))
 	}
-	out.WriteString("</tbody></table></article>")
+	if group != "" {
+		out.WriteString("</dl></section>")
+	}
+	out.WriteString("</div></article>")
+	return template.HTML(out.String())
+}
+
+func commandSyntaxHTML(syntax string) template.HTML {
+	var out strings.Builder
+	for len(syntax) > 0 {
+		start := strings.Index(syntax, "[")
+		if start == -1 {
+			out.WriteString(html.EscapeString(syntax))
+			break
+		}
+		out.WriteString(html.EscapeString(syntax[:start]))
+		end := strings.Index(syntax[start:], "]")
+		if end == -1 {
+			out.WriteString(html.EscapeString(syntax[start:]))
+			break
+		}
+		end += start + 1
+		fmt.Fprintf(&out, `<span class="command-option">%s</span>`, html.EscapeString(syntax[start:end]))
+		syntax = syntax[end:]
+	}
 	return template.HTML(out.String())
 }

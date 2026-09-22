@@ -54,4 +54,35 @@
       selectSimulatorTab(simulatorTabs[next]);
     });
   });
+  async function copyCommand(command) {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(command);
+      return;
+    }
+    const field = document.createElement("textarea");
+    field.value = command;
+    field.setAttribute("readonly", "");
+    field.style.position = "fixed";
+    field.style.opacity = "0";
+    document.body.append(field);
+    field.select();
+    const copied = document.execCommand("copy");
+    field.remove();
+    if (!copied) throw new Error("Unable to copy the command");
+  }
+  document.querySelectorAll("[data-copy-command]").forEach((button) => button.addEventListener("click", async () => {
+    const label = button.textContent;
+    const status = button.parentElement.querySelector(".copy-status");
+    try {
+      await copyCommand(button.dataset.copyCommand);
+      button.textContent = button.dataset.copySuccess;
+      status.textContent = button.dataset.copySuccess;
+      setTimeout(() => {
+        button.textContent = label;
+        status.textContent = "";
+      }, 2000);
+    } catch {
+      status.textContent = button.dataset.copyError;
+    }
+  }));
 })();
