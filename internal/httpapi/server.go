@@ -78,6 +78,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /health", s.health)
 	mux.HandleFunc("GET /{$}", s.home)
 	mux.HandleFunc("GET /downloads", s.downloads)
+	mux.HandleFunc("GET /commands", s.commands)
 	mux.HandleFunc("GET /mentions-legales", s.legalNotice)
 	mux.HandleFunc("GET /cgu", s.terms)
 	mux.HandleFunc("GET /privacy", s.privacy)
@@ -110,6 +111,11 @@ func (s *Server) downloads(w http.ResponseWriter, r *http.Request) {
 	installationURL := url + "/latest/download/install.sh"
 	language := publicLanguage(r)
 	s.renderPublicPage(w, r, localized(language, "Télécharger HTB", "Download HTB"), localized(language, "Installer la CLI HTB pour Linux.", "Install the HTB CLI for Linux."), downloadsBody(language, installationURL, url))
+}
+
+func (s *Server) commands(w http.ResponseWriter, r *http.Request) {
+	language := publicLanguage(r)
+	s.renderPublicPage(w, r, localized(language, "Commandes HTB", "HTB commands"), localized(language, "Guide de référence des commandes de la CLI HTB.", "Reference guide for HTB CLI commands."), commandsBody(language))
 }
 
 func (s *Server) authenticated(next http.Handler) http.Handler {
