@@ -38,6 +38,9 @@ func TestPublicPages(t *testing.T) {
 		if strings.Contains(w.Body.String(), "https://analytics.ben-to.fr/script.js") {
 			t.Fatalf("%s: analytics must not be loaded in the initial HTML", path)
 		}
+		if path == "/" && (!strings.Contains(w.Body.String(), `id="simulateur"`) || !strings.Contains(w.Body.String(), `data-simulator-tab="simulator-track"`)) {
+			t.Fatalf("home page is missing the accessible simulator: %s", w.Body.String())
+		}
 		if path == "/downloads?lang=en" {
 			for _, text := range []string{
 				`lang="en"`, "Command guide", "How to use it", "htb version", "htb config set-server URL", "htb auth login", "htb auth status",
@@ -106,7 +109,7 @@ func TestPublicAssetsDescribeConsentWithoutPreloadingAnalytics(t *testing.T) {
 	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "", slog.Default())
 	w := httptest.NewRecorder()
 	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/assets/public.js", nil))
-	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "htb.analytics-consent") || !strings.Contains(w.Body.String(), "dataset.websiteId") {
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "htb.analytics-consent") || !strings.Contains(w.Body.String(), "dataset.websiteId") || !strings.Contains(w.Body.String(), "data-simulator-tab") {
 		t.Fatalf("unexpected consent script: %d %s", w.Code, w.Body.String())
 	}
 	if !strings.Contains(w.Header().Get("Content-Type"), "text/javascript") {
@@ -118,7 +121,7 @@ func TestPublicStylesAnimateCursorWithReducedMotionFallback(t *testing.T) {
 	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "", slog.Default())
 	w := httptest.NewRecorder()
 	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/assets/public.css", nil))
-	for _, rule := range []string{".wordmark .cursor", "@keyframes cursor-blink", "prefers-reduced-motion: reduce", "animation: none"} {
+	for _, rule := range []string{".wordmark .cursor", "@keyframes cursor-blink", "prefers-reduced-motion: reduce", "animation: none", ".simulator-tabs", ".simulator-panel[hidden]"} {
 		if !strings.Contains(w.Body.String(), rule) {
 			t.Fatalf("public styles are missing %q", rule)
 		}

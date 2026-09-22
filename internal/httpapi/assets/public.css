@@ -224,8 +224,61 @@ main {
 }
 .features p,
 .workflow p,
-.difference p {
+.difference p,
+.simulator-copy > p {
 	color: var(--muted);
+}
+.simulator {
+	display: grid;
+	grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+	gap: 4rem;
+	padding: 6rem 0;
+	border-bottom: 1px solid var(--line);
+}
+.simulator h2 {
+	font-size: clamp(2rem, 5vw, 4rem);
+	line-height: 1.05;
+	letter-spacing: -0.05em;
+	margin: 0.6rem 0 1.5rem;
+}
+.simulator-tabs {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0.6rem;
+	margin-top: 2rem;
+}
+.simulator-tabs button {
+	appearance: none;
+	border: 1px solid var(--line);
+	background: transparent;
+	color: var(--muted);
+	font: inherit;
+	padding: 0.7rem 0.8rem;
+	text-align: left;
+	cursor: pointer;
+}
+.simulator-tabs button[aria-selected="true"] {
+	border-color: var(--lime);
+	background: var(--lime);
+	color: #101414;
+	font-weight: 700;
+}
+.simulator-output {
+	min-width: 0;
+}
+.simulator-panel {
+	max-width: none;
+	min-height: 100%;
+}
+.simulator-panel[hidden] {
+	display: none;
+}
+.simulator-caption {
+	border-top: 1px solid var(--line);
+	color: var(--muted);
+	font-size: 0.84rem;
+	margin: 0;
+	padding: 1rem 1.2rem;
 }
 .workflow,
 .difference {
@@ -355,7 +408,8 @@ main {
 		padding-top: 4rem;
 	}
 	.features,
-	.workflow {
+	.workflow,
+	.simulator {
 		grid-template-columns: 1fr;
 	}
 	.features article {

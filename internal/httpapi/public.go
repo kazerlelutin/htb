@@ -93,7 +93,8 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	language := publicLanguage(r)
-	s.renderPublicPage(w, r, localized(language, "HTB — Tickets pour le terminal", "HTB — Tickets for the terminal"), localized(language, "HTB est un gestionnaire de tickets pensé pour le terminal, les scripts et les agents.", "HTB is a ticket tracker designed for terminals, scripts, and agents."), homeBody(language))
+	body := homeBody(language) + simulatorBody(language)
+	s.renderPublicPage(w, r, localized(language, "HTB — Tickets pour le terminal", "HTB — Tickets for the terminal"), localized(language, "HTB est un gestionnaire de tickets pensé pour le terminal, les scripts et les agents.", "HTB is a ticket tracker designed for terminals, scripts, and agents."), body)
 }
 
 func (s *Server) legalNotice(w http.ResponseWriter, r *http.Request) {
@@ -122,6 +123,53 @@ func homeBody(language string) template.HTML {
 <span class="success">Projet SITE créé. Il est maintenant courant.</span>
 <b>$</b> htb ticket create --title "Livrer la nouvelle page d’accueil"
 <span class="muted">SITE-1 créé · user_story · open</span></code></pre></div></section><section class="features"><article><span>01</span><h2>Conçu pour la commande</h2><p>Le flux reste au clavier. La CLI est lisible pour les humains et fournit du JSON et CSV pour l’automatisation.</p></article><article><span>02</span><h2>Une structure utile</h2><p>US, tâches techniques, bugs, incidents, fonctionnalités de roadmap, commentaires et historique vivent dans un modèle concis.</p></article><article><span>03</span><h2>Partagé sans bruit</h2><p>Invitez les bonnes personnes. Les droits de projet sont explicites et chaque changement reste traçable.</p></article></section><section class="workflow" id="workflow"><div><p class="eyebrow">UN CAS D’USAGE CONCRET</p><h2>Transformez une livraison<br>en séquence fiable.</h2><p>Créez un projet, décrivez l’US, découpez le travail technique, puis laissez la progression de l’US suivre ses tâches.</p></div><ol><li><code>htb project create --key API --name "API publique"</code></li><li><code>htb ticket create --type user_story --title "Permettre l’export"</code></li><li><code>htb ticket create --type technical_task --parent API-1 --title "Ajouter le CSV"</code></li></ol></section><section class="difference"><p class="eyebrow">PAS UN KANBAN DE PLUS</p><h2>HTB est la couche ticket que votre terminal sait parler.</h2><p>Les outils de tickets traditionnels commencent par les tableaux et le navigateur. HTB commence par une API et une CLI : plus rapide pour le travail concentré, scriptable pour le répétitif, et lisible par les agents de code.</p><a class="text-link" href="/downloads">Lire le guide complet des commandes <span aria-hidden="true">→</span></a></section>`)
+}
+
+func simulatorBody(language string) template.HTML {
+	if language == "en" {
+		return template.HTML(`<section class="simulator" id="simulator" aria-labelledby="simulator-title"><div class="simulator-copy"><p class="eyebrow">INTERACTIVE PREVIEW</p><h2 id="simulator-title">See a workday,<br>not just commands.</h2><p>Explore four project moments. This local simulation does not create an account, contact the API, or save anything.</p><div class="simulator-tabs" role="tablist" aria-label="HTB workflow"><button type="button" role="tab" id="simulator-tab-create" aria-selected="true" aria-controls="simulator-create" data-simulator-tab="simulator-create">Create</button><button type="button" role="tab" id="simulator-tab-track" aria-selected="false" aria-controls="simulator-track" tabindex="-1" data-simulator-tab="simulator-track">Track</button><button type="button" role="tab" id="simulator-tab-share" aria-selected="false" aria-controls="simulator-share" tabindex="-1" data-simulator-tab="simulator-share">Share</button><button type="button" role="tab" id="simulator-tab-automate" aria-selected="false" aria-controls="simulator-automate" tabindex="-1" data-simulator-tab="simulator-automate">Automate</button></div></div><div class="simulator-output"><section class="terminal simulator-panel" id="simulator-create" role="tabpanel" aria-labelledby="simulator-tab-create"><div class="terminal-bar"><span></span><span></span><span></span><code>~/website</code></div><pre><code><b>$</b> htb ticket create --title "Publish pricing"
+<span class="success">Ticket SITE-12 created — open.</span>
+
+<b>$</b> htb ticket create --type technical_task \
+  --parent SITE-12 --title "Add comparison table"
+<span class="muted">Ticket SITE-13 created — open.</span></code></pre><p class="simulator-caption">A story and its technical work stay connected from the first command.</p></section><section class="terminal simulator-panel" id="simulator-track" role="tabpanel" aria-labelledby="simulator-tab-track" hidden><div class="terminal-bar"><span></span><span></span><span></span><code>~/website</code></div><pre><code><b>$</b> htb project status
+<span class="success">* SITE — Website</span>
+  User stories  <span class="success">[██████░░░░]</span> 3/5 (60%)
+  Tickets       <span class="success">[███████░░░]</span> 7/9 (77%)
+  open 1 · in_progress 1 · review 0 · blocked 0 · done 7</code></pre><p class="simulator-caption">See delivery progress without building a manual report.</p></section><section class="terminal simulator-panel" id="simulator-share" role="tabpanel" aria-labelledby="simulator-tab-share" hidden><div class="terminal-bar"><span></span><span></span><span></span><code>~/website</code></div><pre><code><b>$</b> htb invite create --role write
+<span class="success">Invitation code created: bramble-forest</span>
+Share it with: htb invite accept bramble-forest
+
+<b>$</b> htb ticket claim SITE-13
+<span class="muted">Ticket SITE-13 claimed.</span></code></pre><p class="simulator-caption">Give the right access, then make ownership visible.</p></section><section class="terminal simulator-panel" id="simulator-automate" role="tabpanel" aria-labelledby="simulator-tab-automate" hidden><div class="terminal-bar"><span></span><span></span><span></span><code>~/website</code></div><pre><code><b>$</b> htb ticket list --json
+[
+  {"ref":"SITE-12","status":"in_progress"}
+]
+
+<b>$</b> htb ticket comment SITE-12 "Preview deployed"
+<span class="muted">Comment added to SITE-12.</span></code></pre><p class="simulator-caption">Use the same workflow in a shell script or coding agent.</p></section></div></section>`)
+	}
+	return template.HTML(`<section class="simulator" id="simulateur" aria-labelledby="simulateur-title"><div class="simulator-copy"><p class="eyebrow">APERÇU INTERACTIF</p><h2 id="simulateur-title">Voyez une journée de travail,<br>pas seulement des commandes.</h2><p>Explorez quatre instants d’un projet. Cette simulation locale ne crée aucun compte, n’appelle pas l’API et n’enregistre rien.</p><div class="simulator-tabs" role="tablist" aria-label="Parcours HTB"><button type="button" role="tab" id="simulator-tab-create" aria-selected="true" aria-controls="simulator-create" data-simulator-tab="simulator-create">Créer</button><button type="button" role="tab" id="simulator-tab-track" aria-selected="false" aria-controls="simulator-track" tabindex="-1" data-simulator-tab="simulator-track">Suivre</button><button type="button" role="tab" id="simulator-tab-share" aria-selected="false" aria-controls="simulator-share" tabindex="-1" data-simulator-tab="simulator-share">Partager</button><button type="button" role="tab" id="simulator-tab-automate" aria-selected="false" aria-controls="simulator-automate" tabindex="-1" data-simulator-tab="simulator-automate">Automatiser</button></div></div><div class="simulator-output"><section class="terminal simulator-panel" id="simulator-create" role="tabpanel" aria-labelledby="simulator-tab-create"><div class="terminal-bar"><span></span><span></span><span></span><code>~/site</code></div><pre><code><b>$</b> htb ticket create --title "Publier les tarifs"
+<span class="success">Ticket SITE-12 créé — open.</span>
+
+<b>$</b> htb ticket create --type technical_task \
+  --parent SITE-12 --title "Ajouter le tableau comparatif"
+<span class="muted">Ticket SITE-13 créé — open.</span></code></pre><p class="simulator-caption">Une US et son travail technique restent liés dès la première commande.</p></section><section class="terminal simulator-panel" id="simulator-track" role="tabpanel" aria-labelledby="simulator-tab-track" hidden><div class="terminal-bar"><span></span><span></span><span></span><code>~/site</code></div><pre><code><b>$</b> htb project status
+<span class="success">* SITE — Site web</span>
+  User stories  <span class="success">[██████░░░░]</span> 3/5 (60%)
+  Tickets       <span class="success">[███████░░░]</span> 7/9 (77%)
+  open 1 · in_progress 1 · review 0 · blocked 0 · done 7</code></pre><p class="simulator-caption">Voyez l’avancement sans fabriquer de rapport à la main.</p></section><section class="terminal simulator-panel" id="simulator-share" role="tabpanel" aria-labelledby="simulator-tab-share" hidden><div class="terminal-bar"><span></span><span></span><span></span><code>~/site</code></div><pre><code><b>$</b> htb invite create --role write
+<span class="success">Code d’invitation créé : bramble-forest</span>
+À partager : htb invite accept bramble-forest
+
+<b>$</b> htb ticket claim SITE-13
+<span class="muted">Ticket SITE-13 réclamé.</span></code></pre><p class="simulator-caption">Donnez le bon accès, puis rendez visible la responsabilité.</p></section><section class="terminal simulator-panel" id="simulator-automate" role="tabpanel" aria-labelledby="simulator-tab-automate" hidden><div class="terminal-bar"><span></span><span></span><span></span><code>~/site</code></div><pre><code><b>$</b> htb ticket list --json
+[
+  {"ref":"SITE-12","status":"in_progress"}
+]
+
+<b>$</b> htb ticket comment SITE-12 "Prévisualisation déployée"
+<span class="muted">Commentaire ajouté à SITE-12.</span></code></pre><p class="simulator-caption">Utilisez le même flux dans un script shell ou un agent de code.</p></section></div></section>`)
 }
 
 func legalNoticeBody(language string) template.HTML {

@@ -34,4 +34,24 @@
   if (preferredLanguage && preferredLanguage !== document.documentElement.lang && !location.search.includes("lang=")) {
     location.replace(location.pathname + "?lang=" + preferredLanguage);
   }
+  const simulatorTabs = Array.from(document.querySelectorAll("[data-simulator-tab]"));
+  function selectSimulatorTab(tab) {
+    simulatorTabs.forEach((candidate) => {
+      const selected = candidate === tab;
+      candidate.setAttribute("aria-selected", String(selected));
+      candidate.tabIndex = selected ? 0 : -1;
+      const panel = document.getElementById(candidate.dataset.simulatorTab);
+      if (panel) panel.hidden = !selected;
+    });
+  }
+  simulatorTabs.forEach((tab, index) => {
+    tab.addEventListener("click", () => selectSimulatorTab(tab));
+    tab.addEventListener("keydown", (event) => {
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+      event.preventDefault();
+      const next = event.key === "Home" ? 0 : event.key === "End" ? simulatorTabs.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + simulatorTabs.length) % simulatorTabs.length;
+      simulatorTabs[next].focus();
+      selectSimulatorTab(simulatorTabs[next]);
+    });
+  });
 })();
