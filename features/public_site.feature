@@ -24,6 +24,12 @@ Feature: Site public HTB
     And elle comprend que les invitations, droits de projet et changements sont gérés de façon explicite et traçable
     And elle peut consulter les CGU, les mentions légales et la politique de confidentialité
 
+  Scenario: Le site affiche une identité terminal reconnaissable
+    Given une personne consulte une page publique HTB
+    Then son navigateur charge le favicon HTB au format SVG
+    And le wordmark affiche le curseur terminal clignotant
+    And le curseur reste fixe lorsque la personne préfère réduire les animations
+
   Scenario: Les futures limites de projets restent inactives par défaut
     Given le contrôle HTBD_ENFORCE_PROJECT_LIMITS vaut "false"
     When une personne crée un projet

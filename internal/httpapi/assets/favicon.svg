@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="64"
+   height="64"
+   viewBox="0 0 64 64"
+   version="1.1"
+   id="svg1"
+   inkscape:version="1.4 (e7c3feb100, 2024-10-09)"
+   sodipodi:docname="favicon.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="px"
+     inkscape:zoom="6.4633979"
+     inkscape:cx="4.0226519"
+     inkscape:cy="56.162409"
+     inkscape:window-width="1920"
+     inkscape:window-height="1011"
+     inkscape:window-x="1920"
+     inkscape:window-y="32"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer1" />
+  <defs
+     id="defs1" />
+  <g
+     inkscape:label="Calque 1"
+     inkscape:groupmode="layer"
+     id="layer1"
+     transform="translate(-149.19595,-64)">
+    <rect
+       style="fill:#000000;fill-opacity:1;stroke:none;stroke-width:2.97558;stroke-linecap:square;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1;paint-order:fill markers stroke"
+       id="rect2"
+       width="64"
+       height="64"
+       x="149.19595"
+       y="64" />
+    <path
+       d="m 153.27161,109.13454 21.70944,-12.896703 v -3.654059 l -21.70944,-13.32659 v 4.889995 L 171.4882,95.001908 V 93.765973 L 153.27161,104.6207 Z m 25.90087,8.22165 h 27.94284 V 79.247761 h -27.94284 z"
+       id="text1"
+       style="font-size:456.125px;font-family:Cantarell;-inkscape-font-specification:Cantarell;text-align:center;text-anchor:middle;fill:#c8ff6b;stroke-width:1.53973;stroke-linejoin:round;paint-order:fill markers stroke"
+       aria-label="&gt;_"
+       sodipodi:nodetypes="cccccccccccccc" />
+    <g
+       id="text2"
+       transform="matrix(0.11781035,0,0,0.11781035,128.17107,65.902838)"
+       style="fill:#000000">
+      <path
+         style="-inkscape-font-specification:Cantarell;fill:#000000;stroke-linecap:square;paint-order:fill markers stroke"
+         d="m 463.0034,390.24063 h 27.78475 V 282.11444 h 124.19448 v 108.12619 h 27.78474 V 157.91996 H 614.98263 V 258.01201 H 490.78815 V 157.91996 H 463.0034 Z"
+         id="path2" />
+      <path
+         style="-inkscape-font-specification:Cantarell;fill:#000000;stroke-linecap:square;paint-order:fill markers stroke"
+         d="m 450.94922,145.86523 v 256.42969 h 51.89453 v -108.125 h 100.08398 v 108.125 h 51.89454 V 145.86523 h -51.89454 v 100.0918 H 502.84375 v -100.0918 z"
+         id="path3"
+         sodipodi:nodetypes="ccccccccccccc" />
+    </g>
+  </g>
+</svg>
