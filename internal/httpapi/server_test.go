@@ -57,6 +57,26 @@ func TestPublicPages(t *testing.T) {
 	}
 }
 
+func TestHomePageDoesNotNameAuthenticationProvider(t *testing.T) {
+	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "", slog.Default())
+	for _, test := range []struct {
+		path string
+		copy string
+	}{
+		{"/", "Invitez les bonnes personnes. Les droits de projet sont explicites et chaque changement reste traçable."},
+		{"/?lang=en", "Invite the right people. Keep project permissions explicit and let every change remain traceable."},
+	} {
+		w := httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, test.path, nil))
+		if !strings.Contains(w.Body.String(), test.copy) {
+			t.Fatalf("%s: home page is missing marketing copy %q", test.path, test.copy)
+		}
+		if strings.Contains(w.Body.String(), "Zitadel") {
+			t.Fatalf("%s: home page names the authentication provider", test.path)
+		}
+	}
+}
+
 func TestPublicAssetsDescribeConsentWithoutPreloadingAnalytics(t *testing.T) {
 	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "", slog.Default())
 	w := httptest.NewRecorder()
