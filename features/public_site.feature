@@ -24,6 +24,13 @@ Feature: Site public HTB
     And elle comprend que les invitations, droits de projet et changements sont gérés de façon explicite et traçable
     And elle peut consulter les CGU, les mentions légales et la politique de confidentialité
 
+  Scenario: Une personne explore HTB sans créer de compte
+    Given une personne consulte la page d’accueil HTB
+    When elle sélectionne un moment dans le simulateur
+    Then elle voit la commande et le résultat correspondant
+    And elle peut passer d’un moment à l’autre au clavier
+    And le simulateur ne crée pas de compte et n’appelle pas l’API
+
   Scenario: Le site affiche une identité terminal reconnaissable
     Given une personne consulte une page publique HTB
     Then son navigateur charge le favicon HTB au format SVG
