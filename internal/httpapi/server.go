@@ -76,6 +76,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /privacy", s.privacy)
 	mux.HandleFunc("GET /assets/public.css", s.publicStyles)
 	mux.HandleFunc("GET /assets/public.js", s.publicScript)
+	mux.HandleFunc("GET /favicon.svg", s.favicon)
 	mux.HandleFunc("GET /auth/device-config", s.deviceConfiguration)
 	mux.Handle("/api/v1/", s.authenticated(http.HandlerFunc(s.api)))
 	return s.logging(mux)

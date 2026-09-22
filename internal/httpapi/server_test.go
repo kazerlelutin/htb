@@ -20,6 +20,12 @@ func TestPublicPages(t *testing.T) {
 		if w.Code != http.StatusOK {
 			t.Fatalf("%s: got status %d", path, w.Code)
 		}
+		if !strings.Contains(w.Body.String(), `<link rel="icon" type="image/svg+xml" href="/favicon.svg">`) {
+			t.Fatalf("%s: public page does not reference the favicon", path)
+		}
+		if !strings.Contains(w.Body.String(), `<span class="cursor" aria-hidden="true">_</span>`) {
+			t.Fatalf("%s: public page does not render the isolated wordmark cursor", path)
+		}
 		if path == "/downloads?lang=en" && !strings.Contains(w.Body.String(), "x=1&amp;y=2") {
 			t.Fatalf("download link is not escaped: %s", w.Body.String())
 		}
@@ -57,6 +63,25 @@ func TestPublicPages(t *testing.T) {
 	}
 }
 
+func TestPublicFavicon(t *testing.T) {
+	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "", slog.Default())
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/favicon.svg", nil))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("got status %d", w.Code)
+	}
+	if !strings.Contains(w.Header().Get("Content-Type"), "image/svg+xml") {
+		t.Fatalf("unexpected content type: %s", w.Header().Get("Content-Type"))
+	}
+	if w.Header().Get("Cache-Control") != "public, max-age=3600" {
+		t.Fatalf("unexpected cache control: %s", w.Header().Get("Cache-Control"))
+	}
+	if !strings.Contains(w.Body.String(), `<svg`) || !strings.Contains(w.Body.String(), `fill:#c8ff6b`) {
+		t.Fatalf("unexpected favicon content: %s", w.Body.String())
+	}
+}
+
 func TestHomePageDoesNotNameAuthenticationProvider(t *testing.T) {
 	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "", slog.Default())
 	for _, test := range []struct {
@@ -86,6 +111,17 @@ func TestPublicAssetsDescribeConsentWithoutPreloadingAnalytics(t *testing.T) {
 	}
 	if !strings.Contains(w.Header().Get("Content-Type"), "text/javascript") {
 		t.Fatalf("unexpected content type: %s", w.Header().Get("Content-Type"))
+	}
+}
+
+func TestPublicStylesAnimateCursorWithReducedMotionFallback(t *testing.T) {
+	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "", slog.Default())
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/assets/public.css", nil))
+	for _, rule := range []string{".wordmark .cursor", "@keyframes cursor-blink", "prefers-reduced-motion: reduce", "animation: none"} {
+		if !strings.Contains(w.Body.String(), rule) {
+			t.Fatalf("public styles are missing %q", rule)
+		}
 	}
 }
 

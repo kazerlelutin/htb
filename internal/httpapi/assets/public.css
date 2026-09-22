@@ -67,6 +67,14 @@ button:focus-visible {
 .success {
 	color: var(--lime);
 }
+.wordmark .cursor {
+	animation: cursor-blink 1s steps(1, end) infinite;
+}
+@keyframes cursor-blink {
+	50% {
+		opacity: 0;
+	}
+}
 nav {
 	display: flex;
 	gap: 1rem;
@@ -325,6 +333,11 @@ main {
 .consent .secondary {
 	color: #101414;
 	border-color: #74817a;
+}
+@media (prefers-reduced-motion: reduce) {
+	.wordmark .cursor {
+		animation: none;
+	}
 }
 @media (max-width: 700px) {
 	.site-header {

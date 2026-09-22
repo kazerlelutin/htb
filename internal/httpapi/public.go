@@ -15,6 +15,9 @@ var publicCSS string
 //go:embed assets/public.js
 var publicJS string
 
+//go:embed assets/favicon.svg
+var publicFavicon string
+
 type publicPage struct {
 	Language, Title, Description, Canonical, FrenchURL, EnglishURL string
 	Body                                                           template.HTML
@@ -23,9 +26,9 @@ type publicPage struct {
 var publicLayout = template.Must(template.New("public").Parse(`<!doctype html>
 <html lang="{{.Language}}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="description" content="{{.Description}}"><link rel="canonical" href="{{.Canonical}}"><meta name="theme-color" content="#101414">
-<link rel="stylesheet" href="/assets/public.css"><title>{{.Title}}</title></head><body>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="stylesheet" href="/assets/public.css"><title>{{.Title}}</title></head><body>
 <a class="skip-link" href="#main">{{if eq .Language "fr"}}Aller au contenu{{else}}Skip to content{{end}}</a>
-<header class="site-header"><a class="wordmark" href="/?lang={{.Language}}" aria-label="HTB home"><span aria-hidden="true">&gt;_</span> HTB</a><nav aria-label="{{if eq .Language "fr"}}Navigation principale{{else}}Main navigation{{end}}"><a href="/downloads?lang={{.Language}}">{{if eq .Language "fr"}}Télécharger{{else}}Download{{end}}</a><a href="/cgu?lang={{.Language}}">{{if eq .Language "fr"}}CGU{{else}}Terms{{end}}</a></nav><nav class="languages" aria-label="Language"><a href="{{.FrenchURL}}" lang="fr" hreflang="fr">FR</a><span aria-hidden="true">/</span><a href="{{.EnglishURL}}" lang="en" hreflang="en">EN</a></nav></header>
+<header class="site-header"><a class="wordmark" href="/?lang={{.Language}}" aria-label="HTB home"><span aria-hidden="true">&gt;</span><span class="cursor" aria-hidden="true">_</span> HTB</a><nav aria-label="{{if eq .Language "fr"}}Navigation principale{{else}}Main navigation{{end}}"><a href="/downloads?lang={{.Language}}">{{if eq .Language "fr"}}Télécharger{{else}}Download{{end}}</a><a href="/cgu?lang={{.Language}}">{{if eq .Language "fr"}}CGU{{else}}Terms{{end}}</a></nav><nav class="languages" aria-label="Language"><a href="{{.FrenchURL}}" lang="fr" hreflang="fr">FR</a><span aria-hidden="true">/</span><a href="{{.EnglishURL}}" lang="en" hreflang="en">EN</a></nav></header>
 <main id="main">{{.Body}}</main>
 <footer class="site-footer"><span>HTB — Headless Ticket Board</span><nav aria-label="{{if eq .Language "fr"}}Informations légales{{else}}Legal information{{end}}"><a href="/mentions-legales?lang={{.Language}}">{{if eq .Language "fr"}}Mentions légales{{else}}Legal notice{{end}}</a><a href="/privacy?lang={{.Language}}">{{if eq .Language "fr"}}Confidentialité{{else}}Privacy{{end}}</a><button class="link-button" type="button" data-open-consent>{{if eq .Language "fr"}}Préférences de mesure{{else}}Analytics preferences{{end}}</button></nav></footer>
 <section class="consent" id="consent" aria-label="{{if eq .Language "fr"}}Préférences de mesure{{else}}Analytics preferences{{end}}" role="dialog" aria-modal="false" hidden><div><h2>{{if eq .Language "fr"}}Votre vie privée{{else}}Your privacy{{end}}</h2><p>{{if eq .Language "fr"}}Avec votre accord, HTB utilise une mesure d’audience hébergée par Ben-to pour améliorer le site. Vous pouvez refuser sans conséquence.{{else}}With your permission, HTB uses Ben-to-hosted analytics to improve this site. You can refuse without any consequence.{{end}}</p><p><a href="/privacy?lang={{.Language}}">{{if eq .Language "fr"}}En savoir plus{{else}}Learn more{{end}}</a></p></div><div class="consent-actions"><button class="button secondary" type="button" data-consent="rejected">{{if eq .Language "fr"}}Refuser{{else}}Reject{{end}}</button><button class="button" type="button" data-consent="accepted">{{if eq .Language "fr"}}Accepter{{else}}Accept{{end}}</button></div></section>
@@ -75,6 +78,13 @@ func (s *Server) publicScript(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
 	fmt.Fprint(w, publicJS)
+}
+
+func (s *Server) favicon(w http.ResponseWriter, _ *http.Request) {
+	s.publicHeaders(w)
+	w.Header().Set("Content-Type", "image/svg+xml")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	fmt.Fprint(w, publicFavicon)
 }
 
 func (s *Server) home(w http.ResponseWriter, r *http.Request) {
