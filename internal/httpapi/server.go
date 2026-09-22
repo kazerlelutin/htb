@@ -47,6 +47,8 @@ var downloadCommands = []commandReference{
 	{"Tickets", "htb ticket show REF", "Display one ticket, including its status, relationships, labels, and current version."},
 	{"Tickets", "htb ticket update --version N [--title TITLE] [--description TEXT] [--status open|in_progress|review|blocked|done] [--priority low|normal|high|urgent] [--feature KEY] REF", "Update a ticket safely. Use the version shown by 'htb ticket show REF' so concurrent changes are not overwritten."},
 	{"Tickets", "htb ticket comment REF TEXT", "Add a comment to a ticket."},
+	{"Tickets", "htb ticket comments REF", "Read ticket comments with their author and timestamp."},
+	{"Tickets", "htb ticket activity REF", "Read the ticket audit activity."},
 	{"Tickets", "htb ticket claim REF", "Assign a ticket to yourself and move an open ticket to in progress."},
 	{"Tickets", "htb ticket release REF", "Remove your claim from a ticket so another person can take it."},
 	{"Tickets", "htb ticket versions REF", "List the saved revisions of a ticket."},
@@ -326,6 +328,15 @@ func (s *Server) ticket(w http.ResponseWriter, r *http.Request, tail string) {
 		writeJSON(w, 200, ticket)
 		return
 	}
+	if len(parts) == 2 && parts[1] == "comments" && r.Method == "GET" {
+		comments, err := s.store.Comments(r.Context(), actor(r), ref)
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		writeJSON(w, 200, map[string]any{"comments": comments})
+		return
+	}
 	if len(parts) == 2 && parts[1] == "comments" && r.Method == "POST" {
 		var in struct {
 			Body string `json:"body"`
@@ -339,6 +350,15 @@ func (s *Server) ticket(w http.ResponseWriter, r *http.Request, tail string) {
 			return
 		}
 		writeJSON(w, 201, comment)
+		return
+	}
+	if len(parts) == 2 && parts[1] == "activity" && r.Method == "GET" {
+		activity, err := s.store.Activity(r.Context(), actor(r), ref)
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		writeJSON(w, 200, map[string]any{"activity": activity})
 		return
 	}
 	if len(parts) == 2 && parts[1] == "claim" && r.Method == "POST" {

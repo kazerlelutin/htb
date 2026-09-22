@@ -197,6 +197,12 @@ func TestTicketLifecycleOverHTTP(t *testing.T) {
 	if response := requestJSON(t, server, http.MethodPost, "/api/v1/tickets/"+child.Ref+"/comments", `{"body":"A comment"}`); response.Code != http.StatusCreated {
 		t.Fatalf("comment on child ticket: %d %s", response.Code, response.Body.String())
 	}
+	if response := requestJSON(t, server, http.MethodGet, "/api/v1/tickets/"+child.Ref+"/comments", ""); response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "A comment") || !strings.Contains(response.Body.String(), "Integration test") {
+		t.Fatalf("list child comments: %d %s", response.Code, response.Body.String())
+	}
+	if response := requestJSON(t, server, http.MethodGet, "/api/v1/tickets/"+child.Ref+"/activity", ""); response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "comment_added") {
+		t.Fatalf("list child activity: %d %s", response.Code, response.Body.String())
+	}
 	if response := requestJSON(t, server, http.MethodGet, "/api/v1/tickets/"+child.Ref+"/versions", ""); response.Code != http.StatusOK {
 		t.Fatalf("list child revisions: %d %s", response.Code, response.Body.String())
 	}

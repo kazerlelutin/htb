@@ -131,7 +131,14 @@ type Revision struct {
 type Comment struct {
 	ID        int64     `json:"id"`
 	Body      string    `json:"body"`
+	Author    string    `json:"author"`
 	CreatedAt time.Time `json:"created_at"`
+}
+type Activity struct {
+	Action    string          `json:"action"`
+	Payload   json.RawMessage `json:"payload"`
+	Actor     string          `json:"actor"`
+	CreatedAt time.Time       `json:"created_at"`
 }
 
 func (s *Store) Migrate(ctx context.Context) error {
@@ -714,6 +721,64 @@ func (s *Store) AddComment(ctx context.Context, actor Actor, ref, body string) (
 		return out, err
 	}
 	return out, tx.Commit()
+}
+
+func (s *Store) Comments(ctx context.Context, actor Actor, ref string) ([]Comment, error) {
+	id, err := s.ticketForRead(ctx, actor, ref)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.DB.QueryContext(ctx, `SELECT c.id,c.body,COALESCE(credential.name,''),c.created_at FROM comments c LEFT JOIN credentials credential ON credential.id=c.author_credential_id WHERE c.ticket_id=$1 ORDER BY c.created_at,c.id`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	comments := []Comment{}
+	for rows.Next() {
+		var comment Comment
+		if err = rows.Scan(&comment.ID, &comment.Body, &comment.Author, &comment.CreatedAt); err != nil {
+			return nil, err
+		}
+		comments = append(comments, comment)
+	}
+	return comments, rows.Err()
+}
+
+func (s *Store) Activity(ctx context.Context, actor Actor, ref string) ([]Activity, error) {
+	id, err := s.ticketForRead(ctx, actor, ref)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.DB.QueryContext(ctx, `SELECT event.action,event.payload,COALESCE(credential.name,''),event.created_at FROM activity_events event LEFT JOIN credentials credential ON credential.id=event.actor_credential_id WHERE event.ticket_id=$1 ORDER BY event.created_at,event.id`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	activity := []Activity{}
+	for rows.Next() {
+		var item Activity
+		if err = rows.Scan(&item.Action, &item.Payload, &item.Actor, &item.CreatedAt); err != nil {
+			return nil, err
+		}
+		activity = append(activity, item)
+	}
+	return activity, rows.Err()
+}
+
+func (s *Store) ticketForRead(ctx context.Context, actor Actor, ref string) (int64, error) {
+	project, _, err := domain.ParseReference(ref)
+	if err != nil {
+		return 0, err
+	}
+	if err = s.authorize(ctx, actor, project, domain.RoleRead); err != nil {
+		return 0, err
+	}
+	projectID, err := projectID(ctx, s.DB, project)
+	if err != nil {
+		return 0, err
+	}
+	id, _, err := ticketID(ctx, s.DB, ref, projectID)
+	return id, err
 }
 
 func (s *Store) Claim(ctx context.Context, actor Actor, ref string) (Ticket, error) {

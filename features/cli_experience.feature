@@ -31,6 +31,11 @@ Feature: CLI experience
     Then the CLI displays only tickets matching every filter
     And the same filters can be used with JSON and CSV output
 
+  Scenario: Reading a ticket keeps its conversation and changes visible
+    Given a ticket with comments and traceable changes
+    When a person runs "htb ticket comments SITE-1" or "htb ticket activity SITE-1"
+    Then the CLI displays the author and timestamp of each item
+
   Scenario: A user story shows progress as a bar
     Given a user story with two completed technical tasks out of three
     When a person runs "htb ticket list"
