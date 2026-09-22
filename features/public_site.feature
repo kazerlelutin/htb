@@ -21,6 +21,7 @@ Feature: Site public HTB
     Given une personne consulte la page d’accueil
     Then elle voit un exemple de commandes pour créer un projet et un ticket
     And elle comprend qu’HTB est utilisable par les personnes, scripts et agents
+    And elle comprend que les invitations, droits de projet et changements sont gérés de façon explicite et traçable
     And elle peut consulter les CGU, les mentions légales et la politique de confidentialité
 
   Scenario: Les futures limites de projets restent inactives par défaut
