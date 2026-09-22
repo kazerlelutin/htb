@@ -40,7 +40,7 @@ var downloadCommands = []commandReference{
 	{"Projects", "htb project use KEY", "Select the project used when a command does not include --project."},
 	{"Roadmap", "htb feature create --key KEY --name NAME [--project KEY] [--description TEXT] [--due-date YYYY-MM-DD]", "Create a roadmap feature. It uses the current project unless --project is provided; --due-date is optional."},
 	{"Tickets", "htb ticket create --title TITLE [--type user_story|technical_task|bug|incident] [--project KEY] [--parent REF] [--related REF] [--feature KEY] [--description TEXT] [--priority low|normal|high|urgent] [--label TAG]", "Create a ticket in the current project by default. A technical task must use --parent with a user-story reference; repeat --label to attach several labels."},
-	{"Tickets", "htb ticket list [--project KEY] [--feature KEY] [--tree] [--json|--csv]", "List tickets from the current project. Filter by feature, include child tickets with --tree, or select JSON/CSV for scripts."},
+	{"Tickets", "htb ticket list [--project KEY] [--feature KEY] [--status STATUS] [--priority PRIORITY] [--label LABEL] [--query TEXT] [--tree] [--json|--csv]", "List tickets from the current project. Combine feature, status, priority, label, and text filters; include child tickets with --tree or select JSON/CSV for scripts."},
 	{"Tickets", "htb ticket show REF", "Display one ticket, including its status, relationships, labels, and current version."},
 	{"Tickets", "htb ticket update --version N [--title TITLE] [--description TEXT] [--status open|in_progress|review|blocked|done] [--priority low|normal|high|urgent] [--feature KEY] REF", "Update a ticket safely. Use the version shown by 'htb ticket show REF' so concurrent changes are not overwritten."},
 	{"Tickets", "htb ticket comment REF TEXT", "Add a comment to a ticket."},
@@ -210,7 +210,15 @@ func (s *Server) listTickets(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "invalid_request", "project is required", nil)
 		return
 	}
-	items, err := s.store.ListTickets(r.Context(), actor(r), project, r.URL.Query().Get("tree") != "true", r.URL.Query().Get("feature"))
+	filter := store.TicketFilter{
+		ParentOnly: r.URL.Query().Get("tree") != "true",
+		FeatureKey: r.URL.Query().Get("feature"),
+		Status:     domain.Status(r.URL.Query().Get("status")),
+		Priority:   r.URL.Query().Get("priority"),
+		Label:      r.URL.Query().Get("label"),
+		Query:      r.URL.Query().Get("query"),
+	}
+	items, err := s.store.ListTickets(r.Context(), actor(r), project, filter)
 	if err != nil {
 		writeStoreError(w, err)
 		return

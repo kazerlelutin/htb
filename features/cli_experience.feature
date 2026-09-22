@@ -25,6 +25,12 @@ Feature: CLI experience
     When a person runs "htb ticket list"
     Then the CLI displays references, statuses, types, and titles in a table
 
+  Scenario: A person narrows daily work with combined filters
+    Given a current project containing tickets with distinct statuses, priorities, labels, and descriptions
+    When they run "htb ticket list --status blocked --priority urgent --label production --query checkout"
+    Then the CLI displays only tickets matching every filter
+    And the same filters can be used with JSON and CSV output
+
   Scenario: A user story shows progress as a bar
     Given a user story with two completed technical tasks out of three
     When a person runs "htb ticket list"

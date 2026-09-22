@@ -87,7 +87,7 @@ htb ticket update --help
 | Organiser la roadmap | `htb feature create --key KEY --name NAME --due-date YYYY-MM-DD` |
 | Créer un ticket | `htb ticket create --title TITRE --type user_story` |
 | Créer une tâche d'US | `htb ticket create --type technical_task --parent SITE-1 --title TITRE` |
-| Voir les tickets | `htb ticket list`, `htb ticket show SITE-1` |
+| Voir les tickets | `htb ticket list --status blocked --priority urgent`, `htb ticket list --label site --query export`, `htb ticket show SITE-1` |
 | Filtrer par fonctionnalité | `htb ticket list --feature newsletter` |
 | Mettre à jour | `htb ticket update --version 2 --status in_progress SITE-2` |
 | Collaborer | `htb ticket comment SITE-2 "Texte"`, `htb ticket claim SITE-2`, `htb ticket release SITE-2` |

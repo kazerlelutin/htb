@@ -119,6 +119,15 @@ func TestHelpIsDetailedForEveryCommand(t *testing.T) {
 	}
 }
 
+func TestTicketListHelpExplainsDailyWorkFilters(t *testing.T) {
+	help := helpText([]string{"ticket", "list"})
+	for _, flag := range []string{"--status STATUS", "--priority PRIORITY", "--label LABEL", "--query TEXT", "--json", "--csv"} {
+		if !strings.Contains(help, flag) {
+			t.Fatalf("ticket list help is missing %q: %s", flag, help)
+		}
+	}
+}
+
 func TestAPIErrorUsesStructuredMessage(t *testing.T) {
 	err := apiError("422 Unprocessable Entity", []byte(`{"error":{"message":"project key is required"}}`))
 	if err.Error() != "project key is required" {
