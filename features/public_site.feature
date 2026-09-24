@@ -24,6 +24,12 @@ Feature: Site public HTB
     And elle comprend que les invitations, droits de projet et changements sont gérés de façon explicite et traçable
     And elle peut consulter les CGU, les mentions légales et la politique de confidentialité
 
+  Scenario: Le site distingue les deux modes d'utilisation
+    Given une personne consulte la page d’accueil HTB
+    Then elle voit une option pour utiliser le serveur hébergé
+    And elle voit une option pour auto-héberger HTB avec un lien vers le guide GitHub
+    And elle peut choisir ces options en français ou en anglais
+
   Scenario: Une personne explore HTB sans créer de compte
     Given une personne consulte la page d’accueil HTB
     When elle sélectionne un moment dans le simulateur
