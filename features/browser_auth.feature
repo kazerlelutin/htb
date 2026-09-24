@@ -21,3 +21,10 @@ Feature: Client browser authentication
     Given the ZITADEL Web client ID is left empty in the example configuration
     When a visitor opens the public HTB site
     Then the client portal entry point is not displayed
+
+  Scenario: A self-hosted portal returns to its own HTTPS domain
+    Given HTBD_PUBLIC_URL is "https://tickets.example.org"
+    And the ZITADEL Web application allows "https://tickets.example.org/auth/callback"
+    When a client signs in through ZITADEL
+    Then ZITADEL returns the browser to the HTB callback on that domain
+    And HTB opens the client portal after validating the login

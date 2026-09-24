@@ -35,10 +35,25 @@ internal work board.
 
 ### Self-host HTB
 
-You need PostgreSQL, a Zitadel instance, and a public HTTPS URL. The
-[self-hosting guide](docs/self-hosting.md) covers Zitadel's Native / Device
-Code and Web / PKCE applications, environment variables, deployment, and
-checks. Your users then connect the same CLI to **your** URL:
+You need PostgreSQL, a Zitadel instance, and a public HTTPS URL. In your
+Zitadel console, create a project named `HTB`, then create two applications
+inside it:
+
+| Application | Type and flow | Redirect URI in Zitadel | Copy into HTB |
+| --- | --- | --- | --- |
+| HTB CLI | Native · Device Code | `htb://oauth/callback` **only if Zitadel requires a URI**; the Device Code flow does not use it | `HTBD_ZITADEL_DEVICE_CLIENT_ID` |
+| HTB Web | Web · Authorization Code + PKCE | `https://tickets.example.org/auth/callback` | `HTBD_ZITADEL_WEB_CLIENT_ID` |
+
+Replace `tickets.example.org` with your HTTPS domain. The Web Redirect URI
+must equal `HTBD_PUBLIC_URL` plus `/auth/callback`, exactly. If Zitadel asks
+for a Post Logout Redirect URI, use your site's root URL; HTB's current
+logout does not call Zitadel's logout endpoint. Copy the Zitadel **Project
+ID** to `HTBD_ZITADEL_AUDIENCE` and its issuer URL to
+`HTBD_ZITADEL_ISSUER`.
+
+Follow the [Zitadel walkthrough](docs/self-hosting.md#1-configure-zitadel),
+then the rest of the self-hosting guide for `.env`, deployment, and checks.
+Your users then connect the same CLI to **your** URL:
 
 ```bash
 htb config set-server https://tickets.example.org
