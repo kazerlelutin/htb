@@ -25,3 +25,6 @@ var ClientRequestsMigration string
 
 //go:embed migrations/0007_client_stories.sql
 var ClientStoriesMigration string
+
+//go:embed migrations/0008_client_story_visibility.sql
+var ClientStoryVisibilityMigration string

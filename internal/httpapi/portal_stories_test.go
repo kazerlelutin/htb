@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -25,6 +26,37 @@ func (stub *clientStoryStub) ListClientStories(_ context.Context, _ store.Actor,
 		return nil, store.ErrForbidden
 	}
 	return stub.stories, nil
+}
+
+func (stub *clientStoryStub) ListClientStoriesPage(_ context.Context, _ store.Actor, project string, page, perPage int) (store.ClientStoryPage, error) {
+	if project != "SITE" {
+		return store.ClientStoryPage{}, store.ErrForbidden
+	}
+	result := store.ClientStoryPage{Page: page, Total: len(stub.stories)}
+	for _, story := range stub.stories {
+		result.TaskCount += story.ChildCount
+		result.TaskDone += story.DoneChildren
+		if story.Status == "done" {
+			result.StoryDone++
+		}
+	}
+	result.TotalPages = (result.Total + perPage - 1) / perPage
+	if result.TotalPages == 0 {
+		result.TotalPages = 1
+	}
+	if result.Page < 1 {
+		result.Page = 1
+	}
+	if result.Page > result.TotalPages {
+		result.Page = result.TotalPages
+	}
+	start := (result.Page - 1) * perPage
+	end := start + perPage
+	if end > result.Total {
+		end = result.Total
+	}
+	result.Stories = append(result.Stories, stub.stories[start:end]...)
+	return result, nil
 }
 
 func (stub *clientStoryStub) GetClientStory(_ context.Context, _ store.Actor, ref string) (store.ClientStory, error) {
@@ -128,6 +160,28 @@ func TestClientStoryWithoutTasksHasNoMisleadingPercentage(t *testing.T) {
 	}
 	if got := progressPercent(2, 3); got != 66 {
 		t.Fatalf("two completed tasks out of three: got %d%%", got)
+	}
+}
+
+func TestClientStoryDashboardPaginatesStories(t *testing.T) {
+	s, _, _ := portalTestServer()
+	stories := make([]store.ClientStory, 21)
+	for i := range stories {
+		stories[i] = store.ClientStory{Ref: "SITE-" + strconv.Itoa(i+1), Project: "SITE", Title: "Story " + strconv.Itoa(i+1), Published: true}
+	}
+	s.stories = &clientStoryStub{stories: stories}
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, portalRequest(http.MethodGet, "/portal/projects/SITE?page=2", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("page 2: %d %s", w.Code, w.Body.String())
+	}
+	for _, want := range []string{"Story 21", "Page 2 sur 2", `href="/portal/projects/SITE?page=1"`, `rel="prev"`} {
+		if !strings.Contains(w.Body.String(), want) {
+			t.Fatalf("page 2 missing %q: %s", want, w.Body.String())
+		}
+	}
+	if strings.Contains(w.Body.String(), "Story 1") {
+		t.Fatalf("page 2 contains a story from page 1: %s", w.Body.String())
 	}
 }
 

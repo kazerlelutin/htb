@@ -61,3 +61,9 @@ Feature: User stories visible aux clients
     When un administrateur la masque avec la CLI
     Then un membre en lecture ne voit plus l’US et ne peut plus la commenter
     And un administrateur retrouve l’US marquée « Brouillon »
+
+  Scenario: Les US visibles sont paginées
+    Given un projet contient plus de vingt US visibles à la personne connectée
+    When cette personne ouvre la deuxième page des user stories
+    Then elle voit les US de cette page sans celles de la première page
+    And elle peut revenir à la page précédente avec une navigation accessible

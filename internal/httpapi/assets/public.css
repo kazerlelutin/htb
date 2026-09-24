@@ -499,6 +499,16 @@ main {
 .portal-comments time {
 	color: var(--muted);
 }
+.portal-pagination {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+	margin-top: 1rem;
+}
+.portal-pagination a {
+	color: var(--lime);
+}
 .portal-form {
 	display: grid;
 	gap: 0.75rem;

@@ -76,10 +76,10 @@ func TestClientStoryPublicationAndPublicConversation(t *testing.T) {
 		t.Fatalf("unpublished story visible: %+v, %v", items, err)
 	}
 	adminItems, err := s.ListClientStories(ctx, admin, "SITE")
-	if err != nil || len(adminItems) != 1 || adminItems[0].Ref != story.Ref || adminItems[0].Published {
+	if err != nil || len(adminItems) != 1 || adminItems[0].Ref != story.Ref || adminItems[0].Published || adminItems[0].Visibility != ClientStoryDraft {
 		t.Fatalf("administrator cannot preview draft: %+v, %v", adminItems, err)
 	}
-	if draft, err := s.GetClientStory(ctx, admin, story.Ref); err != nil || draft.Published {
+	if draft, err := s.GetClientStory(ctx, admin, story.Ref); err != nil || draft.Published || draft.Visibility != ClientStoryDraft {
 		t.Fatalf("administrator draft detail: %+v, %v", draft, err)
 	}
 	internalComments, err := s.ListInternalStoryComments(ctx, admin, story.Ref)
@@ -102,7 +102,7 @@ func TestClientStoryPublicationAndPublicConversation(t *testing.T) {
 		t.Fatal(err)
 	}
 	items, err = s.ListClientStories(ctx, client, "SITE")
-	if err != nil || len(items) != 1 || items[0].Ref != story.Ref || items[0].ChildCount != 1 || items[0].DoneChildren != 0 || !items[0].Published {
+	if err != nil || len(items) != 1 || items[0].Ref != story.Ref || items[0].ChildCount != 1 || items[0].DoneChildren != 0 || !items[0].Published || items[0].Visibility != ClientStoryPublished {
 		t.Fatalf("published story projection: %+v, %v", items, err)
 	}
 	if items[0].Title == technical.Title || items[0].Description == "Note technique privée" {
@@ -142,7 +142,7 @@ func TestClientStoryPublicationAndPublicConversation(t *testing.T) {
 	if _, err = s.GetClientStory(ctx, client, story.Ref); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("unpublished detail remained visible: %v", err)
 	}
-	if draft, err := s.GetClientStory(ctx, admin, story.Ref); err != nil || draft.Published {
+	if draft, err := s.GetClientStory(ctx, admin, story.Ref); err != nil || draft.Published || draft.Visibility != ClientStoryDraft {
 		t.Fatalf("administrator lost unpublished story: %+v, %v", draft, err)
 	}
 	if _, err = s.AddClientStoryComment(ctx, client, story.Ref, "Hidden"); !errors.Is(err, ErrNotFound) {
