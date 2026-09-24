@@ -282,6 +282,17 @@ func TestBrowserInvitationRouteDoesNotExist(t *testing.T) {
 	}
 }
 
+func TestInvitationExpiryDefaultsToSevenDays(t *testing.T) {
+	now := time.Date(2026, time.September, 25, 12, 0, 0, 0, time.UTC)
+	if got, want := invitationExpiry(nil, now), now.Add(defaultInvitationLifetime); !got.Equal(want) {
+		t.Fatalf("default expiration = %s, want %s", got, want)
+	}
+	explicit := now.Add(48 * time.Hour)
+	if got := invitationExpiry(&explicit, now); !got.Equal(explicit) {
+		t.Fatalf("explicit expiration = %s, want %s", got, explicit)
+	}
+}
+
 func TestBrowserLoginCreatesASignedShortLivedPKCEState(t *testing.T) {
 	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "", slog.Default())
 	if err := s.SetBrowserLogin(browserLoginStub{}, []byte("01234567890123456789012345678901")); err != nil {
