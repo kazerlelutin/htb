@@ -203,10 +203,11 @@ depuis `https://tickets.example.org/auth/device-config`.
 
 Le dépôt contient le `Dockerfile` et `captain-definition`. Dans CapRover,
 définir les variables de `.env.example` avec les valeurs de production. Le
-portail client est désactivé tant que `HTBD_ZITADEL_WEB_CLIENT_ID` est absent.
+portail client est désactivé tant que `HTBD_ZITADEL_WEB_CLIENT_ID` est vide.
 Lorsqu’il est activé, la Redirect URI `https://<votre-domaine>/auth/callback`
 doit être enregistrée dans Zitadel et `HTBD_WEB_SESSION_KEY` doit contenir au
-moins 32 octets aléatoires, distincts des autres secrets. La Redirect URI
+moins 32 octets aléatoires, distincts des autres secrets (par exemple avec
+`openssl rand -hex 32`). La Redirect URI
 `htb://oauth/callback` reste un paramètre interne requis par l'application
 native Zitadel ; HTB ne l'expose pas. Ne jamais exposer les clés de comptes de
 service.
