@@ -24,6 +24,13 @@ Feature: User stories visible aux clients
     When une personne ouvre l’US dans le portail
     Then elle lit que l’US n’a pas encore de tâche liée
 
+  Scenario: Le portail utilise un vocabulaire concis
+    Given un projet contient une US et une discussion réservée à l’équipe
+    When un administrateur ouvre le projet puis le détail de l’US dans le portail
+    Then le projet est présenté par son nom sans répéter sa clé
+    And les tâches et les commentaires sont libellés sans les termes « techniques » et « internes »
+    And le logo HTB affiche son curseur terminal animé
+
   Scenario: Un administrateur commente une US brouillon depuis le portail
     Given un administrateur prévisualise une US non publiée dans le portail
     When il ajoute un commentaire interne depuis le détail de l’US
