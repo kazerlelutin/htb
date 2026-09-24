@@ -62,7 +62,7 @@ var downloadCommands = []commandReference{
 	{"Tickets", "htb ticket release REF", "Remove your claim from a ticket so another person can take it."},
 	{"Tickets", "htb ticket versions REF", "List the saved revisions of a ticket."},
 	{"Tickets", "htb ticket restore --version N REF REVISION", "Restore a saved revision only when the ticket is still at version N, preventing accidental overwrites."},
-	{"Invitations", "htb invite create [--project KEY] [--role read|write|admin] [--expires-at RFC3339]", "Create a shareable invitation for the current project or --project. Choose the member role and an expiry time."},
+	{"Invitations", "htb invite create [--project KEY] [--role read|write|admin] [--expires-at RFC3339]", "Create a shareable invitation for the current project or --project. Choose the member role and an expiry time; it defaults to 7 days."},
 	{"Invitations", "htb invite accept CODE", "Accept an invitation code and gain access to its project."},
 	{"Invitations", "htb invite list [--project KEY]", "List active invitations without exposing their codes."},
 	{"Invitations", "htb invite revoke ID [--project KEY]", "Revoke an active invitation."},
@@ -70,6 +70,8 @@ var downloadCommands = []commandReference{
 
 type actorKey struct{}
 type principalKey struct{}
+
+const defaultInvitationLifetime = 7 * 24 * time.Hour
 
 type browserSessionStore interface {
 	BrowserActor(context.Context, string, string, string) (store.Actor, error)
@@ -500,18 +502,26 @@ func (s *Server) createInvitation(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Project   string      `json:"project"`
 		Role      domain.Role `json:"role"`
-		ExpiresAt time.Time   `json:"expires_at"`
+		ExpiresAt *time.Time  `json:"expires_at"`
 	}
 	if !decode(w, r, &in) {
 		return
 	}
-	code, err := s.store.CreateInvitation(r.Context(), actor(r), in.Project, in.Role, in.ExpiresAt)
+	code, err := s.store.CreateInvitation(r.Context(), actor(r), in.Project, in.Role, invitationExpiry(in.ExpiresAt, time.Now()))
 	if err != nil {
 		writeStoreError(w, err)
 		return
 	}
 	writeJSON(w, 201, map[string]string{"code": code})
 }
+
+func invitationExpiry(expiresAt *time.Time, now time.Time) time.Time {
+	if expiresAt == nil {
+		return now.Add(defaultInvitationLifetime)
+	}
+	return *expiresAt
+}
+
 func (s *Server) acceptInvitation(w http.ResponseWriter, r *http.Request, code string) {
 	p := principal(r)
 	if err := s.store.AcceptInvitation(r.Context(), p.Subject, p.Name, p.Email, code); err != nil {

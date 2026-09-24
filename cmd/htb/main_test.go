@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -155,5 +156,14 @@ func TestAPIErrorUsesStructuredMessage(t *testing.T) {
 	}
 	if err := apiError("500 Internal Server Error", []byte("not json")); err.Error() != "request failed: 500 Internal Server Error" {
 		t.Fatalf("got %q", err)
+	}
+}
+
+func TestInvitationCreateInputUsesOptionalExpiration(t *testing.T) {
+	if got, want := invitationCreateInput("ANBY", "read", ""), map[string]string{"project": "ANBY", "role": "read"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("default invitation input = %#v, want %#v", got, want)
+	}
+	if got := invitationCreateInput("ANBY", "read", "2026-10-02T12:00:00Z"); got["expires_at"] != "2026-10-02T12:00:00Z" {
+		t.Fatalf("explicit invitation expiration missing from %#v", got)
 	}
 }

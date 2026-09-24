@@ -238,7 +238,7 @@ Use "htb help ticket create" or "htb ticket create --help" for command details.
 	case "invite":
 		return "Usage:\n  htb invite create [--project KEY] [--role read|write|admin] [--expires-at RFC3339]\n  htb invite accept CODE\n  htb invite list [--project KEY]\n  htb invite revoke ID [--project KEY]\n"
 	case "invite create":
-		return "Usage: htb invite create [--project KEY] [--role read|write|admin] [--expires-at RFC3339]\n\nCreate an invitation for a project.\n"
+		return "Usage: htb invite create [--project KEY] [--role read|write|admin] [--expires-at RFC3339]\n\nCreate an invitation for a project. It expires after 7 days by default.\n"
 	case "invite accept":
 		return "Usage: htb invite accept CODE\n\nAccept a project invitation.\n"
 	case "invite list":
@@ -1068,7 +1068,7 @@ func inviteCommand(args []string) error {
 		var response struct {
 			Code string `json:"code"`
 		}
-		if err := call("POST", "/api/v1/invitations", map[string]string{"project": *project, "role": *role, "expires_at": *expires}, &response); err != nil {
+		if err := call("POST", "/api/v1/invitations", invitationCreateInput(*project, *role, *expires), &response); err != nil {
 			return err
 		}
 		fmt.Printf("Invitation code created: %s\nShare it with: htb invite accept %s\n", response.Code, response.Code)
@@ -1129,6 +1129,14 @@ func inviteCommand(args []string) error {
 		return nil
 	}
 	return errors.New("usage: htb invite {create|accept|list|revoke}")
+}
+
+func invitationCreateInput(project, role, expiresAt string) map[string]string {
+	input := map[string]string{"project": project, "role": role}
+	if expiresAt != "" {
+		input["expires_at"] = expiresAt
+	}
+	return input
 }
 
 func call(method, path string, input any, output any) error {
