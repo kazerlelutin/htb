@@ -614,6 +614,7 @@ main {
 	.site-header nav {
 		order: 3;
 		width: 100%;
+		flex-wrap: wrap;
 	}
 	.languages {
 		margin-left: 0;
