@@ -12,10 +12,12 @@ import (
 )
 
 type clientStoryStub struct {
-	stories   []store.ClientStory
-	comments  []store.ClientStoryComment
-	commented bool
-	published bool
+	stories           []store.ClientStory
+	comments          []store.ClientStoryComment
+	internalComments  []store.Comment
+	commented         bool
+	internalCommented bool
+	published         bool
 }
 
 func (stub *clientStoryStub) ListClientStories(_ context.Context, _ store.Actor, project string) ([]store.ClientStory, error) {
@@ -40,6 +42,24 @@ func (stub *clientStoryStub) SetClientStoryPublished(_ context.Context, _ store.
 	}
 	stub.published = published
 	return nil
+}
+
+func (stub *clientStoryStub) ListInternalStoryComments(ctx context.Context, actor store.Actor, ref string) ([]store.Comment, error) {
+	if _, err := stub.GetClientStory(ctx, actor, ref); err != nil {
+		return nil, err
+	}
+	return stub.internalComments, nil
+}
+
+func (stub *clientStoryStub) AddInternalStoryComment(ctx context.Context, actor store.Actor, ref, body string) (store.Comment, error) {
+	if _, err := stub.GetClientStory(ctx, actor, ref); err != nil {
+		return store.Comment{}, err
+	}
+	if strings.TrimSpace(body) == "" {
+		return store.Comment{}, store.ErrInvalidClientRequest
+	}
+	stub.internalCommented = true
+	return store.Comment{ID: 1, Body: body}, nil
 }
 
 func (stub *clientStoryStub) ListClientStoryComments(ctx context.Context, actor store.Actor, ref string) ([]store.ClientStoryComment, error) {
@@ -108,18 +128,30 @@ func TestClientStoryWithoutTasksHasNoMisleadingPercentage(t *testing.T) {
 	}
 }
 
-func TestAdministratorSeesDraftStoryWithoutClientCommentForm(t *testing.T) {
+func TestAdministratorCanAddInternalCommentToDraftStory(t *testing.T) {
 	s, _, _ := portalTestServer()
-	s.stories = &clientStoryStub{stories: []store.ClientStory{{Ref: "SITE-12", Project: "SITE", Title: "Projet privé", Status: "open"}}}
+	stories := &clientStoryStub{stories: []store.ClientStory{{Ref: "SITE-12", Project: "SITE", Title: "Projet privé", Status: "open"}}}
+	s.stories = stories
 	for _, path := range []string{"/portal/projects/SITE", "/portal/stories/SITE-12"} {
 		w := httptest.NewRecorder()
 		s.Handler().ServeHTTP(w, portalRequest(http.MethodGet, path, nil))
 		if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "Brouillon") {
 			t.Fatalf("%s: draft is missing: %d %s", path, w.Code, w.Body.String())
 		}
-		if path == "/portal/stories/SITE-12" && (!strings.Contains(w.Body.String(), "htb ticket publish SITE-12") || strings.Contains(w.Body.String(), "Ajouter un commentaire")) {
+		if path == "/portal/stories/SITE-12" && (!strings.Contains(w.Body.String(), "htb ticket publish SITE-12") || !strings.Contains(w.Body.String(), "Ajouter un commentaire interne") || !strings.Contains(w.Body.String(), `action="/portal/stories/SITE-12/ticket-comments"`)) {
 			t.Fatalf("draft detail has wrong actions: %s", w.Body.String())
 		}
+	}
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, portalRequest(http.MethodPost, "/portal/stories/SITE-12/ticket-comments", url.Values{"body": {"Note interne"}}))
+	if w.Code != http.StatusForbidden || stories.internalCommented {
+		t.Fatalf("internal comment without CSRF: %d", w.Code)
+	}
+	csrf := s.portalCSRF(portalRequest(http.MethodGet, "/portal", nil).WithContext(context.WithValue(context.Background(), browserSessionTokenKey{}, "valid")))
+	w = httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, portalRequest(http.MethodPost, "/portal/stories/SITE-12/ticket-comments", url.Values{"csrf": {csrf}, "body": {"Note interne"}}))
+	if w.Code != http.StatusSeeOther || !stories.internalCommented {
+		t.Fatalf("valid internal story comment: %d %s", w.Code, w.Body.String())
 	}
 }
 

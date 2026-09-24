@@ -24,6 +24,12 @@ Feature: User stories visible aux clients
     When une personne ouvre l’US dans le portail
     Then elle lit que l’US n’a pas encore de tâche liée
 
+  Scenario: Un administrateur commente une US brouillon depuis le portail
+    Given un administrateur prévisualise une US non publiée dans le portail
+    When il ajoute un commentaire interne depuis le détail de l’US
+    Then son commentaire est enregistré sur le ticket
+    And ce commentaire n’est pas visible dans la conversation client
+
   Scenario: La progression reste lisible à zéro comme en cours
     Given un projet possède une US publiée avec des tâches techniques
     When une personne ouvre le projet ou le détail de l’US

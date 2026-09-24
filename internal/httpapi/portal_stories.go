@@ -29,7 +29,11 @@ type portalStoryView struct {
 	Percent                          int
 	Published                        bool
 	Comments                         []portalStoryCommentView
+	InternalComments                 []portalStoryCommentView
+	CanCommentInternally             bool
 	CSRF, Error, DraftComment        string
+	InternalCommentError             string
+	DraftInternalComment             string
 }
 
 var portalStoryTemplate = template.Must(template.New("portal-story").Parse(`<!doctype html>
@@ -38,6 +42,7 @@ var portalStoryTemplate = template.Must(template.New("portal-story").Parse(`<!do
 <main id="main" class="portal"><p><a href="/portal/projects/{{.Project}}">← Retour au projet</a></p><p class="eyebrow">USER STORY {{.Ref}} · {{.StatusLabel}}{{if not .Published}} · Brouillon{{end}}</p><h1>{{.Title}}</h1>{{if not .Published}}<p>Cette US est visible par les administrateurs du projet. Pour la partager avec les clients, publiez-la avec <code>htb ticket publish {{.Ref}}</code>.</p>{{end}}
 <section aria-labelledby="progress-title"><h2 id="progress-title">Avancement</h2>{{if .ChildCount}}<label for="story-progress">Tâches techniques terminées : {{.DoneChildren}} / {{.ChildCount}} ({{.Percent}} %)</label><progress id="story-progress" value="{{.DoneChildren}}" max="{{.ChildCount}}">{{.Percent}} %</progress>{{else}}<p>Cette US n’a pas encore de tâche technique liée.</p>{{end}}</section>
 <section aria-labelledby="description-title"><h2 id="description-title">Description</h2><div class="portal-markdown">{{.Description}}</div></section>
+{{if .CanCommentInternally}}<section aria-labelledby="internal-comments-title"><h2 id="internal-comments-title">Commentaires internes</h2>{{if .InternalComments}}<ol class="portal-comments">{{range .InternalComments}}<li><strong>{{.Author}}</strong> <time>{{.CreatedAt.Format "02/01/2006 15:04"}}</time><div class="portal-markdown">{{.Body}}</div></li>{{end}}</ol>{{else}}<p>Aucun commentaire interne pour le moment.</p>{{end}}{{if .InternalCommentError}}<p class="portal-error" role="alert">{{.InternalCommentError}}</p>{{end}}<form class="portal-form" action="/portal/stories/{{.Ref}}/ticket-comments" method="post"><input type="hidden" name="csrf" value="{{.CSRF}}"><label for="internal-comment-body">Ajouter un commentaire interne (Markdown accepté)</label><textarea id="internal-comment-body" name="body" maxlength="20000" rows="5" required>{{.DraftInternalComment}}</textarea><button class="button" type="submit">Publier le commentaire</button></form></section>{{end}}
 {{if .Published}}<section aria-labelledby="conversation-title"><h2 id="conversation-title">Conversation</h2>{{if .Comments}}<ol class="portal-comments">{{range .Comments}}<li><strong>{{.Author}}</strong> <time>{{.CreatedAt.Format "02/01/2006 15:04"}}</time><div class="portal-markdown">{{.Body}}</div></li>{{end}}</ol>{{else}}<p>Aucun commentaire pour le moment.</p>{{end}}</section>{{end}}
 {{if .Published}}<section aria-labelledby="comment-title"><h2 id="comment-title">Ajouter un commentaire</h2>{{if .Error}}<p class="portal-error" role="alert">{{.Error}}</p>{{end}}<form class="portal-form" action="/portal/stories/{{.Ref}}/comments" method="post"><input type="hidden" name="csrf" value="{{.CSRF}}"><label for="comment-body">Votre message (Markdown accepté)</label><textarea id="comment-body" name="body" maxlength="20000" rows="5" required>{{.DraftComment}}</textarea><button class="button" type="submit">Publier le commentaire</button></form></section>{{end}}
 </main></body></html>`))
@@ -86,6 +91,15 @@ func (s *Server) storyView(r *http.Request, ref string) (portalStoryView, error)
 	for _, comment := range comments {
 		view.Comments = append(view.Comments, portalStoryCommentView{Author: comment.Author, Body: renderPortalMarkdown(comment.Body), CreatedAt: comment.CreatedAt})
 	}
+	internalComments, err := s.stories.ListInternalStoryComments(r.Context(), actor(r), ref)
+	if err == nil {
+		view.CanCommentInternally = true
+		for _, comment := range internalComments {
+			view.InternalComments = append(view.InternalComments, portalStoryCommentView{Author: comment.Author, Body: renderPortalMarkdown(comment.Body), CreatedAt: comment.CreatedAt})
+		}
+	} else if !errors.Is(err, store.ErrForbidden) {
+		return portalStoryView{}, err
+	}
 	return view, nil
 }
 
@@ -99,6 +113,33 @@ func (s *Server) portalStory(w http.ResponseWriter, r *http.Request) {
 	if err := portalStoryTemplate.Execute(w, view); err != nil {
 		s.log.Error("render client story", "error", err)
 	}
+}
+
+func (s *Server) portalAddInternalStoryComment(w http.ResponseWriter, r *http.Request) {
+	if !s.validPortalForm(w, r) {
+		return
+	}
+	ref := r.PathValue("ref")
+	body := r.PostForm.Get("body")
+	if strings.TrimSpace(body) == "" || len(body) > 20000 {
+		view, err := s.storyView(r, ref)
+		if err != nil {
+			s.portalReadError(w, err)
+			return
+		}
+		view.DraftInternalComment, view.InternalCommentError = body, "Renseignez un commentaire de 1 à 20 000 caractères."
+		s.portalHeaders(w)
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		if err := portalStoryTemplate.Execute(w, view); err != nil {
+			s.log.Error("render internal story comment", "error", err)
+		}
+		return
+	}
+	if _, err := s.stories.AddInternalStoryComment(r.Context(), actor(r), ref, body); err != nil {
+		s.portalReadError(w, err)
+		return
+	}
+	http.Redirect(w, r, "/portal/stories/"+strings.ToUpper(ref), http.StatusSeeOther)
 }
 
 func (s *Server) portalAddStoryComment(w http.ResponseWriter, r *http.Request) {
