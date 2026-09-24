@@ -27,32 +27,42 @@ connexion et n’a pas besoin de serveur SMTP.
 
 ## 2. Configurer Zitadel
 
-Dans la console de **votre** instance Zitadel :
+`https://tickets.example.org` est un exemple : remplacez ce domaine partout,
+y compris dans la Redirect URI Web et `HTBD_PUBLIC_URL`. Ne mettez pas de
+barre oblique finale à `HTBD_PUBLIC_URL`.
 
-1. Créez un projet `HTB` dans **Organization → Projects**. Copiez son
-   **Project ID** : c’est `HTBD_ZITADEL_AUDIENCE`, pas un Client ID. Ne
-   modifiez pas le projet système `ZITADEL`.
-2. Dans **Applications**, créez `HTB CLI` de type **Native** avec la méthode
-   **Device Code**. Copiez son **Client ID** dans
-   `HTBD_ZITADEL_DEVICE_CLIENT_ID`. Si la console impose une Redirect URI
-   native, saisissez `htb://oauth/callback` ; le flux Device Code d’HTB ne
-   l’utilise pas. [Guide Device Code de Zitadel](https://zitadel.com/docs/guides/integrate/login/oidc/device-authorization).
-3. Pour le portail, créez une **seconde application**, `HTB Web`, de type
-   **Web**, avec **Authorization Code + PKCE**. Enregistrez la Redirect URI
-   exacte `https://tickets.example.org/auth/callback`, en remplaçant le domaine
-   par celui de `HTBD_PUBLIC_URL`. Copiez son **Client ID** dans
-   `HTBD_ZITADEL_WEB_CLIENT_ID` ; HTB n’attend pas de Client Secret pour
-   cette configuration PKCE. [Guide Web + PKCE de Zitadel](https://zitadel.com/docs/guides/integrate/login/oidc/login-users).
-4. Dans les réglages de l’application CLI, choisissez des **access tokens
-   JWT** et incluez les rôles dans le jeton si vous utilisez le rôle global
-   `superadmin`. Vous pouvez créer ce rôle dans le projet Zitadel et ne
-   l’attribuer qu’aux administrateurs globaux. Les rôles ordinaires `read`,
+1. **Créer le projet.** Dans la console Zitadel, ouvrez **Organization →
+   Projects → New**, créez `HTB` et copiez son **Project ID** dans
+   `HTBD_ZITADEL_AUDIENCE`. N’utilisez pas le projet système `ZITADEL`.
+   [Guide des projets](https://zitadel.com/docs/guides/manage/console/projects-overview).
+2. **Créer l’application CLI.** Dans ce projet, ouvrez **Applications → New**,
+   nommez l’application `HTB CLI`, choisissez **Native**, puis **Device Code**.
+   Si Zitadel impose un champ **Redirect URI**, indiquez
+   `htb://oauth/callback`. HTB ne visite pas cette URI : le flux se termine
+   sur la page de validation des appareils de Zitadel. Une fois l’application
+   créée, copiez son **Client ID** dans `HTBD_ZITADEL_DEVICE_CLIENT_ID`.
+   [Guide Device Code](https://zitadel.com/docs/guides/integrate/login/oidc/device-authorization).
+3. **Créer l’application Web.** Toujours dans ce projet, ouvrez
+   **Applications → New**, nommez l’application `HTB Web`, choisissez **Web**,
+   puis **PKCE**. Saisissez exactement cette **Redirect URI** :
+   `https://tickets.example.org/auth/callback`. C’est le callback réellement
+   servi par HTB après connexion. Si Zitadel exige une **Post Logout Redirect
+   URI**, saisissez `https://tickets.example.org/` ; HTB révoque actuellement
+   sa session locale, sans appeler la déconnexion Zitadel. Une fois
+   l’application créée, copiez son **Client ID** dans
+   `HTBD_ZITADEL_WEB_CLIENT_ID`. Aucun Client Secret n’est utilisé par HTB
+   pour ce flux PKCE.
+   [Guide Web / PKCE](https://zitadel.com/docs/guides/integrate/login/oidc/login-users).
+4. **Régler les jetons et les rôles.** Ouvrez `HTB CLI` → **Token Settings**,
+   choisissez des **access tokens JWT**. Si vous utilisez le rôle global
+   `superadmin`, créez-le dans le projet Zitadel, incluez les rôles dans le
+   jeton et ne l’attribuez qu’aux administrateurs globaux. Les rôles `read`,
    `write` et `admin` des projets HTB restent gérés par HTB. Laissez
    **Check Role Assignment on Authentication** désactivé : un client invité
    dans HTB n’a pas besoin d’un rôle Zitadel. [Rôles et jetons Zitadel](https://zitadel.com/docs/guides/manage/console/projects-overview).
-5. Si les utilisateurs doivent créer eux-mêmes leur compte, activez
-   **Register allowed** dans le comportement de connexion et configurez les
-   e-mails de vérification. Sinon, créez/invitez les utilisateurs dans
+5. **Choisir l’accueil des utilisateurs.** S’ils doivent créer eux-mêmes leur
+   compte, activez **Register allowed** dans le comportement de connexion et
+   configurez les e-mails de vérification. Sinon, créez ou invitez-les dans
    Zitadel. Le portail HTB exige un e-mail vérifié dans l’ID token.
    [Accueil des utilisateurs Zitadel](https://zitadel.com/docs/guides/integrate/onboarding/end-users).
 
