@@ -11,7 +11,7 @@ accès aux projets et les tickets.
 
 | | Utiliser la version en ligne | Auto-héberger HTB |
 | --- | --- | --- |
-| Serveur | [htb.ben-to.fr](https://htb.ben-to.fr) | Votre domaine et votre infrastructure |
+| Serveur | [htboard.xyz](https://htboard.xyz) | Votre domaine et votre infrastructure |
 | À configurer | La CLI | PostgreSQL, Zitadel, HTTPS et HTB |
 | Pour commencer | [Démarrage rapide](#utiliser-la-version-en-ligne) | [Guide d’auto-hébergement](docs/self-hosting.fr.md) |
 
@@ -20,7 +20,7 @@ accès aux projets et les tickets.
 Installez la [CLI](#installer-la-cli), puis connectez-la au serveur hébergé :
 
 ```bash
-htb config set-server https://htb.ben-to.fr
+htb config set-server https://htboard.xyz
 htb auth login
 htb project create --key SITE --name "Site web"
 ```
@@ -30,7 +30,7 @@ invitation à un projet existant, utilisez `htb invite accept CODE` au lieu de
 créer un projet.
 
 Un client qui n’utilise pas la CLI peut ouvrir le
-[portail client](https://htb.ben-to.fr/login), se connecter et saisir un code
+[portail client](https://htboard.xyz/login), se connecter et saisir un code
 d’invitation. Le portail montre les US publiées et les demandes, pas le tableau
 technique de l’équipe.
 
@@ -95,7 +95,7 @@ et commentaires acceptent le Markdown ; `htb ticket list --json` et `--csv`
 sont disponibles pour les scripts.
 
 Utilisez `htb help` ou `htb help ticket create` pour connaître les options.
-Le [guide des commandes](https://htb.ben-to.fr/commands) est aussi accessible
+Le [guide des commandes](https://htboard.xyz/commands) est aussi accessible
 sur le web.
 
 ### Partager une US avec un client

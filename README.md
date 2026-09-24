@@ -10,7 +10,7 @@ requests. Zitadel handles sign-in; HTB manages project access and tickets.
 
 | | Use the hosted service | Self-host HTB |
 | --- | --- | --- |
-| Server | [htb.ben-to.fr](https://htb.ben-to.fr) | Your own domain and infrastructure |
+| Server | [htboard.xyz](https://htboard.xyz) | Your own domain and infrastructure |
 | You configure | The CLI | PostgreSQL, Zitadel, HTTPS, and HTB |
 | Start here | [Hosted quick start](#use-the-hosted-service) | [Self-hosting guide](docs/self-hosting.md) |
 
@@ -19,7 +19,7 @@ requests. Zitadel handles sign-in; HTB manages project access and tickets.
 Install the [CLI](#install-the-cli), then connect it to the hosted server:
 
 ```bash
-htb config set-server https://htb.ben-to.fr
+htb config set-server https://htboard.xyz
 htb auth login
 htb project create --key SITE --name "Website"
 ```
@@ -28,7 +28,7 @@ Sign-in opens in your browser through Zitadel. If someone invites you to an
 existing project, use `htb invite accept CODE` instead of creating one.
 
 Clients who do not use the CLI can open the
-[client portal](https://htb.ben-to.fr/login), sign in, and enter a project
+[client portal](https://htboard.xyz/login), sign in, and enter a project
 invitation code. The portal shows published user stories and requests, not the
 team's technical work board.
 
@@ -91,7 +91,7 @@ per project (`SITE-1`, `SITE-2`, …). Descriptions and comments support
 Markdown; `htb ticket list --json` and `--csv` are available for scripts.
 
 Run `htb help` or `htb help ticket create` for command options. The
-[command guide](https://htb.ben-to.fr/commands) is also available on the web.
+[command guide](https://htboard.xyz/commands) is also available on the web.
 
 ### Share a user story with clients
 

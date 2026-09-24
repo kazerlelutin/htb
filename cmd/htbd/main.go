@@ -46,7 +46,7 @@ func main() {
 		os.Exit(1)
 	}
 	deviceConfig := auth.DeviceConfig{Issuer: issuer, ClientID: os.Getenv("HTBD_ZITADEL_DEVICE_CLIENT_ID"), Audience: audience}
-	publicURL := valueOr("HTBD_PUBLIC_URL", "https://htb.ben-to.fr")
+	publicURL := valueOr("HTBD_PUBLIC_URL", "https://htboard.xyz")
 	server := httpapi.New(store, verifier, deviceConfig, os.Getenv("HTBD_RELEASE_URL"), logger)
 	server.SetPublicURL(publicURL)
 	if clientID := os.Getenv("HTBD_ZITADEL_WEB_CLIENT_ID"); clientID != "" {
