@@ -16,3 +16,6 @@ var ProjectTicketNumbersMigration string
 
 //go:embed migrations/0004_account_project_limits.sql
 var AccountProjectLimitsMigration string
+
+//go:embed migrations/0005_web_sessions.sql
+var WebSessionsMigration string

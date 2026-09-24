@@ -152,6 +152,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 		{"0002_feature_due_date", htb.FeatureDueDateMigration},
 		{"0003_project_ticket_numbers", htb.ProjectTicketNumbersMigration},
 		{"0004_account_project_limits", htb.AccountProjectLimitsMigration},
+		{"0005_web_sessions", htb.WebSessionsMigration},
 	}
 	for _, migration := range migrations {
 		var exists bool
@@ -208,6 +209,62 @@ func (s *Store) ResolveActor(ctx context.Context, subject, name, email string, s
 		return actor, err
 	}
 	return actor, tx.Commit()
+}
+
+// BrowserActor only accepts an existing Zitadel identity that has already
+// been granted membership in at least one project. Browser login never creates
+// an HTB account or grants project access from an email address alone.
+func (s *Store) BrowserActor(ctx context.Context, subject string) (Actor, error) {
+	var actor Actor
+	err := s.DB.QueryRowContext(ctx, `SELECT c.id,c.user_id,c.zitadel_subject FROM credentials c WHERE c.zitadel_subject=$1 AND c.disabled_at IS NULL AND EXISTS (SELECT 1 FROM project_memberships pm WHERE pm.user_id=c.user_id)`, subject).Scan(&actor.CredentialID, &actor.UserID, &actor.Subject)
+	if errors.Is(err, sql.ErrNoRows) {
+		return actor, ErrForbidden
+	}
+	return actor, err
+}
+
+// CreateWebSession returns an opaque token. Only its hash is persisted so a
+// database disclosure cannot be replayed as a browser session.
+func (s *Store) CreateWebSession(ctx context.Context, actor Actor, lifetime time.Duration) (string, error) {
+	if actor.CredentialID < 1 || lifetime <= 0 {
+		return "", fmt.Errorf("invalid web session")
+	}
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", err
+	}
+	token := hex.EncodeToString(raw)
+	hash := sha256.Sum256([]byte(token))
+	_, err := s.DB.ExecContext(ctx, `INSERT INTO web_sessions(token_hash,credential_id,expires_at) VALUES($1,$2,$3)`, hash[:], actor.CredentialID, time.Now().Add(lifetime))
+	if err != nil {
+		return "", err
+	}
+	return token, nil
+}
+
+// WebSessionActor resolves only an unexpired, non-revoked browser session.
+func (s *Store) WebSessionActor(ctx context.Context, token string) (Actor, error) {
+	var actor Actor
+	if len(token) != 64 {
+		return actor, ErrNotFound
+	}
+	hash := sha256.Sum256([]byte(token))
+	err := s.DB.QueryRowContext(ctx, `SELECT c.id,c.user_id,c.zitadel_subject FROM web_sessions s JOIN credentials c ON c.id=s.credential_id WHERE s.token_hash=$1 AND s.revoked_at IS NULL AND s.expires_at>now() AND c.disabled_at IS NULL`, hash[:]).Scan(&actor.CredentialID, &actor.UserID, &actor.Subject)
+	if errors.Is(err, sql.ErrNoRows) {
+		return actor, ErrNotFound
+	}
+	return actor, err
+}
+
+// RevokeWebSession invalidates the current browser token without revealing
+// whether a supplied token was valid.
+func (s *Store) RevokeWebSession(ctx context.Context, token string) error {
+	if len(token) != 64 {
+		return nil
+	}
+	hash := sha256.Sum256([]byte(token))
+	_, err := s.DB.ExecContext(ctx, `UPDATE web_sessions SET revoked_at=COALESCE(revoked_at,now()) WHERE token_hash=$1`, hash[:])
+	return err
 }
 
 func (s *Store) CreateProject(ctx context.Context, actor Actor, p Project) error {

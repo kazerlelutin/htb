@@ -1,15 +1,63 @@
 package httpapi
 
 import (
+	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kazerlelutin/htb/internal/auth"
 	"github.com/kazerlelutin/htb/internal/store"
 )
+
+type browserLoginStub struct {
+	principal auth.Principal
+	err       error
+}
+
+func (stub browserLoginStub) AuthorizationURL(state, verifier string) string {
+	return "https://id.example/authorize?state=" + state + "&verifier=" + verifier
+}
+func (stub browserLoginStub) Exchange(context.Context, string, string) (auth.Principal, error) {
+	return stub.principal, stub.err
+}
+
+type browserSessionStub struct {
+	actor    store.Actor
+	token    string
+	revoked  bool
+	projects []store.Project
+}
+
+func (stub *browserSessionStub) BrowserActor(_ context.Context, subject string) (store.Actor, error) {
+	if subject != stub.actor.Subject {
+		return store.Actor{}, store.ErrForbidden
+	}
+	return stub.actor, nil
+}
+
+func (stub *browserSessionStub) CreateWebSession(context.Context, store.Actor, time.Duration) (string, error) {
+	return stub.token, nil
+}
+func (stub *browserSessionStub) WebSessionActor(_ context.Context, token string) (store.Actor, error) {
+	if token != stub.token {
+		return store.Actor{}, errors.New("unknown session")
+	}
+	return stub.actor, nil
+}
+func (stub *browserSessionStub) RevokeWebSession(_ context.Context, token string) error {
+	if token == stub.token {
+		stub.revoked = true
+	}
+	return nil
+}
+func (stub *browserSessionStub) ListProjects(context.Context, store.Actor) ([]store.Project, error) {
+	return stub.projects, nil
+}
 
 func TestPublicPages(t *testing.T) {
 	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "https://github.example/releases?x=1&y=2", slog.Default())
@@ -169,5 +217,137 @@ func TestBrowserInvitationRouteDoesNotExist(t *testing.T) {
 	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/invite/code", nil))
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("got %d, want 404", w.Code)
+	}
+}
+
+func TestBrowserLoginCreatesASignedShortLivedPKCEState(t *testing.T) {
+	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "", slog.Default())
+	if err := s.SetBrowserLogin(browserLoginStub{}, []byte("01234567890123456789012345678901")); err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/login", nil))
+	if w.Code != http.StatusFound || !strings.Contains(w.Header().Get("Location"), "https://id.example/authorize?state=") {
+		t.Fatalf("unexpected login redirect: %d %q", w.Code, w.Header().Get("Location"))
+	}
+	result := w.Result()
+	if len(result.Cookies()) != 1 {
+		t.Fatalf("login must set one state cookie: %#v", result.Cookies())
+	}
+	cookie := result.Cookies()[0]
+	if cookie.Name != browserStateCookie || !cookie.HttpOnly || !cookie.Secure || cookie.SameSite != http.SameSiteLaxMode || cookie.Path != "/" {
+		t.Fatalf("unsafe login state cookie: %#v", cookie)
+	}
+	request := httptest.NewRequest(http.MethodGet, "/auth/callback", nil)
+	request.AddCookie(cookie)
+	state, verifier, err := s.readLoginState(request)
+	if err != nil || state == "" || verifier == "" || !strings.Contains(w.Header().Get("Location"), "state="+state) {
+		t.Fatalf("state cookie is not valid: state=%q verifier=%q err=%v", state, verifier, err)
+	}
+}
+
+func TestBrowserCallbackRejectsTamperedState(t *testing.T) {
+	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "", slog.Default())
+	if err := s.SetBrowserLogin(browserLoginStub{}, []byte("01234567890123456789012345678901")); err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodGet, "/auth/callback?code=one-time-code&state=altered", nil)
+	request.AddCookie(s.loginStateCookie("expected", "verifier", time.Now().Add(time.Minute)))
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, request)
+	if w.Code != http.StatusBadRequest || strings.Contains(w.Body.String(), "verifier") {
+		t.Fatalf("tampered callback must fail without exposing secrets: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestBrowserCallbackCreatesRestrictedSessionForExistingMember(t *testing.T) {
+	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "", slog.Default())
+	sessions := &browserSessionStub{token: "opaque-session", actor: store.Actor{CredentialID: 8, UserID: 4, Subject: "zitadel-user"}}
+	if err := s.SetBrowserLogin(browserLoginStub{principal: auth.Principal{Subject: "zitadel-user", Email: "user@example.test"}}, []byte("01234567890123456789012345678901")); err != nil {
+		t.Fatal(err)
+	}
+	s.sessions = sessions
+	request := httptest.NewRequest(http.MethodGet, "/auth/callback?code=one-time-code&state=expected", nil)
+	request.AddCookie(s.loginStateCookie("expected", "verifier", time.Now().Add(time.Minute)))
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, request)
+	if w.Code != http.StatusSeeOther || w.Header().Get("Location") != "/portal/api/projects" {
+		t.Fatalf("valid callback did not complete: %d %s", w.Code, w.Body.String())
+	}
+	var found bool
+	for _, cookie := range w.Result().Cookies() {
+		if cookie.Name == browserSessionCookie {
+			found = true
+			if cookie.Value != sessions.token || !cookie.Secure || !cookie.HttpOnly || cookie.SameSite != http.SameSiteLaxMode || cookie.MaxAge != int(browserSessionTTL.Seconds()) {
+				t.Fatalf("session cookie is unsafe: %#v", cookie)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("callback did not set a browser session")
+	}
+}
+
+func TestBrowserCallbackRejectsExpiredState(t *testing.T) {
+	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "", slog.Default())
+	if err := s.SetBrowserLogin(browserLoginStub{}, []byte("01234567890123456789012345678901")); err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodGet, "/auth/callback?code=one-time-code&state=expected", nil)
+	request.AddCookie(s.loginStateCookie("expected", "verifier", time.Now().Add(-time.Minute)))
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, request)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expired callback state accepted: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestBrowserSessionOnlyAuthenticatesPortalRoutes(t *testing.T) {
+	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "", slog.Default())
+	sessions := &browserSessionStub{token: "browser-token", actor: store.Actor{CredentialID: 8, UserID: 4, Subject: "zitadel-user"}, projects: []store.Project{{Key: "ACME", Name: "Acme", Description: "internal"}}}
+	if err := s.SetBrowserLogin(browserLoginStub{}, []byte("01234567890123456789012345678901")); err != nil {
+		t.Fatal(err)
+	}
+	s.sessions = sessions
+	request := httptest.NewRequest(http.MethodGet, "/portal/api/projects", nil)
+	request.AddCookie(&http.Cookie{Name: browserSessionCookie, Value: sessions.token})
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, request)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"key":"ACME"`) || strings.Contains(w.Body.String(), "internal") {
+		t.Fatalf("browser session did not receive public project summary: %d %s", w.Code, w.Body.String())
+	}
+	request = httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
+	request.AddCookie(&http.Cookie{Name: browserSessionCookie, Value: sessions.token})
+	w = httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, request)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("browser cookie must not authenticate internal API: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestBrowserLogoutRevokesAndClearsTheSession(t *testing.T) {
+	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "", slog.Default())
+	sessions := &browserSessionStub{token: "browser-token"}
+	if err := s.SetBrowserLogin(browserLoginStub{}, []byte("01234567890123456789012345678901")); err != nil {
+		t.Fatal(err)
+	}
+	s.sessions = sessions
+	request := httptest.NewRequest(http.MethodPost, "/logout", nil)
+	request.AddCookie(&http.Cookie{Name: browserSessionCookie, Value: sessions.token})
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, request)
+	if w.Code != http.StatusSeeOther || !sessions.revoked {
+		t.Fatalf("logout did not revoke session: %d %#v", w.Code, sessions)
+	}
+	cookies := w.Result().Cookies()
+	if len(cookies) != 1 || cookies[0].Name != browserSessionCookie || cookies[0].MaxAge >= 0 || !cookies[0].HttpOnly || !cookies[0].Secure {
+		t.Fatalf("logout did not clear secure session cookie: %#v", cookies)
+	}
+}
+
+func TestSetBrowserLoginRejectsShortStateKey(t *testing.T) {
+	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "", slog.Default())
+	if err := s.SetBrowserLogin(browserLoginStub{}, []byte("too-short")); err == nil {
+		t.Fatal("short browser-login state key was accepted")
 	}
 }

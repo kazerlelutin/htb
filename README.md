@@ -140,12 +140,26 @@ le [Device Code](https://zitadel.com/docs/guides/integrate/login/oidc/device-aut
 et les [rôles dans les tokens](https://zitadel.com/docs/guides/manage/console/projects-overview)
 complète ces étapes.
 
-Reporter ensuite les trois valeurs relevées dans la configuration CapRover :
+Pour activer le socle de session navigateur, créer aussi une application
+**Web** Zitadel avec **Authorization Code + PKCE**, enregistrer la Redirect URI
+`https://<votre-domaine>/auth/callback`. Le parcours de connexion effectivement
+présenté à l’utilisateur dépend de la configuration Zitadel. Sa page hébergée
+ne fournit pas, à elle seule, un lien magique par email comme premier facteur.
+HTB ne reçoit qu’une identité OIDC dont l’adresse email a été vérifiée ; les
+jetons OAuth restent côté serveur. Une identité doit déjà appartenir à un
+projet HTB pour obtenir une session navigateur. Après connexion, la route
+`/portal/api/projects` renvoie seulement les noms et clés de ces projets ; le
+portail de consultation et de demandes est suivi séparément dans le ticket
+[#25](https://github.com/kazerlelutin/htb/issues/25).
+
+Reporter ensuite les valeurs relevées dans la configuration CapRover :
 
 ```dotenv
 HTBD_ZITADEL_ISSUER=https://<votre-instance-zitadel>
 HTBD_ZITADEL_AUDIENCE=<Project ID de HTB>
 HTBD_ZITADEL_DEVICE_CLIENT_ID=<Client ID de HTB CLI>
+HTBD_ZITADEL_WEB_CLIENT_ID=<Client ID de l’application Web, optionnel>
+HTBD_WEB_SESSION_KEY=<au-moins-32-octets-aleatoires>
 HTBD_PUBLIC_URL=https://htb.ben-to.fr
 HTBD_ENFORCE_PROJECT_LIMITS=false
 ```
@@ -154,7 +168,7 @@ HTBD_ENFORCE_PROJECT_LIMITS=false
 
 ```bash
 cp .env.example .env
-# renseigner PostgreSQL, Zitadel et le Client ID HTB CLI
+# renseigner PostgreSQL, Zitadel et les Client IDs CLI/Web si le portail client est activé
 set -a && source .env && set +a
 go run ./cmd/htbd
 ```
@@ -166,11 +180,14 @@ depuis `https://tickets.example.org/auth/device-config`.
 ## Déploiement CapRover
 
 Le dépôt contient le `Dockerfile` et `captain-definition`. Dans CapRover,
-définir les variables de `.env.example` avec les valeurs de production. Aucune
-URL de redirection publique HTB, secret de session ni client Web Zitadel n'est
-nécessaire. La Redirect URI `htb://oauth/callback` reste un paramètre interne
-requis par l'application native Zitadel ; HTB ne l'expose pas. Ne jamais
-exposer les clés de comptes de service.
+définir les variables de `.env.example` avec les valeurs de production. Le
+portail client est désactivé tant que `HTBD_ZITADEL_WEB_CLIENT_ID` est absent.
+Lorsqu’il est activé, la Redirect URI `https://<votre-domaine>/auth/callback`
+doit être enregistrée dans Zitadel et `HTBD_WEB_SESSION_KEY` doit contenir au
+moins 32 octets aléatoires, distincts des autres secrets. La Redirect URI
+`htb://oauth/callback` reste un paramètre interne requis par l'application
+native Zitadel ; HTB ne l'expose pas. Ne jamais exposer les clés de comptes de
+service.
 
 HTB est stateless : PostgreSQL est la seule donnée persistante. Les sauvegardes
 et tests de restauration doivent donc couvrir la base PostgreSQL.
