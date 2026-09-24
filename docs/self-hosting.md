@@ -17,44 +17,65 @@ server. HTTPS is required for the portal's secure session cookie.
 
 ## 1. Configure Zitadel
 
-Use `https://tickets.example.org` below as an example. Substitute your public
-HTTPS origin everywhere, including the Web Redirect URI and
-`HTBD_PUBLIC_URL`. Do not add a trailing slash to `HTBD_PUBLIC_URL`.
+Replace `tickets.example.org` with your HTTPS domain throughout this guide.
+Set `HTBD_PUBLIC_URL` to that origin, without a trailing slash.
 
-1. **Create the project.** In your Zitadel console, open **Organization →
-   Projects → New**, create `HTB`, and copy its **Project ID** to
-   `HTBD_ZITADEL_AUDIENCE`. Do not use Zitadel's built-in system project.
-   [Project guide](https://zitadel.com/docs/guides/manage/console/projects-overview).
-2. **Create the CLI app.** In that project's **Applications → New**, name it
-   `HTB CLI`, select **Native**, then **Device Code**. If Zitadel requires a
-   **Redirect URI** field, enter `htb://oauth/callback`. HTB does not visit
-   that URI: Device Code completes at Zitadel's device verification page.
-   After creation, copy **Client ID** to `HTBD_ZITADEL_DEVICE_CLIENT_ID`.
-   [Device Code guide](https://zitadel.com/docs/guides/integrate/login/oidc/device-authorization).
-3. **Create the portal app.** In the same project's **Applications → New**,
-   name it `HTB Web`, select **Web**, then **PKCE**. Enter this **Redirect
-   URI** exactly: `https://tickets.example.org/auth/callback`. This is the
-   callback HTB actually serves after sign-in. If Zitadel requires a **Post
-   Logout Redirect URI**, enter `https://tickets.example.org/`; HTB currently
-   signs out locally and does not call Zitadel's logout endpoint. After
-   creation, copy **Client ID** to `HTBD_ZITADEL_WEB_CLIENT_ID`. Do not
-   configure a Client Secret for HTB's PKCE flow.
-   [Web / PKCE guide](https://zitadel.com/docs/guides/integrate/login/oidc/login-users).
-4. **Set CLI tokens and roles.** Open `HTB CLI` → **Token Settings** and
-   choose **JWT** access tokens. If you use the optional global `superadmin`
-   role, create it in the Zitadel project, include roles in access tokens,
-   and assign it sparingly. Project roles (`read`, `write`, `admin`) are
-   managed by HTB. Leave **Check Role
-   Assignment on Authentication** off so an HTB project invitee can sign
-   in without a Zitadel role. [Role settings](https://zitadel.com/docs/guides/manage/console/projects-overview).
-5. **Choose how users join Zitadel.** If people may create their own accounts,
-   enable **Register allowed** in Zitadel's login behavior and configure its
-   verification emails. Otherwise, create or invite them in Zitadel. The HTB
-   portal requires a verified email claim.
-   [Zitadel onboarding](https://zitadel.com/docs/guides/integrate/onboarding/end-users).
+### Project
 
-Zitadel chooses the actual sign-in method: password, passkey, identity
-provider, or MFA. A project invitation code in HTB is **not** a sign-in code.
+1. Open **Organization → Projects → New** in your Zitadel console.
+2. Create a project named `HTB` (not the built-in `ZITADEL` project).
+3. Copy its **Project ID** to `HTBD_ZITADEL_AUDIENCE`.
+
+[Zitadel project guide](https://zitadel.com/docs/guides/manage/console/projects-overview)
+
+### CLI application
+
+1. Open the `HTB` project, then **Applications → New**.
+2. Name the application `HTB CLI` and select **Native**.
+3. Select **Device Code**.
+4. If a **Redirect URI** is required, enter `htb://oauth/callback`.
+5. Create the application.
+6. Copy its **Client ID** to `HTBD_ZITADEL_DEVICE_CLIENT_ID`.
+
+Device Code does not use that Redirect URI; sign-in finishes on Zitadel's
+device verification page. [Zitadel Device Code guide](https://zitadel.com/docs/guides/integrate/login/oidc/device-authorization)
+
+### Web application
+
+1. In the same project, open **Applications → New**.
+2. Name the application `HTB Web` and select **Web**.
+3. Select **PKCE** as the authentication method.
+4. Set **Redirect URI** to `https://tickets.example.org/auth/callback`.
+5. If required, set **Post Logout Redirect URI** to `https://tickets.example.org/`.
+6. Create the application.
+7. Copy its **Client ID** to `HTBD_ZITADEL_WEB_CLIENT_ID`.
+
+The Web Redirect URI must equal `HTBD_PUBLIC_URL` + `/auth/callback` exactly.
+HTB does not use a Client Secret or call Zitadel's logout endpoint.
+[Zitadel Web / PKCE guide](https://zitadel.com/docs/guides/integrate/login/oidc/login-users)
+
+### Tokens and roles
+
+1. Open `HTB CLI` → **Token Settings**.
+2. Select **JWT** access tokens.
+3. Leave **Check Role Assignment on Authentication** disabled for project invitees.
+4. If you need a global admin, create the `superadmin` role in Zitadel.
+5. If you use `superadmin`, include roles in access tokens.
+6. Assign `superadmin` only to global admins.
+
+Project roles (`read`, `write`, `admin`) are managed by HTB.
+[Zitadel role settings](https://zitadel.com/docs/guides/manage/console/projects-overview)
+
+### Users
+
+1. To allow self-registration, enable **Register allowed** in Zitadel's login behavior.
+2. Configure Zitadel's verification emails for new registrations.
+3. Otherwise, invite users from the Zitadel console.
+4. Make sure users verify their email before opening the HTB portal.
+
+[Zitadel onboarding guide](https://zitadel.com/docs/guides/integrate/onboarding/end-users).
+An HTB project invitation code grants project access after sign-in; it is not
+a sign-in code.
 
 ## 2. Configure HTB
 

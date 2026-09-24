@@ -27,51 +27,67 @@ connexion et n’a pas besoin de serveur SMTP.
 
 ## 2. Configurer Zitadel
 
-`https://tickets.example.org` est un exemple : remplacez ce domaine partout,
-y compris dans la Redirect URI Web et `HTBD_PUBLIC_URL`. Ne mettez pas de
-barre oblique finale à `HTBD_PUBLIC_URL`.
+Remplacez `tickets.example.org` par votre domaine HTTPS dans tout ce guide.
+Donnez cette origine à `HTBD_PUBLIC_URL`, sans barre oblique finale.
 
-1. **Créer le projet.** Dans la console Zitadel, ouvrez **Organization →
-   Projects → New**, créez `HTB` et copiez son **Project ID** dans
-   `HTBD_ZITADEL_AUDIENCE`. N’utilisez pas le projet système `ZITADEL`.
-   [Guide des projets](https://zitadel.com/docs/guides/manage/console/projects-overview).
-2. **Créer l’application CLI.** Dans ce projet, ouvrez **Applications → New**,
-   nommez l’application `HTB CLI`, choisissez **Native**, puis **Device Code**.
-   Si Zitadel impose un champ **Redirect URI**, indiquez
-   `htb://oauth/callback`. HTB ne visite pas cette URI : le flux se termine
-   sur la page de validation des appareils de Zitadel. Une fois l’application
-   créée, copiez son **Client ID** dans `HTBD_ZITADEL_DEVICE_CLIENT_ID`.
-   [Guide Device Code](https://zitadel.com/docs/guides/integrate/login/oidc/device-authorization).
-3. **Créer l’application Web.** Toujours dans ce projet, ouvrez
-   **Applications → New**, nommez l’application `HTB Web`, choisissez **Web**,
-   puis **PKCE**. Saisissez exactement cette **Redirect URI** :
-   `https://tickets.example.org/auth/callback`. C’est le callback réellement
-   servi par HTB après connexion. Si Zitadel exige une **Post Logout Redirect
-   URI**, saisissez `https://tickets.example.org/` ; HTB révoque actuellement
-   sa session locale, sans appeler la déconnexion Zitadel. Une fois
-   l’application créée, copiez son **Client ID** dans
-   `HTBD_ZITADEL_WEB_CLIENT_ID`. Aucun Client Secret n’est utilisé par HTB
-   pour ce flux PKCE.
-   [Guide Web / PKCE](https://zitadel.com/docs/guides/integrate/login/oidc/login-users).
-4. **Régler les jetons et les rôles.** Ouvrez `HTB CLI` → **Token Settings**,
-   choisissez des **access tokens JWT**. Si vous utilisez le rôle global
-   `superadmin`, créez-le dans le projet Zitadel, incluez les rôles dans le
-   jeton et ne l’attribuez qu’aux administrateurs globaux. Les rôles `read`,
-   `write` et `admin` des projets HTB restent gérés par HTB. Laissez
-   **Check Role Assignment on Authentication** désactivé : un client invité
-   dans HTB n’a pas besoin d’un rôle Zitadel. [Rôles et jetons Zitadel](https://zitadel.com/docs/guides/manage/console/projects-overview).
-5. **Choisir l’accueil des utilisateurs.** S’ils doivent créer eux-mêmes leur
-   compte, activez **Register allowed** dans le comportement de connexion et
-   configurez les e-mails de vérification. Sinon, créez ou invitez-les dans
-   Zitadel. Le portail HTB exige un e-mail vérifié dans l’ID token.
-   [Accueil des utilisateurs Zitadel](https://zitadel.com/docs/guides/integrate/onboarding/end-users).
+### Projet
 
-Le mécanisme présenté à l’utilisateur (mot de passe, passkey, fournisseur
-externe, MFA) dépend de Zitadel. Le login hébergé peut proposer des
-[passkeys](https://zitadel.com/docs/guides/integrate/login/hosted-login) ;
-ne supposez pas qu’un code reçu par e-mail soit un premier facteur de
-connexion. Le **code d’invitation HTB** sert uniquement à rejoindre un projet,
-après la connexion Zitadel.
+1. Dans la console Zitadel, ouvrez **Organization → Projects → New**.
+2. Créez un projet `HTB` (pas le projet système `ZITADEL`).
+3. Copiez son **Project ID** dans `HTBD_ZITADEL_AUDIENCE`.
+
+[Guide des projets Zitadel](https://zitadel.com/docs/guides/manage/console/projects-overview)
+
+### Application CLI
+
+1. Ouvrez le projet `HTB`, puis **Applications → New**.
+2. Nommez l’application `HTB CLI` et choisissez **Native**.
+3. Choisissez **Device Code**.
+4. Si une **Redirect URI** est imposée, saisissez `htb://oauth/callback`.
+5. Créez l’application.
+6. Copiez son **Client ID** dans `HTBD_ZITADEL_DEVICE_CLIENT_ID`.
+
+Le flux Device Code n’utilise pas cette Redirect URI : la connexion se
+termine sur la page de validation des appareils de Zitadel.
+[Guide Device Code](https://zitadel.com/docs/guides/integrate/login/oidc/device-authorization)
+
+### Application Web
+
+1. Dans le même projet, ouvrez **Applications → New**.
+2. Nommez l’application `HTB Web` et choisissez **Web**.
+3. Choisissez **PKCE** comme méthode d’authentification.
+4. Saisissez cette **Redirect URI** : `https://tickets.example.org/auth/callback`.
+5. Si nécessaire, saisissez cette **Post Logout Redirect URI** : `https://tickets.example.org/`.
+6. Créez l’application.
+7. Copiez son **Client ID** dans `HTBD_ZITADEL_WEB_CLIENT_ID`.
+
+La Redirect URI Web doit correspondre exactement à `HTBD_PUBLIC_URL` suivi de
+`/auth/callback`. HTB n’utilise pas de Client Secret et n’appelle pas la
+déconnexion Zitadel.
+[Guide Web / PKCE](https://zitadel.com/docs/guides/integrate/login/oidc/login-users)
+
+### Jetons et rôles
+
+1. Ouvrez `HTB CLI` → **Token Settings**.
+2. Choisissez des access tokens **JWT**.
+3. Laissez **Check Role Assignment on Authentication** désactivé pour les personnes invitées.
+4. Si nécessaire, créez le rôle `superadmin` dans le projet Zitadel.
+5. Si vous utilisez `superadmin`, incluez les rôles dans les access tokens.
+6. Attribuez `superadmin` seulement aux administrateurs globaux.
+
+Les rôles de projet (`read`, `write`, `admin`) sont gérés par HTB.
+[Guide des rôles Zitadel](https://zitadel.com/docs/guides/manage/console/projects-overview)
+
+### Utilisateurs
+
+1. Pour permettre l’inscription, activez **Register allowed** dans les réglages de connexion Zitadel.
+2. Configurez les e-mails de vérification Zitadel pour les nouvelles inscriptions.
+3. Sinon, invitez les utilisateurs depuis la console Zitadel.
+4. Vérifiez que leur adresse e-mail est confirmée avant l’accès au portail HTB.
+
+[Guide Zitadel sur l’inscription](https://zitadel.com/docs/guides/integrate/onboarding/end-users).
+Le code d’invitation HTB donne accès à un projet après connexion ; ce n’est pas
+un code de connexion.
 
 ## 3. Renseigner la configuration HTB
 
