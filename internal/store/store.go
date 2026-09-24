@@ -153,6 +153,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 		{"0003_project_ticket_numbers", htb.ProjectTicketNumbersMigration},
 		{"0004_account_project_limits", htb.AccountProjectLimitsMigration},
 		{"0005_web_sessions", htb.WebSessionsMigration},
+		{"0006_client_requests", htb.ClientRequestsMigration},
 	}
 	for _, migration := range migrations {
 		var exists bool
@@ -211,16 +212,10 @@ func (s *Store) ResolveActor(ctx context.Context, subject, name, email string, s
 	return actor, tx.Commit()
 }
 
-// BrowserActor only accepts an existing Zitadel identity that has already
-// been granted membership in at least one project. Browser login never creates
-// an HTB account or grants project access from an email address alone.
-func (s *Store) BrowserActor(ctx context.Context, subject string) (Actor, error) {
-	var actor Actor
-	err := s.DB.QueryRowContext(ctx, `SELECT c.id,c.user_id,c.zitadel_subject FROM credentials c WHERE c.zitadel_subject=$1 AND c.disabled_at IS NULL AND EXISTS (SELECT 1 FROM project_memberships pm WHERE pm.user_id=c.user_id)`, subject).Scan(&actor.CredentialID, &actor.UserID, &actor.Subject)
-	if errors.Is(err, sql.ErrNoRows) {
-		return actor, ErrForbidden
-	}
-	return actor, err
+// BrowserActor records a verified Zitadel identity without granting project
+// access. A project remains inaccessible until an invitation is accepted.
+func (s *Store) BrowserActor(ctx context.Context, subject, name, email string) (Actor, error) {
+	return s.ResolveActor(ctx, subject, name, email, false)
 }
 
 // CreateWebSession returns an opaque token. Only its hash is persisted so a

@@ -27,13 +27,14 @@ func (stub browserLoginStub) Exchange(context.Context, string, string) (auth.Pri
 }
 
 type browserSessionStub struct {
-	actor    store.Actor
-	token    string
-	revoked  bool
-	projects []store.Project
+	actor        store.Actor
+	token        string
+	revoked      bool
+	acceptedCode string
+	projects     []store.Project
 }
 
-func (stub *browserSessionStub) BrowserActor(_ context.Context, subject string) (store.Actor, error) {
+func (stub *browserSessionStub) BrowserActor(_ context.Context, subject, _, _ string) (store.Actor, error) {
 	if subject != stub.actor.Subject {
 		return store.Actor{}, store.ErrForbidden
 	}
@@ -57,6 +58,10 @@ func (stub *browserSessionStub) RevokeWebSession(_ context.Context, token string
 }
 func (stub *browserSessionStub) ListProjects(context.Context, store.Actor) ([]store.Project, error) {
 	return stub.projects, nil
+}
+func (stub *browserSessionStub) AcceptInvitation(_ context.Context, _, _, _, code string) error {
+	stub.acceptedCode = code
+	return nil
 }
 
 func TestPublicPages(t *testing.T) {
