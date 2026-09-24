@@ -93,6 +93,7 @@ type clientRequestStore interface {
 
 type clientStoryStore interface {
 	ListClientStories(context.Context, store.Actor, string) ([]store.ClientStory, error)
+	ListClientStoriesPage(context.Context, store.Actor, string, int, int) (store.ClientStoryPage, error)
 	GetClientStory(context.Context, store.Actor, string) (store.ClientStory, error)
 	SetClientStoryPublished(context.Context, store.Actor, string, bool) error
 	ListInternalStoryComments(context.Context, store.Actor, string) ([]store.Comment, error)

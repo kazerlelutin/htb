@@ -19,10 +19,22 @@ type ClientStory struct {
 	Title        string `json:"title"`
 	Description  string `json:"description"`
 	Status       string `json:"status"`
+	Visibility   string `json:"visibility"`
 	ChildCount   int    `json:"child_count"`
 	DoneChildren int    `json:"done_children"`
 	Published    bool   `json:"published"`
 }
+
+type ClientStoryPage struct {
+	Stories                         []ClientStory
+	Page, Total, StoryDone          int
+	TaskCount, TaskDone, TotalPages int
+}
+
+const (
+	ClientStoryDraft     = "draft"
+	ClientStoryPublished = "published"
+)
 
 type ClientStoryComment struct {
 	ID        int64     `json:"id"`
@@ -31,15 +43,15 @@ type ClientStoryComment struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-const clientStorySelect = `SELECT p.key || '-' || t.number::text,p.key,t.title,t.description,t.status,
+const clientStorySelect = `SELECT p.key || '-' || t.number::text,p.key,t.title,t.description,t.status,t.client_visibility,
 	(SELECT count(*) FROM tickets child WHERE child.parent_ticket_id=t.id AND child.type='technical_task'),
 	(SELECT count(*) FROM tickets child WHERE child.parent_ticket_id=t.id AND child.type='technical_task' AND child.status='done'),
-	t.client_visible_at IS NOT NULL
 	FROM tickets t JOIN projects p ON p.id=t.project_id WHERE t.type='user_story'`
 
 func scanClientStory(row scanner) (ClientStory, error) {
 	var story ClientStory
-	err := row.Scan(&story.Ref, &story.Project, &story.Title, &story.Description, &story.Status, &story.ChildCount, &story.DoneChildren, &story.Published)
+	err := row.Scan(&story.Ref, &story.Project, &story.Title, &story.Description, &story.Status, &story.Visibility, &story.ChildCount, &story.DoneChildren)
+	story.Published = story.Visibility == ClientStoryPublished
 	return story, err
 }
 
@@ -61,7 +73,7 @@ func (s *Store) ListClientStories(ctx context.Context, actor Actor, project stri
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.DB.QueryContext(ctx, clientStorySelect+` AND p.key=$1 AND ($2 OR t.client_visible_at IS NOT NULL) ORDER BY t.number DESC`, strings.ToUpper(project), preview)
+	rows, err := s.DB.QueryContext(ctx, clientStorySelect+` AND p.key=$1 AND ($2 OR t.client_visibility='published') ORDER BY (t.status='done'),t.number DESC`, strings.ToUpper(project), preview)
 	if err != nil {
 		return nil, err
 	}
@@ -77,6 +89,51 @@ func (s *Store) ListClientStories(ctx context.Context, actor Actor, project stri
 	return stories, rows.Err()
 }
 
+// ListClientStoriesPage returns a bounded, authorized page and summary values
+// calculated across every story visible to the current actor.
+func (s *Store) ListClientStoriesPage(ctx context.Context, actor Actor, project string, page, perPage int) (ClientStoryPage, error) {
+	if page < 1 || perPage < 1 || perPage > 100 {
+		return ClientStoryPage{}, fmt.Errorf("invalid client story page")
+	}
+	preview, err := s.canPreviewClientStories(ctx, actor, project)
+	if err != nil {
+		return ClientStoryPage{}, err
+	}
+	project = strings.ToUpper(project)
+	result := ClientStoryPage{Page: page}
+	err = s.DB.QueryRowContext(ctx, `SELECT
+		count(*),
+		count(*) FILTER (WHERE t.status='done'),
+		COALESCE(sum((SELECT count(*) FROM tickets child WHERE child.parent_ticket_id=t.id AND child.type='technical_task')), 0),
+		COALESCE(sum((SELECT count(*) FROM tickets child WHERE child.parent_ticket_id=t.id AND child.type='technical_task' AND child.status='done')), 0)
+		FROM tickets t JOIN projects p ON p.id=t.project_id
+		WHERE t.type='user_story' AND p.key=$1 AND ($2 OR t.client_visibility='published')`, project, preview).Scan(&result.Total, &result.StoryDone, &result.TaskCount, &result.TaskDone)
+	if err != nil {
+		return ClientStoryPage{}, err
+	}
+	result.TotalPages = (result.Total + perPage - 1) / perPage
+	if result.TotalPages == 0 {
+		result.TotalPages = 1
+	}
+	if result.Page > result.TotalPages {
+		result.Page = result.TotalPages
+	}
+	offset := (result.Page - 1) * perPage
+	rows, err := s.DB.QueryContext(ctx, clientStorySelect+` AND p.key=$1 AND ($2 OR t.client_visibility='published') ORDER BY (t.status='done'),t.number DESC LIMIT $3 OFFSET $4`, project, preview, perPage, offset)
+	if err != nil {
+		return ClientStoryPage{}, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		story, err := scanClientStory(rows)
+		if err != nil {
+			return ClientStoryPage{}, err
+		}
+		result.Stories = append(result.Stories, story)
+	}
+	return result, rows.Err()
+}
+
 func (s *Store) GetClientStory(ctx context.Context, actor Actor, ref string) (ClientStory, error) {
 	project, number, err := domain.ParseReference(ref)
 	if err != nil {
@@ -86,7 +143,7 @@ func (s *Store) GetClientStory(ctx context.Context, actor Actor, ref string) (Cl
 	if err != nil {
 		return ClientStory{}, err
 	}
-	story, err := scanClientStory(s.DB.QueryRowContext(ctx, clientStorySelect+` AND p.key=$1 AND t.number=$2 AND ($3 OR t.client_visible_at IS NOT NULL)`, project, number, preview))
+	story, err := scanClientStory(s.DB.QueryRowContext(ctx, clientStorySelect+` AND p.key=$1 AND t.number=$2 AND ($3 OR t.client_visibility='published')`, project, number, preview))
 	if errors.Is(err, sql.ErrNoRows) {
 		return ClientStory{}, ErrNotFound
 	}
@@ -109,9 +166,13 @@ func (s *Store) SetClientStoryPublished(ctx context.Context, actor Actor, ref st
 	}
 	defer tx.Rollback()
 	var ticketID, projectID int64
-	err = tx.QueryRowContext(ctx, `UPDATE tickets t SET client_visible_at=CASE WHEN $3 THEN COALESCE(t.client_visible_at,now()) ELSE NULL END
+	visibility := ClientStoryDraft
+	if published {
+		visibility = ClientStoryPublished
+	}
+	err = tx.QueryRowContext(ctx, `UPDATE tickets t SET client_visibility=$3,client_published_at=CASE WHEN $3='published' THEN COALESCE(t.client_published_at,now()) ELSE NULL END
 		FROM projects p WHERE p.id=t.project_id AND p.key=$1 AND t.number=$2 AND t.type='user_story'
-		RETURNING t.id,p.id`, project, number, published).Scan(&ticketID, &projectID)
+		RETURNING t.id,p.id`, project, number, visibility).Scan(&ticketID, &projectID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -177,7 +238,7 @@ func (s *Store) ListClientStoryComments(ctx context.Context, actor Actor, ref st
 	rows, err := s.DB.QueryContext(ctx, `SELECT c.id,c.body,COALESCE(a.name,''),c.created_at
 		FROM client_story_comments c JOIN tickets t ON t.id=c.ticket_id JOIN projects p ON p.id=t.project_id
 		JOIN credentials a ON a.id=c.author_credential_id
-		WHERE p.key=$1 AND t.number=$2 AND t.type='user_story' AND t.client_visible_at IS NOT NULL
+		WHERE p.key=$1 AND t.number=$2 AND t.type='user_story' AND t.client_visibility='published'
 		ORDER BY c.created_at,c.id`, project, number)
 	if err != nil {
 		return nil, err
@@ -214,7 +275,7 @@ func (s *Store) AddClientStoryComment(ctx context.Context, actor Actor, ref, bod
 	defer tx.Rollback()
 	var ticketID, projectID int64
 	err = tx.QueryRowContext(ctx, `SELECT t.id,p.id FROM tickets t JOIN projects p ON p.id=t.project_id
-		WHERE p.key=$1 AND t.number=$2 AND t.type='user_story' AND t.client_visible_at IS NOT NULL FOR UPDATE OF t`, project, number).Scan(&ticketID, &projectID)
+		WHERE p.key=$1 AND t.number=$2 AND t.type='user_story' AND t.client_visibility='published' FOR UPDATE OF t`, project, number).Scan(&ticketID, &projectID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return comment, ErrNotFound
 	}
