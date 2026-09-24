@@ -251,7 +251,7 @@ func TestPublicStylesAnimateCursorWithReducedMotionFallback(t *testing.T) {
 	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "", slog.Default())
 	w := httptest.NewRecorder()
 	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/assets/public.css", nil))
-	for _, rule := range []string{".wordmark .cursor", "@keyframes cursor-blink", "prefers-reduced-motion: reduce", "animation: none", ".simulator-tabs", ".simulator-panel[hidden]", ".command-guide", ".command-entry", ".command-option", ".copy-command"} {
+	for _, rule := range []string{".wordmark .cursor", "@keyframes cursor-blink", "prefers-reduced-motion: reduce", "animation: none", ".simulator-tabs", ".simulator-panel[hidden]", ".command-guide", ".command-entry", ".command-option", ".copy-command", "--progress: #9ab87a", ".portal progress", "background: var(--progress)"} {
 		if !strings.Contains(w.Body.String(), rule) {
 			t.Fatalf("public styles are missing %q", rule)
 		}

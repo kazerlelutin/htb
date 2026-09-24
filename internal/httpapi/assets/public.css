@@ -6,6 +6,7 @@
 	--text: #eff5ed;
 	--muted: #9ba9a5;
 	--lime: #c8ff6b;
+	--progress: #9ab87a;
 	--coral: #ff896b;
 }
 * {
@@ -463,10 +464,10 @@ main {
 	background: transparent;
 }
 .portal progress::-webkit-progress-value {
-	background: var(--lime);
+	background: var(--progress);
 }
 .portal progress::-moz-progress-bar {
-	background: var(--lime);
+	background: var(--progress);
 }
 .portal label {
 	display: block;
