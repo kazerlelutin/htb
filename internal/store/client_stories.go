@@ -128,6 +128,43 @@ func (s *Store) SetClientStoryPublished(ctx context.Context, actor Actor, ref st
 	return tx.Commit()
 }
 
+// ListInternalStoryComments returns the ticket discussion to project
+// administrators. It is intentionally separate from the client conversation.
+func (s *Store) ListInternalStoryComments(ctx context.Context, actor Actor, ref string) ([]Comment, error) {
+	if err := s.authorizeInternalStoryComments(ctx, actor, ref); err != nil {
+		return nil, err
+	}
+	return s.Comments(ctx, actor, ref)
+}
+
+// AddInternalStoryComment adds a private ticket comment for a project
+// administrator, including when the story is still a draft.
+func (s *Store) AddInternalStoryComment(ctx context.Context, actor Actor, ref, body string) (Comment, error) {
+	if err := s.authorizeInternalStoryComments(ctx, actor, ref); err != nil {
+		return Comment{}, err
+	}
+	return s.AddComment(ctx, actor, ref, body)
+}
+
+func (s *Store) authorizeInternalStoryComments(ctx context.Context, actor Actor, ref string) error {
+	project, number, err := domain.ParseReference(ref)
+	if err != nil {
+		return ErrNotFound
+	}
+	if err := s.authorize(ctx, actor, project, domain.RoleAdmin); err != nil {
+		return err
+	}
+	var exists bool
+	err = s.DB.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM tickets t JOIN projects p ON p.id=t.project_id WHERE p.key=$1 AND t.number=$2 AND t.type='user_story')`, project, number).Scan(&exists)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (s *Store) ListClientStoryComments(ctx context.Context, actor Actor, ref string) ([]ClientStoryComment, error) {
 	story, err := s.GetClientStory(ctx, actor, ref)
 	if err != nil {

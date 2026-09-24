@@ -93,6 +93,8 @@ type clientStoryStore interface {
 	ListClientStories(context.Context, store.Actor, string) ([]store.ClientStory, error)
 	GetClientStory(context.Context, store.Actor, string) (store.ClientStory, error)
 	SetClientStoryPublished(context.Context, store.Actor, string, bool) error
+	ListInternalStoryComments(context.Context, store.Actor, string) ([]store.Comment, error)
+	AddInternalStoryComment(context.Context, store.Actor, string, string) (store.Comment, error)
 	ListClientStoryComments(context.Context, store.Actor, string) ([]store.ClientStoryComment, error)
 	AddClientStoryComment(context.Context, store.Actor, string, string) (store.ClientStoryComment, error)
 }
@@ -139,6 +141,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /portal/api/projects", s.browserAuthenticated(http.HandlerFunc(s.browserProjects)))
 	mux.Handle("GET /portal/projects/{project}", s.browserAuthenticated(http.HandlerFunc(s.portalProject)))
 	mux.Handle("GET /portal/stories/{ref}", s.browserAuthenticated(http.HandlerFunc(s.portalStory)))
+	mux.Handle("POST /portal/stories/{ref}/ticket-comments", s.browserAuthenticated(http.HandlerFunc(s.portalAddInternalStoryComment)))
 	mux.Handle("POST /portal/stories/{ref}/comments", s.browserAuthenticated(http.HandlerFunc(s.portalAddStoryComment)))
 	mux.Handle("POST /portal/projects/{project}/requests", s.browserAuthenticated(http.HandlerFunc(s.portalCreateRequest)))
 	mux.Handle("GET /portal/requests/{id}", s.browserAuthenticated(http.HandlerFunc(s.portalRequest)))

@@ -82,6 +82,10 @@ func TestClientStoryPublicationAndPublicConversation(t *testing.T) {
 	if draft, err := s.GetClientStory(ctx, admin, story.Ref); err != nil || draft.Published {
 		t.Fatalf("administrator draft detail: %+v, %v", draft, err)
 	}
+	internalComments, err := s.ListInternalStoryComments(ctx, admin, story.Ref)
+	if err != nil || len(internalComments) != 1 || internalComments[0].Body != "Note technique privée" {
+		t.Fatalf("administrator draft internal comments: %+v, %v", internalComments, err)
+	}
 	if _, err := s.ListClientStoryComments(ctx, admin, story.Ref); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("draft conversation should remain closed: %v", err)
 	}
@@ -107,6 +111,12 @@ func TestClientStoryPublicationAndPublicConversation(t *testing.T) {
 	comments, err := s.ListClientStoryComments(ctx, client, story.Ref)
 	if err != nil || len(comments) != 0 {
 		t.Fatalf("internal comment leaked: %+v, %v", comments, err)
+	}
+	if _, err := s.ListInternalStoryComments(ctx, client, story.Ref); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("client read internal comments: %v", err)
+	}
+	if _, err := s.AddInternalStoryComment(ctx, client, story.Ref, "Secret"); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("client added internal comment: %v", err)
 	}
 	if _, err = s.AddClientStoryComment(ctx, client, story.Ref, "Question client"); err != nil {
 		t.Fatal(err)
