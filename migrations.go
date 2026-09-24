@@ -22,3 +22,6 @@ var WebSessionsMigration string
 
 //go:embed migrations/0006_client_requests.sql
 var ClientRequestsMigration string
+
+//go:embed migrations/0007_client_stories.sql
+var ClientStoriesMigration string

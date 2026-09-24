@@ -20,6 +20,7 @@ type Server struct {
 	store        *store.Store
 	sessions     browserSessionStore
 	requests     clientRequestStore
+	stories      clientStoryStore
 	verifier     auth.Verifier
 	browserLogin auth.BrowserLogin
 	stateKey     []byte
@@ -53,6 +54,9 @@ var downloadCommands = []commandReference{
 	{"Tickets", "htb ticket update --version N [--title TITLE] [--description TEXT] [--status open|in_progress|review|blocked|done] [--priority low|normal|high|urgent] [--feature KEY] REF", "Update a ticket safely. Use the version shown by 'htb ticket show REF' so concurrent changes are not overwritten."},
 	{"Tickets", "htb ticket comment REF TEXT", "Add a comment to a ticket."},
 	{"Tickets", "htb ticket comments REF", "Read ticket comments with their author and timestamp."},
+	{"Client stories", "htb ticket publish REF | htb ticket unpublish REF", "Make a user story visible to clients or hide it again; project admin only."},
+	{"Client stories", "htb ticket client-comments REF", "Read the public conversation on a published user story."},
+	{"Client stories", "htb ticket client-comment REF TEXT", "Reply to clients without exposing internal ticket comments."},
 	{"Tickets", "htb ticket activity REF", "Read the ticket audit activity."},
 	{"Tickets", "htb ticket claim REF", "Assign a ticket to yourself and move an open ticket to in progress."},
 	{"Tickets", "htb ticket release REF", "Remove your claim from a ticket so another person can take it."},
@@ -85,8 +89,16 @@ type clientRequestStore interface {
 	UpdateClientRequest(context.Context, store.Actor, int64, store.ClientRequestUpdate) (store.ClientRequest, error)
 }
 
+type clientStoryStore interface {
+	ListClientStories(context.Context, store.Actor, string) ([]store.ClientStory, error)
+	GetClientStory(context.Context, store.Actor, string) (store.ClientStory, error)
+	SetClientStoryPublished(context.Context, store.Actor, string, bool) error
+	ListClientStoryComments(context.Context, store.Actor, string) ([]store.ClientStoryComment, error)
+	AddClientStoryComment(context.Context, store.Actor, string, string) (store.ClientStoryComment, error)
+}
+
 func New(s *store.Store, verifier auth.Verifier, deviceConfig auth.DeviceConfig, releaseURL string, log *slog.Logger) *Server {
-	return &Server{store: s, sessions: s, requests: s, verifier: verifier, deviceConfig: deviceConfig, releaseURL: releaseURL, publicURL: "https://htb.ben-to.fr", log: log}
+	return &Server{store: s, sessions: s, requests: s, stories: s, verifier: verifier, deviceConfig: deviceConfig, releaseURL: releaseURL, publicURL: "https://htb.ben-to.fr", log: log}
 }
 
 // SetBrowserLogin enables the web entry point backed by Zitadel.
@@ -126,6 +138,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /portal/invitations", s.browserAuthenticated(http.HandlerFunc(s.portalAcceptInvitation)))
 	mux.Handle("GET /portal/api/projects", s.browserAuthenticated(http.HandlerFunc(s.browserProjects)))
 	mux.Handle("GET /portal/projects/{project}", s.browserAuthenticated(http.HandlerFunc(s.portalProject)))
+	mux.Handle("GET /portal/stories/{ref}", s.browserAuthenticated(http.HandlerFunc(s.portalStory)))
+	mux.Handle("POST /portal/stories/{ref}/comments", s.browserAuthenticated(http.HandlerFunc(s.portalAddStoryComment)))
 	mux.Handle("POST /portal/projects/{project}/requests", s.browserAuthenticated(http.HandlerFunc(s.portalCreateRequest)))
 	mux.Handle("GET /portal/requests/{id}", s.browserAuthenticated(http.HandlerFunc(s.portalRequest)))
 	mux.Handle("POST /portal/requests/{id}/comments", s.browserAuthenticated(http.HandlerFunc(s.portalAddComment)))
@@ -216,6 +230,8 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 		s.updateInternalClientRequest(w, r, strings.TrimPrefix(path, "client-requests/"))
 	case r.Method == "POST" && path == "tickets":
 		s.createTicket(w, r)
+	case strings.HasPrefix(path, "client-stories/"):
+		s.clientStoryAPI(w, r, strings.TrimPrefix(path, "client-stories/"))
 	case strings.HasPrefix(path, "tickets/"):
 		s.ticket(w, r, strings.TrimPrefix(path, "tickets/"))
 	case r.Method == "POST" && path == "invitations":

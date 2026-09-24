@@ -25,6 +25,9 @@ type portalProjectView struct {
 	Name, Key, CSRF, Error, Title, Description string
 	Requests                                   []portalRequestRow
 	Counts                                     map[string]int
+	Stories                                    []portalStoryRow
+	StoryCount, StoryDone, TaskCount, TaskDone int
+	StoryPercent, TaskPercent                  int
 }
 
 type portalCommentView struct {
@@ -34,19 +37,21 @@ type portalCommentView struct {
 }
 
 type portalRequestView struct {
-	ID                          int64
-	Project, Title, StatusLabel string
-	Body                        template.HTML
-	Comments                    []portalCommentView
-	CSRF, Error, DraftComment   string
+	ID                                 int64
+	Project, Title, StatusLabel        string
+	Body                               template.HTML
+	Comments                           []portalCommentView
+	CSRF, Error, DraftComment          string
+	RelatedStoryRef, RelatedStoryTitle string
 }
 
 var portalProjectTemplate = template.Must(template.New("portal-project").Parse(`<!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{.Name}} — HTB</title><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="stylesheet" href="/assets/public.css"></head><body>
 <a class="skip-link" href="#main">Aller au contenu</a><header class="site-header"><a class="wordmark" href="/portal">&gt;_ HTB</a><form action="/logout" method="post"><button class="link-button" type="submit">Se déconnecter</button></form></header>
 <main id="main" class="portal"><p><a href="/portal">← Mes projets</a></p><p class="eyebrow">{{.Key}}</p><h1>{{.Name}}</h1>
-<section aria-labelledby="status-title"><h2 id="status-title">Suivi</h2><p>Reçues : {{index .Counts "received"}} · En cours : {{index .Counts "in_progress"}} · Besoin d’information : {{index .Counts "needs_info"}} · Terminées : {{index .Counts "done"}}</p></section>
-<section aria-labelledby="requests-title"><h2 id="requests-title">Demandes</h2>{{if .Requests}}<ul class="portal-requests">{{range .Requests}}<li><a href="/portal/requests/{{.ID}}"><strong>{{.Title}}</strong><span>{{.StatusLabel}}</span></a></li>{{end}}</ul>{{else}}<p>Aucune demande pour le moment.</p>{{end}}</section>
+<section aria-labelledby="progress-title"><h2 id="progress-title">Avancement du projet</h2>{{if .StoryCount}}<label for="stories-progress">US terminées : {{.StoryDone}} / {{.StoryCount}} ({{.StoryPercent}} %)</label><progress id="stories-progress" value="{{.StoryDone}}" max="{{.StoryCount}}">{{.StoryPercent}} %</progress>{{if .TaskCount}}<label for="tasks-progress">Tâches techniques terminées : {{.TaskDone}} / {{.TaskCount}} ({{.TaskPercent}} %)</label><progress id="tasks-progress" value="{{.TaskDone}}" max="{{.TaskCount}}">{{.TaskPercent}} %</progress>{{else}}<p>Les US visibles n’ont pas encore de tâches techniques liées.</p>{{end}}{{else}}<p>Aucune US publiée pour le moment.</p>{{end}}</section>
+<section aria-labelledby="stories-title"><h2 id="stories-title">User stories</h2>{{if .Stories}}<ul class="portal-requests">{{range .Stories}}<li><a href="/portal/stories/{{.Ref}}"><strong>{{.Title}}</strong><span>{{.Ref}} · {{.StatusLabel}}</span></a>{{if .ChildCount}}<label for="story-{{.Ref}}">Tâches terminées : {{.DoneChildren}} / {{.ChildCount}} ({{.Percent}} %)</label><progress id="story-{{.Ref}}" value="{{.DoneChildren}}" max="{{.ChildCount}}">{{.Percent}} %</progress>{{else}}<span>Aucune tâche technique liée</span>{{end}}</li>{{end}}</ul>{{else}}<p>Aucune US publiée pour ce projet.</p>{{end}}</section>
+<section aria-labelledby="requests-title"><h2 id="requests-title">Demandes proposées</h2><p>Reçues : {{index .Counts "received"}} · En cours : {{index .Counts "in_progress"}} · Besoin d’information : {{index .Counts "needs_info"}} · Terminées : {{index .Counts "done"}}</p>{{if .Requests}}<ul class="portal-requests">{{range .Requests}}<li><a href="/portal/requests/{{.ID}}"><strong>{{.Title}}</strong><span>{{.StatusLabel}}</span></a></li>{{end}}</ul>{{else}}<p>Aucune demande pour le moment.</p>{{end}}</section>
 <section aria-labelledby="new-request-title"><h2 id="new-request-title">Proposer une demande</h2><p>Décrivez votre besoin en quelques mots. Vous pourrez suivre la conversation ici.</p>
 {{if .Error}}<p class="portal-error" role="alert">{{.Error}}</p>{{end}}
 <form class="portal-form" action="/portal/projects/{{.Key}}/requests" method="post"><input type="hidden" name="csrf" value="{{.CSRF}}"><label for="request-title">Sujet</label><input id="request-title" name="title" maxlength="240" required value="{{.Title}}"><label for="request-body">Description (Markdown accepté)</label><textarea id="request-body" name="body" maxlength="20000" rows="7" required>{{.Description}}</textarea><button class="button" type="submit">Envoyer la demande</button></form></section>
@@ -55,7 +60,7 @@ var portalProjectTemplate = template.Must(template.New("portal-project").Parse(`
 var portalRequestTemplate = template.Must(template.New("portal-request").Parse(`<!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{.Title}} — HTB</title><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="stylesheet" href="/assets/public.css"></head><body>
 <a class="skip-link" href="#main">Aller au contenu</a><header class="site-header"><a class="wordmark" href="/portal">&gt;_ HTB</a><form action="/logout" method="post"><button class="link-button" type="submit">Se déconnecter</button></form></header>
-<main id="main" class="portal"><p><a href="/portal/projects/{{.Project}}">← Retour au projet</a></p><p class="eyebrow">DEMANDE #{{.ID}} · {{.StatusLabel}}</p><h1>{{.Title}}</h1><div class="portal-markdown">{{.Body}}</div>
+<main id="main" class="portal"><p><a href="/portal/projects/{{.Project}}">← Retour au projet</a></p><p class="eyebrow">DEMANDE #{{.ID}} · {{.StatusLabel}}</p><h1>{{.Title}}</h1><div class="portal-markdown">{{.Body}}</div>{{if .RelatedStoryRef}}<p>Cette demande est suivie dans l’<a href="/portal/stories/{{.RelatedStoryRef}}">US {{.RelatedStoryRef}} — {{.RelatedStoryTitle}}</a>.</p>{{end}}
 <section aria-labelledby="conversation-title"><h2 id="conversation-title">Conversation</h2>{{if .Comments}}<ol class="portal-comments">{{range .Comments}}<li><strong>{{.Author}}</strong> <time>{{.CreatedAt.Format "02/01/2006 15:04"}}</time><div class="portal-markdown">{{.Body}}</div></li>{{end}}</ol>{{else}}<p>Aucun commentaire pour le moment.</p>{{end}}</section>
 <section aria-labelledby="comment-title"><h2 id="comment-title">Ajouter un commentaire</h2>{{if .Error}}<p class="portal-error" role="alert">{{.Error}}</p>{{end}}<form class="portal-form" action="/portal/requests/{{.ID}}/comments" method="post"><input type="hidden" name="csrf" value="{{.CSRF}}"><label for="comment-body">Votre message (Markdown accepté)</label><textarea id="comment-body" name="body" maxlength="20000" rows="5" required>{{.DraftComment}}</textarea><button class="button" type="submit">Publier le commentaire</button></form></section>
 </main></body></html>`))
@@ -113,6 +118,21 @@ func (s *Server) projectView(r *http.Request, key string) (portalProjectView, er
 	if err != nil {
 		return view, err
 	}
+	stories, err := s.stories.ListClientStories(r.Context(), actor(r), key)
+	if err != nil {
+		return view, err
+	}
+	for _, story := range stories {
+		view.Stories = append(view.Stories, portalStoryRow{ClientStory: story, StatusLabel: storyStatusLabel(story.Status), Percent: progressPercent(story.DoneChildren, story.ChildCount)})
+		view.StoryCount++
+		view.TaskCount += story.ChildCount
+		view.TaskDone += story.DoneChildren
+		if story.Status == string(domain.Done) {
+			view.StoryDone++
+		}
+	}
+	view.StoryPercent = progressPercent(view.StoryDone, view.StoryCount)
+	view.TaskPercent = progressPercent(view.TaskDone, view.TaskCount)
 	for _, item := range items {
 		view.Counts[item.Status]++
 		view.Requests = append(view.Requests, portalRequestRow{ID: item.ID, Title: item.Title, StatusLabel: clientStatusLabel(item.Status), CreatedAt: item.CreatedAt})
@@ -180,6 +200,17 @@ func (s *Server) requestView(r *http.Request, id int64) (portalRequestView, erro
 		return view, err
 	}
 	view.ID, view.Project, view.Title, view.StatusLabel, view.Body = item.ID, item.Project, item.Title, clientStatusLabel(item.Status), renderPortalMarkdown(item.Body)
+	if item.LinkedTicketRef != nil {
+		story, storyErr := s.stories.GetClientStory(r.Context(), actor(r), *item.LinkedTicketRef)
+		switch {
+		case storyErr == nil:
+			view.RelatedStoryRef, view.RelatedStoryTitle = story.Ref, story.Title
+		case errors.Is(storyErr, store.ErrNotFound):
+			// A technical or unpublished ticket remains private.
+		default:
+			return view, storyErr
+		}
+	}
 	for _, comment := range comments {
 		view.Comments = append(view.Comments, portalCommentView{Author: comment.Author, Body: renderPortalMarkdown(comment.Body), CreatedAt: comment.CreatedAt})
 	}
@@ -237,7 +268,7 @@ func (s *Server) portalAddComment(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) portalReadError(w http.ResponseWriter, err error) {
 	if errors.Is(err, store.ErrForbidden) || errors.Is(err, store.ErrNotFound) {
-		http.Error(w, "Demande ou projet introuvable.", http.StatusNotFound)
+		http.Error(w, "Contenu ou projet introuvable.", http.StatusNotFound)
 		return
 	}
 	s.log.Error("client portal", "error", err)
