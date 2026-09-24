@@ -17,7 +17,7 @@ type portalHomeView struct {
 
 var portalTemplate = template.Must(template.New("portal").Parse(`<!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Mes projets — HTB</title><link rel="stylesheet" href="/assets/public.css"></head><body>
+<title>Mes projets — HTB</title><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="stylesheet" href="/assets/public.css"></head><body>
 <a class="skip-link" href="#main">Aller au contenu</a>
 <header class="site-header"><a class="wordmark" href="/" aria-label="Accueil HTB">&gt;_ HTB</a><form action="/logout" method="post"><button class="link-button" type="submit">Se déconnecter</button></form></header>
 <main id="main" class="portal"><p class="eyebrow">ESPACE CLIENT</p><h1>Mes projets</h1>

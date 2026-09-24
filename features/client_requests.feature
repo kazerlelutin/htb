@@ -1,4 +1,9 @@
 Feature: Espace client de demandes
+  Scenario: Le portail conserve l’identité visuelle du site
+    Given une personne est connectée au portail client
+    When elle consulte ses projets, un projet ou une demande
+    Then son navigateur charge le favicon HTB au format SVG
+
   Scenario: Une nouvelle personne rejoint un projet sans CLI
     Given une personne possède une identité Zitadel avec email vérifié
     And un administrateur lui a transmis un code d’invitation au projet SITE

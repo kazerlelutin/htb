@@ -85,6 +85,9 @@ func TestClientPortalUsesProjectMembershipAndEscapesMarkdown(t *testing.T) {
 		if w.Code != http.StatusOK {
 			t.Fatalf("%s: %d %s", path, w.Code, w.Body.String())
 		}
+		if !strings.Contains(w.Body.String(), `<link rel="icon" type="image/svg+xml" href="/favicon.svg">`) {
+			t.Fatalf("%s: portal page does not reference the favicon", path)
+		}
 		if !strings.Contains(w.Header().Get("Cache-Control"), "no-store") {
 			t.Fatalf("%s: response may be cached", path)
 		}
