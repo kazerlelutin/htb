@@ -22,6 +22,12 @@ Feature: Client browser authentication
     When a visitor opens the public HTB site
     Then the client portal entry point is not displayed
 
+  Scenario: The public site names both browser access options
+    Given HTB is configured with a Zitadel web application using PKCE
+    When a visitor opens the public HTB site
+    Then the login link reads "Se connecter / S’inscrire" in French
+    And the same link reads "Sign in / Sign up" in English
+
   Scenario: A self-hosted portal returns to its own HTTPS domain
     Given HTBD_PUBLIC_URL is "https://tickets.example.org"
     And the ZITADEL Web application allows "https://tickets.example.org/auth/callback"

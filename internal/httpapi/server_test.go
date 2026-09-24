@@ -298,10 +298,17 @@ func TestClientEntryPointAppearsOnlyWhenBrowserLoginIsConfigured(t *testing.T) {
 	if err := s.SetBrowserLogin(browserLoginStub{}, []byte("01234567890123456789012345678901")); err != nil {
 		t.Fatal(err)
 	}
-	w = httptest.NewRecorder()
-	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/", nil))
-	if !strings.Contains(w.Body.String(), `href="/login">Espace client`) {
-		t.Fatal("configured browser login has no visible entry point")
+	for _, test := range []struct {
+		path, label string
+	}{
+		{"/?lang=fr", "Se connecter / S’inscrire"},
+		{"/?lang=en", "Sign in / Sign up"},
+	} {
+		w = httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, test.path, nil))
+		if !strings.Contains(w.Body.String(), `href="/login">`+test.label+`</a>`) {
+			t.Fatalf("configured browser login entry point missing for %s", test.path)
+		}
 	}
 }
 
