@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -17,7 +18,11 @@ import (
 
 type Server struct {
 	store        *store.Store
+	sessions     browserSessionStore
+	requests     clientRequestStore
 	verifier     auth.Verifier
+	browserLogin auth.BrowserLogin
+	stateKey     []byte
 	deviceConfig auth.DeviceConfig
 	releaseURL   string
 	publicURL    string
@@ -62,8 +67,37 @@ var downloadCommands = []commandReference{
 type actorKey struct{}
 type principalKey struct{}
 
+type browserSessionStore interface {
+	BrowserActor(context.Context, string, string, string) (store.Actor, error)
+	CreateWebSession(context.Context, store.Actor, time.Duration) (string, error)
+	WebSessionActor(context.Context, string) (store.Actor, error)
+	RevokeWebSession(context.Context, string) error
+	ListProjects(context.Context, store.Actor) ([]store.Project, error)
+	AcceptInvitation(context.Context, string, string, string, string) error
+}
+
+type clientRequestStore interface {
+	CreateClientRequest(context.Context, store.Actor, string, string, string) (store.ClientRequest, error)
+	ListClientRequests(context.Context, store.Actor, string) ([]store.ClientRequest, error)
+	GetClientRequest(context.Context, store.Actor, int64) (store.ClientRequest, error)
+	ListClientRequestComments(context.Context, store.Actor, int64) ([]store.ClientRequestComment, error)
+	AddClientRequestComment(context.Context, store.Actor, int64, string) (store.ClientRequestComment, error)
+	UpdateClientRequest(context.Context, store.Actor, int64, store.ClientRequestUpdate) (store.ClientRequest, error)
+}
+
 func New(s *store.Store, verifier auth.Verifier, deviceConfig auth.DeviceConfig, releaseURL string, log *slog.Logger) *Server {
-	return &Server{store: s, verifier: verifier, deviceConfig: deviceConfig, releaseURL: releaseURL, publicURL: "https://htb.ben-to.fr", log: log}
+	return &Server{store: s, sessions: s, requests: s, verifier: verifier, deviceConfig: deviceConfig, releaseURL: releaseURL, publicURL: "https://htb.ben-to.fr", log: log}
+}
+
+// SetBrowserLogin enables the web entry point backed by Zitadel.
+// The key signs the transient PKCE state cookie; it must be at least 32 bytes.
+func (s *Server) SetBrowserLogin(login auth.BrowserLogin, stateKey []byte) error {
+	if login == nil || len(stateKey) < 32 {
+		return fmt.Errorf("browser login requires an authenticator and a state key of at least 32 bytes")
+	}
+	s.browserLogin = login
+	s.stateKey = append([]byte(nil), stateKey...)
+	return nil
 }
 
 // SetPublicURL configures canonical URLs displayed on public pages.
@@ -85,6 +119,16 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /assets/public.css", s.publicStyles)
 	mux.HandleFunc("GET /assets/public.js", s.publicScript)
 	mux.HandleFunc("GET /favicon.svg", s.favicon)
+	mux.HandleFunc("GET /login", s.login)
+	mux.HandleFunc("GET /auth/callback", s.browserCallback)
+	mux.HandleFunc("POST /logout", s.logout)
+	mux.Handle("GET /portal", s.browserAuthenticated(http.HandlerFunc(s.portalProjects)))
+	mux.Handle("POST /portal/invitations", s.browserAuthenticated(http.HandlerFunc(s.portalAcceptInvitation)))
+	mux.Handle("GET /portal/api/projects", s.browserAuthenticated(http.HandlerFunc(s.browserProjects)))
+	mux.Handle("GET /portal/projects/{project}", s.browserAuthenticated(http.HandlerFunc(s.portalProject)))
+	mux.Handle("POST /portal/projects/{project}/requests", s.browserAuthenticated(http.HandlerFunc(s.portalCreateRequest)))
+	mux.Handle("GET /portal/requests/{id}", s.browserAuthenticated(http.HandlerFunc(s.portalRequest)))
+	mux.Handle("POST /portal/requests/{id}/comments", s.browserAuthenticated(http.HandlerFunc(s.portalAddComment)))
 	mux.HandleFunc("GET /auth/device-config", s.deviceConfiguration)
 	mux.Handle("/api/v1/", s.authenticated(http.HandlerFunc(s.api)))
 	return s.logging(mux)
@@ -121,23 +165,23 @@ func (s *Server) commands(w http.ResponseWriter, r *http.Request) {
 func (s *Server) authenticated(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		raw, err := auth.Bearer(r)
-		if err != nil {
-			writeError(w, 401, "unauthenticated", "Authentication is required", nil)
+		if err == nil {
+			p, verifyErr := s.verifier.Verify(r.Context(), raw)
+			if verifyErr != nil {
+				s.log.Warn("Zitadel token verification failed", "error", verifyErr)
+				writeError(w, 401, "invalid_token", "Token is invalid or expired", nil)
+				return
+			}
+			ctx := context.WithValue(r.Context(), principalKey{}, p)
+			actor, resolveErr := s.store.ResolveActor(ctx, p.Subject, p.Name, p.Email, p.Superadmin)
+			if resolveErr != nil {
+				writeStoreError(w, resolveErr)
+				return
+			}
+			next.ServeHTTP(w, r.WithContext(context.WithValue(ctx, actorKey{}, actor)))
 			return
 		}
-		p, err := s.verifier.Verify(r.Context(), raw)
-		if err != nil {
-			s.log.Warn("Zitadel token verification failed", "error", err)
-			writeError(w, 401, "invalid_token", "Token is invalid or expired", nil)
-			return
-		}
-		ctx := context.WithValue(r.Context(), principalKey{}, p)
-		actor, err := s.store.ResolveActor(ctx, p.Subject, p.Name, p.Email, p.Superadmin)
-		if err != nil {
-			writeStoreError(w, err)
-			return
-		}
-		next.ServeHTTP(w, r.WithContext(context.WithValue(ctx, actorKey{}, actor)))
+		writeError(w, 401, "unauthenticated", "Authentication is required", nil)
 	})
 }
 func actor(r *http.Request) store.Actor { return r.Context().Value(actorKey{}).(store.Actor) }
@@ -162,6 +206,14 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 		s.projectAdministration(w, r, strings.TrimPrefix(path, "projects/"))
 	case r.Method == "GET" && path == "tickets":
 		s.listTickets(w, r)
+	case r.Method == "GET" && path == "client-requests":
+		s.listInternalClientRequests(w, r)
+	case r.Method == "GET" && strings.HasPrefix(path, "client-requests/"):
+		s.getInternalClientRequest(w, r, strings.TrimPrefix(path, "client-requests/"))
+	case r.Method == "POST" && strings.HasPrefix(path, "client-requests/"):
+		s.commentInternalClientRequest(w, r, strings.TrimPrefix(path, "client-requests/"))
+	case r.Method == "PATCH" && strings.HasPrefix(path, "client-requests/"):
+		s.updateInternalClientRequest(w, r, strings.TrimPrefix(path, "client-requests/"))
 	case r.Method == "POST" && path == "tickets":
 		s.createTicket(w, r)
 	case strings.HasPrefix(path, "tickets/"):

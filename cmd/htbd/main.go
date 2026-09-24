@@ -46,8 +46,20 @@ func main() {
 		os.Exit(1)
 	}
 	deviceConfig := auth.DeviceConfig{Issuer: issuer, ClientID: os.Getenv("HTBD_ZITADEL_DEVICE_CLIENT_ID"), Audience: audience}
+	publicURL := valueOr("HTBD_PUBLIC_URL", "https://htb.ben-to.fr")
 	server := httpapi.New(store, verifier, deviceConfig, os.Getenv("HTBD_RELEASE_URL"), logger)
-	server.SetPublicURL(valueOr("HTBD_PUBLIC_URL", "https://htb.ben-to.fr"))
+	server.SetPublicURL(publicURL)
+	if clientID := os.Getenv("HTBD_ZITADEL_WEB_CLIENT_ID"); clientID != "" {
+		browser, err := auth.NewBrowserAuthenticator(ctx, issuer, clientID, publicURL+"/auth/callback")
+		if err != nil {
+			logger.Error("initialize Zitadel browser login", "error", err)
+			os.Exit(1)
+		}
+		if err = server.SetBrowserLogin(browser, []byte(os.Getenv("HTBD_WEB_SESSION_KEY"))); err != nil {
+			logger.Error("configure browser login", "error", err)
+			os.Exit(2)
+		}
+	}
 	httpServer := &http.Server{Addr: valueOr("HTBD_LISTEN_ADDR", ":8080"), Handler: server.Handler(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second}
 	go func() {
 		logger.Info("server started", "address", httpServer.Addr, "version", version)

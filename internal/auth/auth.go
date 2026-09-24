@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"golang.org/x/oauth2"
 )
 
 type Principal struct {
@@ -23,6 +24,13 @@ type DeviceConfig struct {
 }
 type Verifier interface {
 	Verify(context.Context, string) (Principal, error)
+}
+
+// BrowserLogin runs an OIDC Authorization Code with PKCE login for the web
+// portal. Zitadel owns the end-user login experience.
+type BrowserLogin interface {
+	AuthorizationURL(state, codeVerifier string) string
+	Exchange(ctx context.Context, code, codeVerifier string) (Principal, error)
 }
 
 // ZitadelVerifier validates signed access tokens against the issuer JWKS.
@@ -72,6 +80,72 @@ func (v *ZitadelVerifier) Verify(ctx context.Context, raw string) (Principal, er
 	}
 	p.Superadmin = hasRole(all[v.superadminClaim], v.superadminRole)
 	return p, nil
+}
+
+// BrowserAuthenticator exchanges a one-time authorization code for an ID
+// token. It deliberately returns only identity claims: HTB never places an
+// OAuth token in a browser cookie.
+type BrowserAuthenticator struct {
+	config   oauth2.Config
+	verifier *oidc.IDTokenVerifier
+}
+
+func NewBrowserAuthenticator(ctx context.Context, issuer, clientID, redirectURL string) (*BrowserAuthenticator, error) {
+	if issuer == "" || clientID == "" || redirectURL == "" {
+		return nil, fmt.Errorf("Zitadel issuer, web client ID, and redirect URL are required")
+	}
+	provider, err := oidc.NewProvider(ctx, issuer)
+	if err != nil {
+		return nil, fmt.Errorf("discover Zitadel web client: %w", err)
+	}
+	return &BrowserAuthenticator{
+		config: oauth2.Config{
+			ClientID:    clientID,
+			Endpoint:    provider.Endpoint(),
+			RedirectURL: redirectURL,
+			Scopes:      []string{oidc.ScopeOpenID, "profile", "email"},
+		},
+		verifier: provider.Verifier(&oidc.Config{ClientID: clientID}),
+	}, nil
+}
+
+func (a *BrowserAuthenticator) AuthorizationURL(state, codeVerifier string) string {
+	return a.config.AuthCodeURL(state,
+		oauth2.SetAuthURLParam("code_challenge", pkceChallenge(codeVerifier)),
+		oauth2.SetAuthURLParam("code_challenge_method", "S256"),
+	)
+}
+
+func (a *BrowserAuthenticator) Exchange(ctx context.Context, code, codeVerifier string) (Principal, error) {
+	token, err := a.config.Exchange(ctx, code, oauth2.SetAuthURLParam("code_verifier", codeVerifier))
+	if err != nil {
+		return Principal{}, fmt.Errorf("exchange authorization code: %w", err)
+	}
+	rawIDToken, ok := token.Extra("id_token").(string)
+	if !ok || rawIDToken == "" {
+		return Principal{}, fmt.Errorf("authorization response does not contain an ID token")
+	}
+	idToken, err := a.verifier.Verify(ctx, rawIDToken)
+	if err != nil {
+		return Principal{}, fmt.Errorf("verify ID token: %w", err)
+	}
+	var claims struct {
+		Subject   string `json:"sub"`
+		Name      string `json:"name"`
+		Preferred string `json:"preferred_username"`
+		Email     string `json:"email"`
+		Verified  bool   `json:"email_verified"`
+	}
+	if err = idToken.Claims(&claims); err != nil {
+		return Principal{}, err
+	}
+	if claims.Subject == "" || claims.Email == "" || !claims.Verified {
+		return Principal{}, fmt.Errorf("ID token must contain a subject and verified email")
+	}
+	if claims.Name == "" {
+		claims.Name = claims.Preferred
+	}
+	return Principal{Subject: claims.Subject, Name: claims.Name, Email: claims.Email}, nil
 }
 
 // hasRole accepts Zitadel's standard nested claim shape, while retaining
