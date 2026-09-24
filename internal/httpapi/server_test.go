@@ -246,6 +246,23 @@ func TestBrowserLoginCreatesASignedShortLivedPKCEState(t *testing.T) {
 	}
 }
 
+func TestClientEntryPointAppearsOnlyWhenBrowserLoginIsConfigured(t *testing.T) {
+	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "", slog.Default())
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/", nil))
+	if strings.Contains(w.Body.String(), `href="/login"`) {
+		t.Fatal("client entry point is visible without browser login")
+	}
+	if err := s.SetBrowserLogin(browserLoginStub{}, []byte("01234567890123456789012345678901")); err != nil {
+		t.Fatal(err)
+	}
+	w = httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/", nil))
+	if !strings.Contains(w.Body.String(), `href="/login">Espace client`) {
+		t.Fatal("configured browser login has no visible entry point")
+	}
+}
+
 func TestBrowserCallbackRejectsTamperedState(t *testing.T) {
 	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "", slog.Default())
 	if err := s.SetBrowserLogin(browserLoginStub{}, []byte("01234567890123456789012345678901")); err != nil {
@@ -271,7 +288,7 @@ func TestBrowserCallbackCreatesRestrictedSessionForExistingMember(t *testing.T) 
 	request.AddCookie(s.loginStateCookie("expected", "verifier", time.Now().Add(time.Minute)))
 	w := httptest.NewRecorder()
 	s.Handler().ServeHTTP(w, request)
-	if w.Code != http.StatusSeeOther || w.Header().Get("Location") != "/portal/api/projects" {
+	if w.Code != http.StatusSeeOther || w.Header().Get("Location") != "/portal" {
 		t.Fatalf("valid callback did not complete: %d %s", w.Code, w.Body.String())
 	}
 	var found bool
@@ -322,6 +339,25 @@ func TestBrowserSessionOnlyAuthenticatesPortalRoutes(t *testing.T) {
 	s.Handler().ServeHTTP(w, request)
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("browser cookie must not authenticate internal API: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestPortalDisplaysAuthorizedProjectsAndEscapesTheirNames(t *testing.T) {
+	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "", slog.Default())
+	sessions := &browserSessionStub{token: "browser-token", actor: store.Actor{CredentialID: 8, UserID: 4, Subject: "zitadel-user"}, projects: []store.Project{{Key: "ACME", Name: "<script>alert(1)</script>"}}}
+	if err := s.SetBrowserLogin(browserLoginStub{}, []byte("01234567890123456789012345678901")); err != nil {
+		t.Fatal(err)
+	}
+	s.sessions = sessions
+	request := httptest.NewRequest(http.MethodGet, "/portal", nil)
+	request.AddCookie(&http.Cookie{Name: browserSessionCookie, Value: sessions.token})
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, request)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "&lt;script&gt;alert(1)&lt;/script&gt;") || strings.Contains(w.Body.String(), "<script>alert(1)</script>") {
+		t.Fatalf("portal did not escape project name: %d %s", w.Code, w.Body.String())
+	}
+	if w.Header().Get("Cache-Control") != "private, no-store" {
+		t.Fatalf("portal response is cacheable: %s", w.Header().Get("Cache-Control"))
 	}
 }
 

@@ -111,6 +111,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /login", s.login)
 	mux.HandleFunc("GET /auth/callback", s.browserCallback)
 	mux.HandleFunc("POST /logout", s.logout)
+	mux.Handle("GET /portal", s.browserAuthenticated(http.HandlerFunc(s.portalProjects)))
 	mux.Handle("GET /portal/api/projects", s.browserAuthenticated(http.HandlerFunc(s.browserProjects)))
 	mux.HandleFunc("GET /auth/device-config", s.deviceConfiguration)
 	mux.Handle("/api/v1/", s.authenticated(http.HandlerFunc(s.api)))

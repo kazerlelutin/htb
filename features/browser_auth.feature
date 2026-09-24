@@ -13,6 +13,6 @@ Feature: Client browser authentication
 
   Scenario: Browser access preserves project authorization
     Given a client has a browser session and membership in one project
-    When they request their projects through the client route
-    Then HTB returns only their authorized project names
+    When they open the client space
+    Then HTB shows only their authorized project names
     And the browser session cannot access the internal API

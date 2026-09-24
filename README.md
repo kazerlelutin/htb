@@ -145,10 +145,13 @@ Pour activer le socle de session navigateur, créer aussi une application
 `https://<votre-domaine>/auth/callback`. Le parcours de connexion effectivement
 présenté à l’utilisateur dépend de la configuration Zitadel. Sa page hébergée
 ne fournit pas, à elle seule, un lien magique par email comme premier facteur.
+Pour une connexion sans mot de passe gérée par Zitadel, activer les
+[passkeys dans son login hébergé](https://zitadel.com/docs/guides/integrate/login-ui/login-app).
 HTB ne reçoit qu’une identité OIDC dont l’adresse email a été vérifiée ; les
 jetons OAuth restent côté serveur. Une identité doit déjà appartenir à un
-projet HTB pour obtenir une session navigateur. Après connexion, la route
-`/portal/api/projects` renvoie seulement les noms et clés de ces projets ; le
+projet HTB pour obtenir une session navigateur. Après connexion, la page
+`/portal` affiche les projets accessibles ; la route
+`/portal/api/projects` renvoie seulement leurs noms et clés. Le
 portail de consultation et de demandes est suivi séparément dans le ticket
 [#25](https://github.com/kazerlelutin/htb/issues/25).
 

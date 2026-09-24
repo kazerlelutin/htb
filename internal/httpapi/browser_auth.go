@@ -24,6 +24,7 @@ const (
 )
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	if s.browserLogin == nil {
 		http.NotFound(w, r)
 		return
@@ -46,6 +47,8 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) browserCallback(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Referrer-Policy", "no-referrer")
 	if s.browserLogin == nil {
 		http.NotFound(w, r)
 		return
@@ -80,7 +83,7 @@ func (s *Server) browserCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.SetCookie(w, &http.Cookie{Name: browserSessionCookie, Value: token, Path: "/", Expires: time.Now().Add(browserSessionTTL), MaxAge: int(browserSessionTTL.Seconds()), Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode})
-	http.Redirect(w, r, "/portal/api/projects", http.StatusSeeOther)
+	http.Redirect(w, r, "/portal", http.StatusSeeOther)
 }
 
 func (s *Server) browserAuthenticated(next http.Handler) http.Handler {
@@ -119,6 +122,7 @@ func (s *Server) browserProjects(w http.ResponseWriter, r *http.Request) {
 	for _, project := range projects {
 		items = append(items, clientProject{Key: project.Key, Name: project.Name})
 	}
+	w.Header().Set("Cache-Control", "private, no-store")
 	writeJSON(w, http.StatusOK, map[string]any{"projects": items})
 }
 
