@@ -148,14 +148,20 @@ Install the [CLI](../README.md#install-the-cli) on your workstation and use
 htb config set-server https://tickets.example.org
 htb auth login
 htb project create --key SITE --name "Website"
+htb ticket create --type user_story --title "Export data"
+htb ticket create --type technical_task --parent SITE-1 --title "Build the export"
+htb ticket publish SITE-1
 htb invite create --project SITE --role read
 ```
 
 Send the invitation code through your usual channel. The client opens
 `https://tickets.example.org/login`, signs in with your Zitadel, and enters
-the code in `/portal`. They can then follow and comment on project requests.
-The team works with internal tickets through the CLI and handles client
-requests with `htb request`.
+the code in `/portal`. They see the published story, its progress from
+completed technical tasks, and its separate client conversation; task details
+are not shown in the portal. A `read` member can still access those details
+with the CLI or API. They can also propose requests. Use `htb request list` and
+`htb request show ID` to read them, then `htb request link ID SITE-1` to
+connect one to the story. Only project admins can publish stories.
 
 ## Operations
 

@@ -157,14 +157,21 @@ domaine, pas celui de l’instance en ligne :
 htb config set-server https://tickets.example.org
 htb auth login
 htb project create --key SITE --name "Site web"
+htb ticket create --type user_story --title "Exporter les données"
+htb ticket create --type technical_task --parent SITE-1 --title "Construire l’export"
+htb ticket publish SITE-1
 htb invite create --project SITE --role read
 ```
 
 Transmettez le code d’invitation au client par votre canal habituel. Celui-ci
 ouvre `https://tickets.example.org/login`, se connecte via votre Zitadel, puis
-saisit le code dans `/portal`. Il peut alors voir les demandes du projet, en
-proposer et commenter. L’équipe continue à gérer les tickets de travail dans
-la CLI ; `htb request` sert à qualifier les demandes client.
+saisit le code dans `/portal`. Il voit l’US publiée, son avancement calculé
+depuis les tâches terminées et sa conversation client ; le détail des tâches
+n’est pas affiché dans le portail. Un membre `read` peut néanmoins le consulter
+avec la CLI ou l’API. Il peut aussi proposer une demande. L’équipe la retrouve
+avec `htb request list` et `htb request show ID`, puis peut la rattacher à
+l’US avec `htb request link ID SITE-1`. Seuls les administrateurs du projet
+peuvent publier une US.
 
 ## Exploitation
 
