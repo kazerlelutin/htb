@@ -88,10 +88,13 @@ func TestClientStoryDashboardShowsSafeProgress(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("project dashboard: %d %s", w.Code, w.Body.String())
 	}
-	for _, want := range []string{"Exporter les données", "2 / 3 (66 %)", `href="/portal/stories/SITE-12"`, `value="2" max="3"`} {
+	for _, want := range []string{"Exporter les données", "2 / 3 (66 %)", "Tâches terminées", `href="/portal/stories/SITE-12"`, `value="2" max="3"`, `<span class="cursor" aria-hidden="true">_</span>`} {
 		if !strings.Contains(w.Body.String(), want) {
 			t.Fatalf("dashboard missing %q", want)
 		}
+	}
+	if strings.Contains(w.Body.String(), `<p class="eyebrow">SITE</p>`) || strings.Contains(w.Body.String(), "Tâches techniques") {
+		t.Fatalf("dashboard contains redundant project key or overly technical task label: %s", w.Body.String())
 	}
 	for _, private := range []string{"Implement CSV endpoint", "priority", "assignee"} {
 		if strings.Contains(w.Body.String(), private) {
@@ -100,7 +103,7 @@ func TestClientStoryDashboardShowsSafeProgress(t *testing.T) {
 	}
 	w = httptest.NewRecorder()
 	s.Handler().ServeHTTP(w, portalRequest(http.MethodGet, "/portal/stories/SITE-12", nil))
-	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "<h2>Besoin</h2>") || strings.Contains(w.Body.String(), "<script>") {
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "<h2>Besoin</h2>") || !strings.Contains(w.Body.String(), "Tâches terminées") || !strings.Contains(w.Body.String(), `<span class="cursor" aria-hidden="true">_</span>`) || strings.Contains(w.Body.String(), "<script>") {
 		t.Fatalf("unsafe story detail: %d %s", w.Code, w.Body.String())
 	}
 	w = httptest.NewRecorder()
@@ -116,7 +119,7 @@ func TestClientStoryWithoutTasksHasNoMisleadingPercentage(t *testing.T) {
 	for _, path := range []string{"/portal/projects/SITE", "/portal/stories/SITE-12"} {
 		w := httptest.NewRecorder()
 		s.Handler().ServeHTTP(w, portalRequest(http.MethodGet, path, nil))
-		if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "Aucune tâche technique liée") && !strings.Contains(w.Body.String(), "pas encore de tâche technique liée") {
+		if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "Aucune tâche liée") && !strings.Contains(w.Body.String(), "pas encore de tâche liée") {
 			t.Fatalf("%s: missing no-task explanation: %d %s", path, w.Code, w.Body.String())
 		}
 		if strings.Contains(w.Body.String(), "Tâches terminées : 0 / 0") || strings.Contains(w.Body.String(), `id="story-progress"`) {
@@ -138,7 +141,7 @@ func TestAdministratorCanAddInternalCommentToDraftStory(t *testing.T) {
 		if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "Brouillon") {
 			t.Fatalf("%s: draft is missing: %d %s", path, w.Code, w.Body.String())
 		}
-		if path == "/portal/stories/SITE-12" && (!strings.Contains(w.Body.String(), "htb ticket publish SITE-12") || !strings.Contains(w.Body.String(), "Ajouter un commentaire interne") || !strings.Contains(w.Body.String(), `action="/portal/stories/SITE-12/ticket-comments"`)) {
+		if path == "/portal/stories/SITE-12" && (!strings.Contains(w.Body.String(), "htb ticket publish SITE-12") || !strings.Contains(w.Body.String(), "Ajouter un commentaire (Markdown accepté)") || strings.Contains(w.Body.String(), "commentaire interne") || !strings.Contains(w.Body.String(), `action="/portal/stories/SITE-12/ticket-comments"`)) {
 			t.Fatalf("draft detail has wrong actions: %s", w.Body.String())
 		}
 	}
