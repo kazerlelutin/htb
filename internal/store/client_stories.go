@@ -21,6 +21,7 @@ type ClientStory struct {
 	Status       string `json:"status"`
 	ChildCount   int    `json:"child_count"`
 	DoneChildren int    `json:"done_children"`
+	Published    bool   `json:"published"`
 }
 
 type ClientStoryComment struct {
@@ -32,20 +33,35 @@ type ClientStoryComment struct {
 
 const clientStorySelect = `SELECT p.key || '-' || t.number::text,p.key,t.title,t.description,t.status,
 	(SELECT count(*) FROM tickets child WHERE child.parent_ticket_id=t.id AND child.type='technical_task'),
-	(SELECT count(*) FROM tickets child WHERE child.parent_ticket_id=t.id AND child.type='technical_task' AND child.status='done')
-	FROM tickets t JOIN projects p ON p.id=t.project_id WHERE t.type='user_story' AND t.client_visible_at IS NOT NULL`
+	(SELECT count(*) FROM tickets child WHERE child.parent_ticket_id=t.id AND child.type='technical_task' AND child.status='done'),
+	t.client_visible_at IS NOT NULL
+	FROM tickets t JOIN projects p ON p.id=t.project_id WHERE t.type='user_story'`
 
 func scanClientStory(row scanner) (ClientStory, error) {
 	var story ClientStory
-	err := row.Scan(&story.Ref, &story.Project, &story.Title, &story.Description, &story.Status, &story.ChildCount, &story.DoneChildren)
+	err := row.Scan(&story.Ref, &story.Project, &story.Title, &story.Description, &story.Status, &story.ChildCount, &story.DoneChildren, &story.Published)
 	return story, err
 }
 
+// Project administrators can preview drafts. Other members only see stories
+// explicitly published to the client portal.
+func (s *Store) canPreviewClientStories(ctx context.Context, actor Actor, project string) (bool, error) {
+	err := s.authorize(ctx, actor, project, domain.RoleAdmin)
+	if err == nil {
+		return true, nil
+	}
+	if !errors.Is(err, ErrForbidden) {
+		return false, err
+	}
+	return false, s.authorize(ctx, actor, project, domain.RoleRead)
+}
+
 func (s *Store) ListClientStories(ctx context.Context, actor Actor, project string) ([]ClientStory, error) {
-	if err := s.authorize(ctx, actor, project, domain.RoleRead); err != nil {
+	preview, err := s.canPreviewClientStories(ctx, actor, project)
+	if err != nil {
 		return nil, err
 	}
-	rows, err := s.DB.QueryContext(ctx, clientStorySelect+` AND p.key=$1 ORDER BY t.number DESC`, strings.ToUpper(project))
+	rows, err := s.DB.QueryContext(ctx, clientStorySelect+` AND p.key=$1 AND ($2 OR t.client_visible_at IS NOT NULL) ORDER BY t.number DESC`, strings.ToUpper(project), preview)
 	if err != nil {
 		return nil, err
 	}
@@ -66,10 +82,11 @@ func (s *Store) GetClientStory(ctx context.Context, actor Actor, ref string) (Cl
 	if err != nil {
 		return ClientStory{}, ErrNotFound
 	}
-	if err := s.authorize(ctx, actor, project, domain.RoleRead); err != nil {
+	preview, err := s.canPreviewClientStories(ctx, actor, project)
+	if err != nil {
 		return ClientStory{}, err
 	}
-	story, err := scanClientStory(s.DB.QueryRowContext(ctx, clientStorySelect+` AND p.key=$1 AND t.number=$2`, project, number))
+	story, err := scanClientStory(s.DB.QueryRowContext(ctx, clientStorySelect+` AND p.key=$1 AND t.number=$2 AND ($3 OR t.client_visible_at IS NOT NULL)`, project, number, preview))
 	if errors.Is(err, sql.ErrNoRows) {
 		return ClientStory{}, ErrNotFound
 	}
@@ -112,8 +129,12 @@ func (s *Store) SetClientStoryPublished(ctx context.Context, actor Actor, ref st
 }
 
 func (s *Store) ListClientStoryComments(ctx context.Context, actor Actor, ref string) ([]ClientStoryComment, error) {
-	if _, err := s.GetClientStory(ctx, actor, ref); err != nil {
+	story, err := s.GetClientStory(ctx, actor, ref)
+	if err != nil {
 		return nil, err
+	}
+	if !story.Published {
+		return nil, ErrNotFound
 	}
 	project, number, _ := domain.ParseReference(ref)
 	rows, err := s.DB.QueryContext(ctx, `SELECT c.id,c.body,COALESCE(a.name,''),c.created_at

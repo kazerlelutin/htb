@@ -32,6 +32,7 @@ type Actor struct {
 	CredentialID int64  `json:"credential_id"`
 	UserID       int64  `json:"user_id"`
 	Subject      string `json:"subject"`
+	Name         string `json:"-"`
 	Superadmin   bool   `json:"superadmin"`
 }
 type Project struct {
@@ -186,7 +187,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 func (s *Store) ResolveActor(ctx context.Context, subject, name, email string, super bool) (Actor, error) {
 	var actor Actor
 	actor.Subject, actor.Superadmin = subject, super
-	err := s.DB.QueryRowContext(ctx, `SELECT c.id,c.user_id FROM credentials c WHERE c.zitadel_subject=$1 AND c.disabled_at IS NULL`, subject).Scan(&actor.CredentialID, &actor.UserID)
+	err := s.DB.QueryRowContext(ctx, `SELECT c.id,c.user_id,c.name FROM credentials c WHERE c.zitadel_subject=$1 AND c.disabled_at IS NULL`, subject).Scan(&actor.CredentialID, &actor.UserID, &actor.Name)
 	if err == nil {
 		return actor, nil
 	}
@@ -210,6 +211,7 @@ func (s *Store) ResolveActor(ctx context.Context, subject, name, email string, s
 	if err != nil {
 		return actor, err
 	}
+	actor.Name = fallback(name, subject)
 	return actor, tx.Commit()
 }
 
@@ -245,7 +247,7 @@ func (s *Store) WebSessionActor(ctx context.Context, token string) (Actor, error
 		return actor, ErrNotFound
 	}
 	hash := sha256.Sum256([]byte(token))
-	err := s.DB.QueryRowContext(ctx, `SELECT c.id,c.user_id,c.zitadel_subject FROM web_sessions s JOIN credentials c ON c.id=s.credential_id WHERE s.token_hash=$1 AND s.revoked_at IS NULL AND s.expires_at>now() AND c.disabled_at IS NULL`, hash[:]).Scan(&actor.CredentialID, &actor.UserID, &actor.Subject)
+	err := s.DB.QueryRowContext(ctx, `SELECT c.id,c.user_id,c.zitadel_subject,c.name FROM web_sessions s JOIN credentials c ON c.id=s.credential_id WHERE s.token_hash=$1 AND s.revoked_at IS NULL AND s.expires_at>now() AND c.disabled_at IS NULL`, hash[:]).Scan(&actor.CredentialID, &actor.UserID, &actor.Subject, &actor.Name)
 	if errors.Is(err, sql.ErrNoRows) {
 		return actor, ErrNotFound
 	}

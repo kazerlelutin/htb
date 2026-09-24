@@ -27,6 +27,7 @@ type portalStoryView struct {
 	Description                      template.HTML
 	ChildCount, DoneChildren         int
 	Percent                          int
+	Published                        bool
 	Comments                         []portalStoryCommentView
 	CSRF, Error, DraftComment        string
 }
@@ -34,11 +35,11 @@ type portalStoryView struct {
 var portalStoryTemplate = template.Must(template.New("portal-story").Parse(`<!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{.Title}} — HTB</title><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="stylesheet" href="/assets/public.css"></head><body>
 <a class="skip-link" href="#main">Aller au contenu</a><header class="site-header"><a class="wordmark" href="/portal">&gt;_ HTB</a><form action="/logout" method="post"><button class="link-button" type="submit">Se déconnecter</button></form></header>
-<main id="main" class="portal"><p><a href="/portal/projects/{{.Project}}">← Retour au projet</a></p><p class="eyebrow">USER STORY {{.Ref}} · {{.StatusLabel}}</p><h1>{{.Title}}</h1>
+<main id="main" class="portal"><p><a href="/portal/projects/{{.Project}}">← Retour au projet</a></p><p class="eyebrow">USER STORY {{.Ref}} · {{.StatusLabel}}{{if not .Published}} · Brouillon{{end}}</p><h1>{{.Title}}</h1>{{if not .Published}}<p>Cette US est visible par les administrateurs du projet. Pour la partager avec les clients, publiez-la avec <code>htb ticket publish {{.Ref}}</code>.</p>{{end}}
 <section aria-labelledby="progress-title"><h2 id="progress-title">Avancement</h2>{{if .ChildCount}}<label for="story-progress">Tâches techniques terminées : {{.DoneChildren}} / {{.ChildCount}} ({{.Percent}} %)</label><progress id="story-progress" value="{{.DoneChildren}}" max="{{.ChildCount}}">{{.Percent}} %</progress>{{else}}<p>Cette US n’a pas encore de tâche technique liée.</p>{{end}}</section>
 <section aria-labelledby="description-title"><h2 id="description-title">Description</h2><div class="portal-markdown">{{.Description}}</div></section>
-<section aria-labelledby="conversation-title"><h2 id="conversation-title">Conversation</h2>{{if .Comments}}<ol class="portal-comments">{{range .Comments}}<li><strong>{{.Author}}</strong> <time>{{.CreatedAt.Format "02/01/2006 15:04"}}</time><div class="portal-markdown">{{.Body}}</div></li>{{end}}</ol>{{else}}<p>Aucun commentaire pour le moment.</p>{{end}}</section>
-<section aria-labelledby="comment-title"><h2 id="comment-title">Ajouter un commentaire</h2>{{if .Error}}<p class="portal-error" role="alert">{{.Error}}</p>{{end}}<form class="portal-form" action="/portal/stories/{{.Ref}}/comments" method="post"><input type="hidden" name="csrf" value="{{.CSRF}}"><label for="comment-body">Votre message (Markdown accepté)</label><textarea id="comment-body" name="body" maxlength="20000" rows="5" required>{{.DraftComment}}</textarea><button class="button" type="submit">Publier le commentaire</button></form></section>
+{{if .Published}}<section aria-labelledby="conversation-title"><h2 id="conversation-title">Conversation</h2>{{if .Comments}}<ol class="portal-comments">{{range .Comments}}<li><strong>{{.Author}}</strong> <time>{{.CreatedAt.Format "02/01/2006 15:04"}}</time><div class="portal-markdown">{{.Body}}</div></li>{{end}}</ol>{{else}}<p>Aucun commentaire pour le moment.</p>{{end}}</section>{{end}}
+{{if .Published}}<section aria-labelledby="comment-title"><h2 id="comment-title">Ajouter un commentaire</h2>{{if .Error}}<p class="portal-error" role="alert">{{.Error}}</p>{{end}}<form class="portal-form" action="/portal/stories/{{.Ref}}/comments" method="post"><input type="hidden" name="csrf" value="{{.CSRF}}"><label for="comment-body">Votre message (Markdown accepté)</label><textarea id="comment-body" name="body" maxlength="20000" rows="5" required>{{.DraftComment}}</textarea><button class="button" type="submit">Publier le commentaire</button></form></section>{{end}}
 </main></body></html>`))
 
 func storyStatusLabel(status string) string {
@@ -70,14 +71,17 @@ func (s *Server) storyView(r *http.Request, ref string) (portalStoryView, error)
 	if err != nil {
 		return portalStoryView{}, err
 	}
-	comments, err := s.stories.ListClientStoryComments(r.Context(), actor(r), ref)
-	if err != nil {
-		return portalStoryView{}, err
+	var comments []store.ClientStoryComment
+	if story.Published {
+		comments, err = s.stories.ListClientStoryComments(r.Context(), actor(r), ref)
+		if err != nil {
+			return portalStoryView{}, err
+		}
 	}
 	view := portalStoryView{
 		Ref: story.Ref, Project: story.Project, Title: story.Title,
 		StatusLabel: storyStatusLabel(story.Status), Description: renderPortalMarkdown(story.Description),
-		ChildCount: story.ChildCount, DoneChildren: story.DoneChildren, Percent: progressPercent(story.DoneChildren, story.ChildCount), CSRF: s.portalCSRF(r),
+		ChildCount: story.ChildCount, DoneChildren: story.DoneChildren, Percent: progressPercent(story.DoneChildren, story.ChildCount), Published: story.Published, CSRF: s.portalCSRF(r),
 	}
 	for _, comment := range comments {
 		view.Comments = append(view.Comments, portalStoryCommentView{Author: comment.Author, Body: renderPortalMarkdown(comment.Body), CreatedAt: comment.CreatedAt})

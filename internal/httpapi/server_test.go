@@ -326,6 +326,10 @@ func TestClientEntryPointAppearsOnlyWhenBrowserLoginIsConfigured(t *testing.T) {
 		if !strings.Contains(w.Body.String(), `href="/login">`+test.label+`</a>`) {
 			t.Fatalf("configured browser login entry point missing for %s", test.path)
 		}
+		header := strings.SplitN(strings.SplitN(w.Body.String(), "<header", 2)[1], "</header>", 2)[0]
+		if account, languages := strings.Index(header, `class="account-nav"`), strings.Index(header, `class="languages"`); account < 0 || languages <= account || !strings.Contains(header[account:languages], `href="/login"`) {
+			t.Fatalf("sign-in control is not beside languages for %s: %s", test.path, header)
+		}
 	}
 }
 
@@ -405,6 +409,66 @@ func TestBrowserSessionOnlyAuthenticatesPortalRoutes(t *testing.T) {
 	s.Handler().ServeHTTP(w, request)
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("browser cookie must not authenticate internal API: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestPublicHeaderShowsSignedInNameAndSignOut(t *testing.T) {
+	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "", slog.Default())
+	sessions := &browserSessionStub{token: "valid", actor: store.Actor{Subject: "zitadel-user", Name: "Éloïse <Admin>"}}
+	if err := s.SetBrowserLogin(browserLoginStub{}, []byte(strings.Repeat("x", 32))); err != nil {
+		t.Fatal(err)
+	}
+	s.sessions = sessions
+	for _, test := range []struct{ path, signOut string }{{"/?lang=fr", "Se déconnecter"}, {"/?lang=en", "Sign out"}} {
+		r := httptest.NewRequest(http.MethodGet, test.path, nil)
+		r.AddCookie(&http.Cookie{Name: browserSessionCookie, Value: "valid"})
+		w := httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, r)
+		body := w.Body.String()
+		header := strings.SplitN(strings.SplitN(body, "<header", 2)[1], "</header>", 2)[0]
+		if w.Code != http.StatusOK || !strings.Contains(header, "Éloïse &lt;Admin&gt;") || !strings.Contains(header, `class="account-avatar" aria-hidden="true">É</span>`) || !strings.Contains(header, test.signOut) || !strings.Contains(header, `class="header-actions"`) || strings.Contains(header, `href="/login"`) {
+			t.Fatalf("signed-in header for %s: %d %s", test.path, w.Code, body)
+		}
+		if account, languages := strings.Index(header, `class="account-nav"`), strings.Index(header, `class="languages"`); account < 0 || languages <= account || !strings.Contains(header[account:languages], `href="/portal"`) {
+			t.Fatalf("account controls are not beside languages: %s", header)
+		}
+		if w.Header().Get("Cache-Control") != "private, no-store" {
+			t.Fatalf("personalized public page may be cached: %s", w.Header().Get("Cache-Control"))
+		}
+	}
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.AddCookie(&http.Cookie{Name: browserSessionCookie, Value: "expired"})
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, r)
+	if !strings.Contains(w.Body.String(), `href="/login"`) || strings.Contains(w.Body.String(), "Éloïse") {
+		t.Fatal("expired session was displayed as signed in")
+	}
+}
+
+func TestPublicHeaderUsesDashboardLabelInsteadOfTechnicalIdentifier(t *testing.T) {
+	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "", slog.Default())
+	sessions := &browserSessionStub{token: "valid", actor: store.Actor{Subject: "328477252230043650", Name: "328477252230043650"}}
+	if err := s.SetBrowserLogin(browserLoginStub{}, []byte(strings.Repeat("x", 32))); err != nil {
+		t.Fatal(err)
+	}
+	s.sessions = sessions
+	for _, test := range []struct{ path, label string }{{"/?lang=fr", "Mon tableau de bord"}, {"/?lang=en", "My dashboard"}} {
+		r := httptest.NewRequest(http.MethodGet, test.path, nil)
+		r.AddCookie(&http.Cookie{Name: browserSessionCookie, Value: "valid"})
+		w := httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, r)
+		header := strings.SplitN(strings.SplitN(w.Body.String(), "<header", 2)[1], "</header>", 2)[0]
+		if w.Code != http.StatusOK || !strings.Contains(header, `href="/portal">`+test.label+`</a>`) || strings.Contains(header, sessions.actor.Subject) || strings.Contains(header, "account-avatar") || !strings.Contains(header, `action="/logout"`) {
+			t.Fatalf("technical identifier shown for %s: %d %s", test.path, w.Code, header)
+		}
+	}
+	sessions.actor.Name = ""
+	r := httptest.NewRequest(http.MethodGet, "/?lang=fr", nil)
+	r.AddCookie(&http.Cookie{Name: browserSessionCookie, Value: "valid"})
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, r)
+	if !strings.Contains(w.Body.String(), `href="/portal">Mon tableau de bord</a>`) {
+		t.Fatal("missing name did not use dashboard label")
 	}
 }
 

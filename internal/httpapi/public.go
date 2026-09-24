@@ -22,6 +22,8 @@ type publicPage struct {
 	Language, Title, Description, Canonical, FrenchURL, EnglishURL string
 	Body                                                           template.HTML
 	BrowserLogin                                                   bool
+	SignedIn                                                       bool
+	AccountName, AccountInitial                                    string
 }
 
 var publicLayout = template.Must(template.New("public").Parse(`<!doctype html>
@@ -29,7 +31,11 @@ var publicLayout = template.Must(template.New("public").Parse(`<!doctype html>
 <meta name="description" content="{{.Description}}"><link rel="canonical" href="{{.Canonical}}"><meta name="theme-color" content="#101414">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="stylesheet" href="/assets/public.css"><title>{{.Title}}</title></head><body>
 <a class="skip-link" href="#main">{{if eq .Language "fr"}}Aller au contenu{{else}}Skip to content{{end}}</a>
-<header class="site-header"><a class="wordmark" href="/?lang={{.Language}}" aria-label="HTB home"><span aria-hidden="true">&gt;</span><span class="cursor" aria-hidden="true">_</span> HTB</a><nav aria-label="{{if eq .Language "fr"}}Navigation principale{{else}}Main navigation{{end}}"><a href="/?lang={{.Language}}#deployment">{{if eq .Language "fr"}}Choisir HTB{{else}}Choose HTB{{end}}</a><a href="/commands?lang={{.Language}}">{{if eq .Language "fr"}}Commandes{{else}}Commands{{end}}</a><a href="/downloads?lang={{.Language}}">{{if eq .Language "fr"}}Télécharger{{else}}Download{{end}}</a><a href="/cgu?lang={{.Language}}">{{if eq .Language "fr"}}CGU{{else}}Terms{{end}}</a>{{if .BrowserLogin}}<a href="/login">{{if eq .Language "fr"}}Se connecter / S’inscrire{{else}}Sign in / Sign up{{end}}</a>{{end}}</nav><nav class="languages" aria-label="Language"><a href="{{.FrenchURL}}" lang="fr" hreflang="fr">FR</a><span aria-hidden="true">/</span><a href="{{.EnglishURL}}" lang="en" hreflang="en">EN</a></nav></header>
+<header class="site-header public-header">
+<a class="wordmark" href="/?lang={{.Language}}" aria-label="HTB home"><span aria-hidden="true">&gt;</span><span class="cursor" aria-hidden="true">_</span> HTB</a>
+<nav class="primary-nav" aria-label="{{if eq .Language "fr"}}Navigation principale{{else}}Main navigation{{end}}"><a href="/?lang={{.Language}}#deployment">{{if eq .Language "fr"}}Choisir HTB{{else}}Choose HTB{{end}}</a><a href="/commands?lang={{.Language}}">{{if eq .Language "fr"}}Commandes{{else}}Commands{{end}}</a><a href="/downloads?lang={{.Language}}">{{if eq .Language "fr"}}Télécharger{{else}}Download{{end}}</a><a href="/cgu?lang={{.Language}}">{{if eq .Language "fr"}}CGU{{else}}Terms{{end}}</a></nav>
+<div class="header-actions">{{if .BrowserLogin}}<nav class="account-nav" aria-label="{{if eq .Language "fr"}}Compte{{else}}Account{{end}}">{{if .SignedIn}}<a class="account-link" href="/portal">{{if .AccountName}}<span class="account-avatar" aria-hidden="true">{{.AccountInitial}}</span><span class="account-name">{{.AccountName}}</span>{{else}}{{if eq .Language "fr"}}Mon tableau de bord{{else}}My dashboard{{end}}{{end}}</a><form action="/logout" method="post"><button class="link-button" type="submit">{{if eq .Language "fr"}}Se déconnecter{{else}}Sign out{{end}}</button></form>{{else}}<a href="/login">{{if eq .Language "fr"}}Se connecter / S’inscrire{{else}}Sign in / Sign up{{end}}</a>{{end}}</nav>{{end}}<nav class="languages" aria-label="Language"><a href="{{.FrenchURL}}" lang="fr" hreflang="fr">FR</a><span aria-hidden="true">/</span><a href="{{.EnglishURL}}" lang="en" hreflang="en">EN</a></nav></div>
+</header>
 <main id="main">{{.Body}}</main>
 <footer class="site-footer"><span>HTB — Headless Ticket Board</span><nav aria-label="{{if eq .Language "fr"}}Informations légales{{else}}Legal information{{end}}"><a href="/mentions-legales?lang={{.Language}}">{{if eq .Language "fr"}}Mentions légales{{else}}Legal notice{{end}}</a><a href="/privacy?lang={{.Language}}">{{if eq .Language "fr"}}Confidentialité{{else}}Privacy{{end}}</a><button class="link-button" type="button" data-open-consent>{{if eq .Language "fr"}}Préférences de mesure{{else}}Analytics preferences{{end}}</button></nav></footer>
 <section class="consent" id="consent" aria-label="{{if eq .Language "fr"}}Préférences de mesure{{else}}Analytics preferences{{end}}" role="dialog" aria-modal="false" hidden><div><h2>{{if eq .Language "fr"}}Votre vie privée{{else}}Your privacy{{end}}</h2><p>{{if eq .Language "fr"}}Avec votre accord, HTB utilise une mesure d’audience hébergée par Ben-to pour améliorer le site. Vous pouvez refuser sans conséquence.{{else}}With your permission, HTB uses Ben-to-hosted analytics to improve this site. You can refuse without any consequence.{{end}}</p><p><a href="/privacy?lang={{.Language}}">{{if eq .Language "fr"}}En savoir plus{{else}}Learn more{{end}}</a></p></div><div class="consent-actions"><button class="button secondary" type="button" data-consent="rejected">{{if eq .Language "fr"}}Refuser{{else}}Reject{{end}}</button><button class="button" type="button" data-consent="accepted">{{if eq .Language "fr"}}Accepter{{else}}Accept{{end}}</button></div></section>
@@ -54,8 +60,23 @@ func localized(language, french, english string) string {
 func (s *Server) renderPublicPage(w http.ResponseWriter, r *http.Request, title, description string, body template.HTML) {
 	language := publicLanguage(r)
 	s.publicHeaders(w)
+	if s.browserLogin != nil {
+		w.Header().Set("Cache-Control", "private, no-store")
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	page := publicPage{Language: language, Title: title, Description: description, Canonical: s.publicURL + r.URL.Path, FrenchURL: languageURL(r, "fr"), EnglishURL: languageURL(r, "en"), Body: body, BrowserLogin: s.browserLogin != nil}
+	if cookie, err := r.Cookie(browserSessionCookie); err == nil && s.browserLogin != nil {
+		if account, err := s.sessions.WebSessionActor(r.Context(), cookie.Value); err == nil {
+			page.SignedIn = true
+			page.AccountName = strings.TrimSpace(account.Name)
+			if page.AccountName == strings.TrimSpace(account.Subject) {
+				page.AccountName = ""
+			}
+			if page.AccountName != "" {
+				page.AccountInitial = strings.ToUpper(string([]rune(page.AccountName)[0]))
+			}
+		}
+	}
 	if err := publicLayout.Execute(w, page); err != nil {
 		s.log.Error("render public page", "error", err)
 	}
