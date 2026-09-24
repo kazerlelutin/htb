@@ -28,6 +28,27 @@ Feature: Client browser authentication
     Then the login link reads "Se connecter / S’inscrire" in French
     And the same link reads "Sign in / Sign up" in English
 
+  Scenario: A signed-in visitor sees their account on the public site
+    Given a visitor has a valid browser session with a name
+    When they open the public HTB site
+    Then the header shows their name and an avatar initial linked to the portal
+    And the header offers a sign-out action
+    And an expired session shows the sign-in link instead
+
+  Scenario: A signed-in visitor has no display name
+    Given a visitor has a valid browser session whose stored name is their technical identifier
+    When they open the public HTB site in French
+    Then the header links to the portal as "Mon tableau de bord"
+    And their technical identifier is not displayed
+    And the header offers a sign-out action
+
+  Scenario: Account controls stay beside the language selector
+    Given HTB is configured with browser login
+    When a visitor opens the public HTB site on desktop or mobile
+    Then the sign-in link appears beside the language selector on the right
+    And after sign-in the account and sign-out controls take the same place
+    And the main navigation remains accessible without horizontal overflow
+
   Scenario: A self-hosted portal returns to its own HTTPS domain
     Given HTBD_PUBLIC_URL is "https://tickets.example.org"
     And the ZITADEL Web application allows "https://tickets.example.org/auth/callback"

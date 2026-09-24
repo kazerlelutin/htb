@@ -62,7 +62,7 @@ func (stub *clientStoryStub) AddClientStoryComment(ctx context.Context, actor st
 
 func TestClientStoryDashboardShowsSafeProgress(t *testing.T) {
 	s, _, _ := portalTestServer()
-	s.stories = &clientStoryStub{stories: []store.ClientStory{{Ref: "SITE-12", Project: "SITE", Title: "Exporter les données", Description: "# Besoin\n<script>secret()</script>", Status: "in_progress", ChildCount: 3, DoneChildren: 2}}}
+	s.stories = &clientStoryStub{stories: []store.ClientStory{{Ref: "SITE-12", Project: "SITE", Title: "Exporter les données", Description: "# Besoin\n<script>secret()</script>", Status: "in_progress", ChildCount: 3, DoneChildren: 2, Published: true}}}
 	w := httptest.NewRecorder()
 	s.Handler().ServeHTTP(w, portalRequest(http.MethodGet, "/portal/projects/SITE", nil))
 	if w.Code != http.StatusOK {
@@ -92,7 +92,7 @@ func TestClientStoryDashboardShowsSafeProgress(t *testing.T) {
 
 func TestClientStoryWithoutTasksHasNoMisleadingPercentage(t *testing.T) {
 	s, _, _ := portalTestServer()
-	s.stories = &clientStoryStub{stories: []store.ClientStory{{Ref: "SITE-12", Project: "SITE", Title: "New story", Status: "open"}}}
+	s.stories = &clientStoryStub{stories: []store.ClientStory{{Ref: "SITE-12", Project: "SITE", Title: "New story", Status: "open", Published: true}}}
 	for _, path := range []string{"/portal/projects/SITE", "/portal/stories/SITE-12"} {
 		w := httptest.NewRecorder()
 		s.Handler().ServeHTTP(w, portalRequest(http.MethodGet, path, nil))
@@ -108,9 +108,24 @@ func TestClientStoryWithoutTasksHasNoMisleadingPercentage(t *testing.T) {
 	}
 }
 
+func TestAdministratorSeesDraftStoryWithoutClientCommentForm(t *testing.T) {
+	s, _, _ := portalTestServer()
+	s.stories = &clientStoryStub{stories: []store.ClientStory{{Ref: "SITE-12", Project: "SITE", Title: "Projet privé", Status: "open"}}}
+	for _, path := range []string{"/portal/projects/SITE", "/portal/stories/SITE-12"} {
+		w := httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, portalRequest(http.MethodGet, path, nil))
+		if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "Brouillon") {
+			t.Fatalf("%s: draft is missing: %d %s", path, w.Code, w.Body.String())
+		}
+		if path == "/portal/stories/SITE-12" && (!strings.Contains(w.Body.String(), "htb ticket publish SITE-12") || strings.Contains(w.Body.String(), "Ajouter un commentaire")) {
+			t.Fatalf("draft detail has wrong actions: %s", w.Body.String())
+		}
+	}
+}
+
 func TestClientStoryCommentUsesPublicConversationAndCSRF(t *testing.T) {
 	s, _, _ := portalTestServer()
-	stories := &clientStoryStub{stories: []store.ClientStory{{Ref: "SITE-12", Project: "SITE", Title: "Exporter les données"}}}
+	stories := &clientStoryStub{stories: []store.ClientStory{{Ref: "SITE-12", Project: "SITE", Title: "Exporter les données", Published: true}}}
 	s.stories = stories
 	w := httptest.NewRecorder()
 	s.Handler().ServeHTTP(w, portalRequest(http.MethodPost, "/portal/stories/SITE-12/comments", url.Values{"body": {"Question"}}))

@@ -75,6 +75,16 @@ func TestClientStoryPublicationAndPublicConversation(t *testing.T) {
 	if err != nil || len(items) != 0 {
 		t.Fatalf("unpublished story visible: %+v, %v", items, err)
 	}
+	adminItems, err := s.ListClientStories(ctx, admin, "SITE")
+	if err != nil || len(adminItems) != 1 || adminItems[0].Ref != story.Ref || adminItems[0].Published {
+		t.Fatalf("administrator cannot preview draft: %+v, %v", adminItems, err)
+	}
+	if draft, err := s.GetClientStory(ctx, admin, story.Ref); err != nil || draft.Published {
+		t.Fatalf("administrator draft detail: %+v, %v", draft, err)
+	}
+	if _, err := s.ListClientStoryComments(ctx, admin, story.Ref); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("draft conversation should remain closed: %v", err)
+	}
 	if _, err = s.GetClientStory(ctx, client, story.Ref); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("unpublished detail: %v", err)
 	}
@@ -88,7 +98,7 @@ func TestClientStoryPublicationAndPublicConversation(t *testing.T) {
 		t.Fatal(err)
 	}
 	items, err = s.ListClientStories(ctx, client, "SITE")
-	if err != nil || len(items) != 1 || items[0].Ref != story.Ref || items[0].ChildCount != 1 || items[0].DoneChildren != 0 {
+	if err != nil || len(items) != 1 || items[0].Ref != story.Ref || items[0].ChildCount != 1 || items[0].DoneChildren != 0 || !items[0].Published {
 		t.Fatalf("published story projection: %+v, %v", items, err)
 	}
 	if items[0].Title == technical.Title || items[0].Description == "Note technique privée" {
@@ -121,6 +131,9 @@ func TestClientStoryPublicationAndPublicConversation(t *testing.T) {
 	}
 	if _, err = s.GetClientStory(ctx, client, story.Ref); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("unpublished detail remained visible: %v", err)
+	}
+	if draft, err := s.GetClientStory(ctx, admin, story.Ref); err != nil || draft.Published {
+		t.Fatalf("administrator lost unpublished story: %+v, %v", draft, err)
 	}
 	if _, err = s.AddClientStoryComment(ctx, client, story.Ref, "Hidden"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("comment on hidden story: %v", err)
