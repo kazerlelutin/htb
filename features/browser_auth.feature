@@ -16,3 +16,8 @@ Feature: Client browser authentication
     When they open the client space
     Then HTB shows only their authorized project names
     And the browser session cannot access the internal API
+
+  Scenario: An unconfigured Web client does not expose browser login
+    Given the ZITADEL Web client ID is left empty in the example configuration
+    When a visitor opens the public HTB site
+    Then the client portal entry point is not displayed

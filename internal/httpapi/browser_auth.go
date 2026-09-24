@@ -23,6 +23,8 @@ const (
 	browserSessionTTL    = 30 * 24 * time.Hour
 )
 
+type browserSessionTokenKey struct{}
+
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	if s.browserLogin == nil {
@@ -66,7 +68,7 @@ func (s *Server) browserCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unable to complete sign in. Please try again.", http.StatusUnauthorized)
 		return
 	}
-	actor, err := s.sessions.BrowserActor(r.Context(), principal.Subject)
+	actor, err := s.sessions.BrowserActor(r.Context(), principal.Subject, principal.Name, principal.Email)
 	if err != nil {
 		if errors.Is(err, store.ErrForbidden) {
 			http.Error(w, "This account does not have access to a project.", http.StatusForbidden)
@@ -103,6 +105,7 @@ func (s *Server) browserAuthenticated(next http.Handler) http.Handler {
 			return
 		}
 		ctx := context.WithValue(r.Context(), actorKey{}, actor)
+		ctx = context.WithValue(ctx, browserSessionTokenKey{}, cookie.Value)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

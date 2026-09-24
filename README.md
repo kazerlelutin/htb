@@ -95,6 +95,7 @@ htb ticket update --help
 | Collaborer | `htb ticket comment SITE-2 "Texte"`, `htb ticket claim SITE-2`, `htb ticket release SITE-2` |
 | Historique | `htb ticket versions SITE-2`, `htb ticket restore --version 3 SITE-2 1` |
 | Invitations | `htb invite create --role write`, `htb invite list`, `htb invite revoke ID`, `htb invite accept CODE` |
+| Demandes client | `htb request list`, `htb request show 7`, `htb request comments 7`, `htb request comment 7 "Réponse"`, `htb request status 7 in_progress`, `htb request link 7 SITE-12` |
 
 La sortie est conçue pour le terminal. Pour automatiser une liste, utiliser
 `htb ticket list --json` ou `htb ticket list --csv`.
@@ -148,12 +149,30 @@ ne fournit pas, à elle seule, un lien magique par email comme premier facteur.
 Pour une connexion sans mot de passe gérée par Zitadel, activer les
 [passkeys dans son login hébergé](https://zitadel.com/docs/guides/integrate/login-ui/login-app).
 HTB ne reçoit qu’une identité OIDC dont l’adresse email a été vérifiée ; les
-jetons OAuth restent côté serveur. Une identité doit déjà appartenir à un
-projet HTB pour obtenir une session navigateur. Après connexion, la page
-`/portal` affiche les projets accessibles ; la route
-`/portal/api/projects` renvoie seulement leurs noms et clés. Le
-portail de consultation et de demandes est suivi séparément dans le ticket
-[#25](https://github.com/kazerlelutin/htb/issues/25).
+jetons OAuth restent côté serveur. Après connexion, la page `/portal` affiche
+les projets accessibles. Une nouvelle identité peut y saisir un code
+d’invitation sans installer la CLI ; la connexion et la vérification de son
+email restent entièrement chez Zitadel. La route `/portal/api/projects`
+renvoie seulement les noms et clés de ses projets.
+
+## Espace client léger
+
+Une personne invitée ouvre `/login`, se connecte via Zitadel, puis saisit dans
+`/portal` le code d’invitation transmis par l’administrateur du projet. Dans
+chaque projet, elle voit les demandes et leur état simplifié : reçue, en
+cours, besoin d’information ou terminée. Elle peut proposer une demande et
+commenter la conversation. Les descriptions et commentaires acceptent un
+Markdown limité, affiché sans HTML actif. Le portail ne montre ni priorité,
+ni responsable, ni estimation ou état interne des tickets de travail.
+
+Une proposition reste une *demande client* distincte. L’équipe la traite via
+`htb request list`, `htb request show`, `htb request comment` et `htb request
+status` ; elle peut créer un ticket de travail normal, puis relier la demande
+avec `htb request link ID TICKET-REF`. Le ticket lié n’est pas affiché dans le
+portail. Un membre du projet ayant le rôle `read` peut consulter, proposer et
+commenter ; le rôle `write` est nécessaire pour changer l’état ou lier un
+ticket. L’accès est revérifié à chaque requête. Les formulaires du portail
+sont protégés par un jeton anti-CSRF associé à la session navigateur.
 
 Reporter ensuite les valeurs relevées dans la configuration CapRover :
 
@@ -184,10 +203,11 @@ depuis `https://tickets.example.org/auth/device-config`.
 
 Le dépôt contient le `Dockerfile` et `captain-definition`. Dans CapRover,
 définir les variables de `.env.example` avec les valeurs de production. Le
-portail client est désactivé tant que `HTBD_ZITADEL_WEB_CLIENT_ID` est absent.
+portail client est désactivé tant que `HTBD_ZITADEL_WEB_CLIENT_ID` est vide.
 Lorsqu’il est activé, la Redirect URI `https://<votre-domaine>/auth/callback`
 doit être enregistrée dans Zitadel et `HTBD_WEB_SESSION_KEY` doit contenir au
-moins 32 octets aléatoires, distincts des autres secrets. La Redirect URI
+moins 32 octets aléatoires, distincts des autres secrets (par exemple avec
+`openssl rand -hex 32`). La Redirect URI
 `htb://oauth/callback` reste un paramètre interne requis par l'application
 native Zitadel ; HTB ne l'expose pas. Ne jamais exposer les clés de comptes de
 service.

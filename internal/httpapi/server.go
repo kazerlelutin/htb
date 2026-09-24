@@ -19,6 +19,7 @@ import (
 type Server struct {
 	store        *store.Store
 	sessions     browserSessionStore
+	requests     clientRequestStore
 	verifier     auth.Verifier
 	browserLogin auth.BrowserLogin
 	stateKey     []byte
@@ -67,15 +68,25 @@ type actorKey struct{}
 type principalKey struct{}
 
 type browserSessionStore interface {
-	BrowserActor(context.Context, string) (store.Actor, error)
+	BrowserActor(context.Context, string, string, string) (store.Actor, error)
 	CreateWebSession(context.Context, store.Actor, time.Duration) (string, error)
 	WebSessionActor(context.Context, string) (store.Actor, error)
 	RevokeWebSession(context.Context, string) error
 	ListProjects(context.Context, store.Actor) ([]store.Project, error)
+	AcceptInvitation(context.Context, string, string, string, string) error
+}
+
+type clientRequestStore interface {
+	CreateClientRequest(context.Context, store.Actor, string, string, string) (store.ClientRequest, error)
+	ListClientRequests(context.Context, store.Actor, string) ([]store.ClientRequest, error)
+	GetClientRequest(context.Context, store.Actor, int64) (store.ClientRequest, error)
+	ListClientRequestComments(context.Context, store.Actor, int64) ([]store.ClientRequestComment, error)
+	AddClientRequestComment(context.Context, store.Actor, int64, string) (store.ClientRequestComment, error)
+	UpdateClientRequest(context.Context, store.Actor, int64, store.ClientRequestUpdate) (store.ClientRequest, error)
 }
 
 func New(s *store.Store, verifier auth.Verifier, deviceConfig auth.DeviceConfig, releaseURL string, log *slog.Logger) *Server {
-	return &Server{store: s, sessions: s, verifier: verifier, deviceConfig: deviceConfig, releaseURL: releaseURL, publicURL: "https://htb.ben-to.fr", log: log}
+	return &Server{store: s, sessions: s, requests: s, verifier: verifier, deviceConfig: deviceConfig, releaseURL: releaseURL, publicURL: "https://htb.ben-to.fr", log: log}
 }
 
 // SetBrowserLogin enables the web entry point backed by Zitadel.
@@ -112,7 +123,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /auth/callback", s.browserCallback)
 	mux.HandleFunc("POST /logout", s.logout)
 	mux.Handle("GET /portal", s.browserAuthenticated(http.HandlerFunc(s.portalProjects)))
+	mux.Handle("POST /portal/invitations", s.browserAuthenticated(http.HandlerFunc(s.portalAcceptInvitation)))
 	mux.Handle("GET /portal/api/projects", s.browserAuthenticated(http.HandlerFunc(s.browserProjects)))
+	mux.Handle("GET /portal/projects/{project}", s.browserAuthenticated(http.HandlerFunc(s.portalProject)))
+	mux.Handle("POST /portal/projects/{project}/requests", s.browserAuthenticated(http.HandlerFunc(s.portalCreateRequest)))
+	mux.Handle("GET /portal/requests/{id}", s.browserAuthenticated(http.HandlerFunc(s.portalRequest)))
+	mux.Handle("POST /portal/requests/{id}/comments", s.browserAuthenticated(http.HandlerFunc(s.portalAddComment)))
 	mux.HandleFunc("GET /auth/device-config", s.deviceConfiguration)
 	mux.Handle("/api/v1/", s.authenticated(http.HandlerFunc(s.api)))
 	return s.logging(mux)
@@ -190,6 +206,14 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 		s.projectAdministration(w, r, strings.TrimPrefix(path, "projects/"))
 	case r.Method == "GET" && path == "tickets":
 		s.listTickets(w, r)
+	case r.Method == "GET" && path == "client-requests":
+		s.listInternalClientRequests(w, r)
+	case r.Method == "GET" && strings.HasPrefix(path, "client-requests/"):
+		s.getInternalClientRequest(w, r, strings.TrimPrefix(path, "client-requests/"))
+	case r.Method == "POST" && strings.HasPrefix(path, "client-requests/"):
+		s.commentInternalClientRequest(w, r, strings.TrimPrefix(path, "client-requests/"))
+	case r.Method == "PATCH" && strings.HasPrefix(path, "client-requests/"):
+		s.updateInternalClientRequest(w, r, strings.TrimPrefix(path, "client-requests/"))
 	case r.Method == "POST" && path == "tickets":
 		s.createTicket(w, r)
 	case strings.HasPrefix(path, "tickets/"):
