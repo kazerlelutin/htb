@@ -218,6 +218,23 @@ func TestHomePageDoesNotNameAuthenticationProvider(t *testing.T) {
 	}
 }
 
+func TestHomePageExplainsPublishedStoriesAndTechnicalProgress(t *testing.T) {
+	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "", slog.Default())
+	for _, test := range []struct {
+		path string
+		copy string
+	}{
+		{"/", "Les clients voient les US publiées, leur avancement et la conversation, sans le découpage technique."},
+		{"/?lang=en", "Clients see published stories, their progress, and the conversation—not the technical breakdown."},
+	} {
+		w := httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, test.path, nil))
+		if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), test.copy) || !strings.Contains(w.Body.String(), "htb ticket publish SITE-1") {
+			t.Fatalf("%s: missing story publication message: %d", test.path, w.Code)
+		}
+	}
+}
+
 func TestPublicAssetsDescribeConsentWithoutPreloadingAnalytics(t *testing.T) {
 	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "", slog.Default())
 	w := httptest.NewRecorder()
