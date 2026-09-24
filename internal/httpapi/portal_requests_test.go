@@ -60,6 +60,7 @@ func portalTestServer() (*Server, *clientRequestStub, *browserSessionStub) {
 	sessions := &browserSessionStub{actor: store.Actor{Subject: "zitadel-user", CredentialID: 1}, token: "valid", projects: []store.Project{{Key: "SITE", Name: "Site client"}}}
 	requests := &clientRequestStub{items: []store.ClientRequest{{ID: 7, Project: "SITE", Title: "Une demande", Body: "# Sujet\n<script>alert(1)</script>\n[lien](javascript:alert(1))", Status: "received"}}}
 	s.sessions, s.requests = sessions, requests
+	s.stories = &clientStoryStub{}
 	_ = s.SetBrowserLogin(browserLoginStub{}, []byte(strings.Repeat("x", 32)))
 	return s, requests, sessions
 }
@@ -133,5 +134,25 @@ func TestPortalMarkdownRejectsUnsafeLinks(t *testing.T) {
 	got := string(renderPortalMarkdown("<img src=x onerror=alert(1)>\n[bad](javascript:alert(1))\n[good](https://example.org/a?x=1&y=2)\n**bold**"))
 	if strings.Contains(got, "<img") || strings.Contains(got, "javascript:") || !strings.Contains(got, `href="https://example.org/a?x=1&amp;y=2"`) || !strings.Contains(got, "<strong>bold</strong>") {
 		t.Fatalf("unexpected markdown rendering: %s", got)
+	}
+}
+
+func TestClientRequestOnlyLinksToPublishedStory(t *testing.T) {
+	s, requests, _ := portalTestServer()
+	linked := "SITE-12"
+	requests.items[0].LinkedTicketRef = &linked
+	for _, test := range []struct {
+		stories  []store.ClientStory
+		wantLink bool
+	}{
+		{nil, false},
+		{[]store.ClientStory{{Ref: linked, Project: "SITE", Title: "Export data"}}, true},
+	} {
+		s.stories = &clientStoryStub{stories: test.stories}
+		w := httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, portalRequest(http.MethodGet, "/portal/requests/7", nil))
+		if w.Code != http.StatusOK || strings.Contains(w.Body.String(), `href="/portal/stories/SITE-12"`) != test.wantLink {
+			t.Fatalf("published=%v: %d %s", test.wantLink, w.Code, w.Body.String())
+		}
 	}
 }

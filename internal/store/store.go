@@ -154,6 +154,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 		{"0004_account_project_limits", htb.AccountProjectLimitsMigration},
 		{"0005_web_sessions", htb.WebSessionsMigration},
 		{"0006_client_requests", htb.ClientRequestsMigration},
+		{"0007_client_stories", htb.ClientStoriesMigration},
 	}
 	for _, migration := range migrations {
 		var exists bool

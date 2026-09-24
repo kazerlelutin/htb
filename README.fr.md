@@ -2,10 +2,10 @@
 
 [English](README.md) · Français
 
-HTB est un gestionnaire de tickets centré sur la CLI et l’API. L’équipe
-travaille dans le terminal ; les clients peuvent consulter leurs projets,
-proposer des demandes et commenter dans un portail web léger. Zitadel gère la
-connexion. HTB gère les accès aux projets et les tickets.
+HTB garde les tickets techniques de l’équipe dans la CLI. Les clients suivent
+les US publiées, leur avancement et leurs échanges dans un portail web léger ;
+ils peuvent aussi proposer des demandes. Zitadel gère la connexion, HTB les
+accès aux projets et les tickets.
 
 ## Choisir son installation
 
@@ -31,8 +31,8 @@ créer un projet.
 
 Un client qui n’utilise pas la CLI peut ouvrir le
 [portail client](https://htb.ben-to.fr/login), se connecter et saisir un code
-d’invitation. Le portail sert aux demandes et aux échanges, pas au suivi
-interne du travail de l’équipe.
+d’invitation. Le portail montre les US publiées et les demandes, pas le tableau
+technique de l’équipe.
 
 ### Auto-héberger HTB
 
@@ -98,6 +98,25 @@ Utilisez `htb help` ou `htb help ticket create` pour connaître les options.
 Le [guide des commandes](https://htb.ben-to.fr/commands) est aussi accessible
 sur le web.
 
+### Partager une US avec un client
+
+```bash
+htb ticket create --type technical_task --parent SITE-1 --title "Construire l’export"
+htb ticket publish SITE-1
+htb ticket client-comments SITE-1
+htb ticket client-comment SITE-1 "L’export est prêt pour validation."
+```
+
+Seul un administrateur du projet peut publier ou masquer une US. Elles sont
+privées par défaut ; `htb ticket unpublish SITE-1` en masque une à nouveau. Le
+portail affiche son titre, sa description, son état et le nombre de tâches
+techniques terminées sur le total. Sans tâche liée, il indique que l’US n’est
+pas encore découpée. Le contenu des tâches et `htb ticket comments` ne sont pas
+affichés dans le portail ; `client-comments` est une conversation distincte qui
+y est visible. Un membre ayant le droit `read` peut toutefois consulter les
+tickets techniques via la CLI ou l’API. Vérifiez le titre et la description
+avant publication, y compris après une modification.
+
 ### Demandes client
 
 Un administrateur de projet crée une invitation avec
@@ -113,9 +132,10 @@ htb request status 7 needs_info
 htb request link 7 SITE-12
 ```
 
-`htb request link` rattache une demande à un ticket de travail existant. Le
-portail client n’expose ni priorité, ni assignation, ni état interne des
-tickets. L’authentification reste chez Zitadel ; l’invitation donne uniquement
+`htb request link` rattache une demande à un ticket existant, sans le publier.
+Si ce ticket est une US publiée, la demande mène vers elle dans le portail.
+Le portail n’expose ni priorité, ni assignation, ni contenu des tâches ou
+commentaires internes. L’authentification reste chez Zitadel ; l’invitation donne uniquement
 accès au projet dans HTB.
 
 ## Développement

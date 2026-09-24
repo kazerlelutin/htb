@@ -168,6 +168,8 @@ Commands:
   feature create                  Create a roadmap feature
   ticket create | list | show     Create, browse, or view tickets
   ticket update | comment         Update or comment on a ticket
+  ticket publish | unpublish      Control client visibility of a user story
+  ticket client-comments | client-comment   Read or reply to client comments
   ticket claim | release          Claim or release a ticket
   ticket versions | restore       View or restore history
   request list | show | comments | comment | status | link   Handle client requests
@@ -202,7 +204,7 @@ Use "htb help ticket create" or "htb ticket create --help" for command details.
 	case "feature", "feature create":
 		return "Usage: htb feature create --key KEY --name NAME [--project KEY] [--description TEXT] [--due-date YYYY-MM-DD]\n\nCreate a roadmap feature. Example: htb feature create --key newsletter --name Newsletter --due-date 2026-09-30\n"
 	case "ticket":
-		return "Usage:\n  htb ticket create --title TITLE [options]\n  htb ticket list [options]\n  htb ticket show REF | comments REF | activity REF\n  htb ticket update --version N [options] REF\n  htb ticket comment REF TEXT\n  htb ticket claim REF | htb ticket release REF\n  htb ticket versions REF | restore --version N REF REVISION\n"
+		return "Usage:\n  htb ticket create --title TITLE [options]\n  htb ticket list [options]\n  htb ticket show REF | comments REF | activity REF\n  htb ticket update --version N [options] REF\n  htb ticket comment REF TEXT\n  htb ticket publish REF | unpublish REF\n  htb ticket client-comments REF | client-comment REF TEXT\n  htb ticket claim REF | htb ticket release REF\n  htb ticket versions REF | restore --version N REF REVISION\n"
 	case "ticket create":
 		return "Usage: htb ticket create --title TITLE [--type user_story|technical_task|bug|incident] [--project KEY] [--parent REF] [--related REF] [--feature KEY] [--description TEXT] [--priority low|normal|high|urgent] [--label TAG]\n\nA technical task requires --parent STORY-REF. Repeat --label to add multiple labels.\n"
 	case "ticket list":
@@ -215,6 +217,12 @@ Use "htb help ticket create" or "htb ticket create --help" for command details.
 		return "Usage: htb ticket comment REF TEXT\n\nAdd a comment to a ticket.\n"
 	case "ticket comments":
 		return "Usage: htb ticket comments REF\n\nList a ticket conversation.\n"
+	case "ticket publish", "ticket unpublish":
+		return "Usage: htb " + command + " STORY-REF\n\nA project admin controls whether a user story is visible in the client portal. Technical tasks cannot be published.\n"
+	case "ticket client-comments":
+		return "Usage: htb ticket client-comments STORY-REF\n\nRead the separate client-visible conversation on a published user story.\n"
+	case "ticket client-comment":
+		return "Usage: htb ticket client-comment STORY-REF TEXT\n\nReply in the client-visible conversation. Internal ticket comments stay private.\n"
 	case "ticket activity":
 		return "Usage: htb ticket activity REF\n\nList the ticket audit activity.\n"
 	case "ticket claim":
@@ -759,6 +767,14 @@ func ticketCommand(args []string) error {
 		return ticketComment(args[1:])
 	case "comments":
 		return ticketComments(args[1:])
+	case "publish":
+		return ticketPublication(args[1:], true)
+	case "unpublish":
+		return ticketPublication(args[1:], false)
+	case "client-comments":
+		return ticketClientComments(args[1:])
+	case "client-comment":
+		return ticketClientComment(args[1:])
 	case "activity":
 		return ticketActivity(args[1:])
 	case "claim":

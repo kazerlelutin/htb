@@ -2,9 +2,9 @@
 
 English · [Français](README.fr.md)
 
-HTB is a ticket tracker built around a CLI and an API. Teams work in the
-terminal; clients can view projects, propose requests, and comment in a small
-web portal. Zitadel handles sign-in. HTB manages project access and tickets.
+HTB keeps the team's technical tickets in the CLI. Clients use a small web
+portal to follow published user stories, see progress, comment, and propose
+requests. Zitadel handles sign-in; HTB manages project access and tickets.
 
 ## Choose your setup
 
@@ -29,8 +29,8 @@ existing project, use `htb invite accept CODE` instead of creating one.
 
 Clients who do not use the CLI can open the
 [client portal](https://htb.ben-to.fr/login), sign in, and enter a project
-invitation code. The portal is for requests and conversation, not the team's
-internal work board.
+invitation code. The portal shows published user stories and requests, not the
+team's technical work board.
 
 ### Self-host HTB
 
@@ -93,6 +93,25 @@ Markdown; `htb ticket list --json` and `--csv` are available for scripts.
 Run `htb help` or `htb help ticket create` for command options. The
 [command guide](https://htb.ben-to.fr/commands) is also available on the web.
 
+### Share a user story with clients
+
+```bash
+htb ticket create --type technical_task --parent SITE-1 --title "Build the export"
+htb ticket publish SITE-1
+htb ticket client-comments SITE-1
+htb ticket client-comment SITE-1 "The export is ready to review."
+```
+
+Only a project admin can publish or unpublish a user story. Stories are private
+by default; `htb ticket unpublish SITE-1` hides one again. The portal shows
+its title, description, status, and completed technical tasks out of total
+technical tasks. With no linked tasks, it says the story has not been split
+yet. Technical task details and `htb ticket comments` are not shown in the
+portal; `client-comments` is a separate conversation visible there. A project
+member with `read` access can still inspect technical tickets through the CLI
+or API. Check the story title and description before publishing, including
+future edits.
+
 ### Client requests
 
 A project admin creates an invitation with `htb invite create --role read`.
@@ -108,8 +127,10 @@ htb request status 7 needs_info
 htb request link 7 SITE-12
 ```
 
-`htb request link` connects a client request to an existing work ticket. The
-client portal does not expose internal priority, assignment, or ticket status.
+`htb request link` connects a request to an existing ticket; linking does not
+publish it. Link to a published user story to show that story from the request
+page. The portal does not expose internal priority, assignment, technical task
+content, or internal ticket comments.
 Authentication remains with Zitadel; a project invitation only grants access
 inside HTB.
 
