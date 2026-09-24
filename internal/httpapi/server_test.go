@@ -133,6 +133,9 @@ func TestPublicPages(t *testing.T) {
 
 func TestHomeShowsHostedAndSelfHostedPaths(t *testing.T) {
 	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "", slog.Default())
+	if s.publicURL != "https://htboard.xyz" {
+		t.Fatalf("default public URL = %q, want htboard.xyz", s.publicURL)
+	}
 	s.SetPublicURL("https://tickets.example.org")
 	w := httptest.NewRecorder()
 	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/?lang=en", nil))
@@ -141,9 +144,9 @@ func TestHomeShowsHostedAndSelfHostedPaths(t *testing.T) {
 	}
 	for _, want := range []string{
 		`id="deployment"`, `Hosted by Ben-to`, `Self-host HTB`,
-		`href="https://htb.ben-to.fr"`,
+		`href="https://htboard.xyz"`,
 		`href="https://github.com/kazerlelutin/htb/blob/main/docs/self-hosting.md"`,
-		`htb config set-server https://htb.ben-to.fr`,
+		`htb config set-server https://htboard.xyz`,
 	} {
 		if !strings.Contains(w.Body.String(), want) {
 			t.Fatalf("home page is missing %q", want)
@@ -157,7 +160,7 @@ func TestHomeShowsHostedAndSelfHostedPaths(t *testing.T) {
 	if !strings.Contains(w.Body.String(), `Version hébergée par Ben-to`) || !strings.Contains(w.Body.String(), `docs/self-hosting.fr.md`) {
 		t.Fatal("French hosting choices are missing")
 	}
-	s.SetPublicURL("https://htb.ben-to.fr")
+	s.SetPublicURL("https://htboard.xyz")
 	if err := s.SetBrowserLogin(browserLoginStub{}, []byte(strings.Repeat("k", 32))); err != nil {
 		t.Fatal(err)
 	}

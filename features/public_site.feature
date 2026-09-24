@@ -30,6 +30,11 @@ Feature: Site public HTB
     And elle voit une option pour auto-héberger HTB avec un lien vers le guide GitHub
     And elle peut choisir ces options en français ou en anglais
 
+  Scenario: La documentation indique le domaine du service hébergé
+    Given une personne consulte le README HTB en français ou en anglais
+    Then le domaine de la version hébergée est "htboard.xyz"
+    And les commandes et liens du parcours hébergé utilisent ce domaine
+
   Scenario: Une personne explore HTB sans créer de compte
     Given une personne consulte la page d’accueil HTB
     When elle sélectionne un moment dans le simulateur

@@ -100,7 +100,7 @@ type clientStoryStore interface {
 }
 
 func New(s *store.Store, verifier auth.Verifier, deviceConfig auth.DeviceConfig, releaseURL string, log *slog.Logger) *Server {
-	return &Server{store: s, sessions: s, requests: s, stories: s, verifier: verifier, deviceConfig: deviceConfig, releaseURL: releaseURL, publicURL: "https://htb.ben-to.fr", log: log}
+	return &Server{store: s, sessions: s, requests: s, stories: s, verifier: verifier, deviceConfig: deviceConfig, releaseURL: releaseURL, publicURL: "https://htboard.xyz", log: log}
 }
 
 // SetBrowserLogin enables the web entry point backed by Zitadel.
