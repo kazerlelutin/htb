@@ -73,7 +73,7 @@ func (s *Store) ListClientStories(ctx context.Context, actor Actor, project stri
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.DB.QueryContext(ctx, clientStorySelect+` AND p.key=$1 AND ($2 OR t.client_visibility='published') ORDER BY t.number DESC`, strings.ToUpper(project), preview)
+	rows, err := s.DB.QueryContext(ctx, clientStorySelect+` AND p.key=$1 AND ($2 OR t.client_visibility='published') ORDER BY (t.status='done'),t.number DESC`, strings.ToUpper(project), preview)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +119,7 @@ func (s *Store) ListClientStoriesPage(ctx context.Context, actor Actor, project 
 		result.Page = result.TotalPages
 	}
 	offset := (result.Page - 1) * perPage
-	rows, err := s.DB.QueryContext(ctx, clientStorySelect+` AND p.key=$1 AND ($2 OR t.client_visibility='published') ORDER BY t.number DESC LIMIT $3 OFFSET $4`, project, preview, perPage, offset)
+	rows, err := s.DB.QueryContext(ctx, clientStorySelect+` AND p.key=$1 AND ($2 OR t.client_visibility='published') ORDER BY (t.status='done'),t.number DESC LIMIT $3 OFFSET $4`, project, preview, perPage, offset)
 	if err != nil {
 		return ClientStoryPage{}, err
 	}

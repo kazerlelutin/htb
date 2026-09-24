@@ -136,6 +136,31 @@ func TestClientStoryPublicationAndPublicConversation(t *testing.T) {
 	if err != nil || visible.ChildCount != 1 || visible.DoneChildren != 1 || visible.Status != string(domain.Done) {
 		t.Fatalf("derived progress: %+v, %v", visible, err)
 	}
+	active, err := s.CreateTicket(ctx, admin, CreateTicket{Project: "SITE", Type: domain.UserStory, Title: "Préparer le prochain export"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = s.SetClientStoryPublished(ctx, admin, active.Ref, true); err != nil {
+		t.Fatal(err)
+	}
+	completedLater, err := s.CreateTicket(ctx, admin, CreateTicket{Project: "SITE", Type: domain.UserStory, Title: "Export archivé"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	completedTechnical, err := s.CreateTicket(ctx, admin, CreateTicket{Project: "SITE", Type: domain.TechnicalTask, ParentRef: completedLater.Ref, Title: "Archiver l'export"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.UpdateTicket(ctx, admin, completedTechnical.Ref, UpdateTicket{Status: &completed, ExpectedVersion: completedTechnical.Version}); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.SetClientStoryPublished(ctx, admin, completedLater.Ref, true); err != nil {
+		t.Fatal(err)
+	}
+	items, err = s.ListClientStories(ctx, client, "SITE")
+	if err != nil || len(items) != 3 || items[0].Ref != active.Ref || items[1].Ref != completedLater.Ref || items[2].Ref != story.Ref {
+		t.Fatalf("active stories should precede completed stories: %+v, %v", items, err)
+	}
 	if err = s.SetClientStoryPublished(ctx, admin, story.Ref, false); err != nil {
 		t.Fatal(err)
 	}
