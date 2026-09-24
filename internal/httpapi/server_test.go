@@ -131,6 +131,43 @@ func TestPublicPages(t *testing.T) {
 	}
 }
 
+func TestHomeShowsHostedAndSelfHostedPaths(t *testing.T) {
+	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "", slog.Default())
+	s.SetPublicURL("https://tickets.example.org")
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/?lang=en", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("home status: %d", w.Code)
+	}
+	for _, want := range []string{
+		`id="deployment"`, `Hosted by Ben-to`, `Self-host HTB`,
+		`href="https://htb.ben-to.fr"`,
+		`href="https://github.com/kazerlelutin/htb/blob/main/docs/self-hosting.md"`,
+		`htb config set-server https://htb.ben-to.fr`,
+	} {
+		if !strings.Contains(w.Body.String(), want) {
+			t.Fatalf("home page is missing %q", want)
+		}
+	}
+	if strings.Contains(w.Body.String(), `href="/login"`) {
+		t.Fatal("disabled browser login is advertised")
+	}
+	w = httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/?lang=fr", nil))
+	if !strings.Contains(w.Body.String(), `Version hébergée par Ben-to`) || !strings.Contains(w.Body.String(), `docs/self-hosting.fr.md`) {
+		t.Fatal("French hosting choices are missing")
+	}
+	s.SetPublicURL("https://htb.ben-to.fr")
+	if err := s.SetBrowserLogin(browserLoginStub{}, []byte(strings.Repeat("k", 32))); err != nil {
+		t.Fatal(err)
+	}
+	w = httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/?lang=en", nil))
+	if !strings.Contains(w.Body.String(), `href="/login">Open the client portal`) {
+		t.Fatal("configured hosted portal is not linked")
+	}
+}
+
 func TestCommandSyntaxHighlightsOptionalArgumentsWithoutChangingText(t *testing.T) {
 	got := string(commandSyntaxHTML(`htb ticket list [--project KEY] [--json|--csv]`))
 	want := `htb ticket list <span class="command-option">[--project KEY]</span> <span class="command-option">[--json|--csv]</span>`
@@ -261,10 +298,17 @@ func TestClientEntryPointAppearsOnlyWhenBrowserLoginIsConfigured(t *testing.T) {
 	if err := s.SetBrowserLogin(browserLoginStub{}, []byte("01234567890123456789012345678901")); err != nil {
 		t.Fatal(err)
 	}
-	w = httptest.NewRecorder()
-	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/", nil))
-	if !strings.Contains(w.Body.String(), `href="/login">Espace client`) {
-		t.Fatal("configured browser login has no visible entry point")
+	for _, test := range []struct {
+		path, label string
+	}{
+		{"/?lang=fr", "Se connecter / S’inscrire"},
+		{"/?lang=en", "Sign in / Sign up"},
+	} {
+		w = httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, test.path, nil))
+		if !strings.Contains(w.Body.String(), `href="/login">`+test.label+`</a>`) {
+			t.Fatalf("configured browser login entry point missing for %s", test.path)
+		}
 	}
 }
 
