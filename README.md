@@ -89,7 +89,7 @@ htb ticket update --help
 | Créer un ticket | `htb ticket create --title TITRE --type user_story` |
 | Créer une tâche d'US | `htb ticket create --type technical_task --parent SITE-1 --title TITRE` |
 | Voir les tickets | `htb ticket list --status blocked --priority urgent`, `htb ticket list --label site --query export`, `htb ticket show SITE-1` |
-| Suivre la conversation | `htb ticket comments SITE-1`, `htb ticket activity SITE-1` |
+| Suivre la conversation | `htb ticket show SITE-1`, `htb ticket comments SITE-1`, `htb ticket activity SITE-1` — les descriptions et commentaires Markdown sont formatés pour le terminal |
 | Filtrer par fonctionnalité | `htb ticket list --feature newsletter` |
 | Mettre à jour | `htb ticket update --version 2 --status in_progress SITE-2` |
 | Collaborer | `htb ticket comment SITE-2 "Texte"`, `htb ticket claim SITE-2`, `htb ticket release SITE-2` |

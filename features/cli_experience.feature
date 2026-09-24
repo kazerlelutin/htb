@@ -36,6 +36,12 @@ Feature: CLI experience
     When a person runs "htb ticket comments SITE-1" or "htb ticket activity SITE-1"
     Then the CLI displays the author and timestamp of each item
 
+  Scenario: Reading ticket content formats Markdown safely
+    Given a ticket description or comment containing headings, lists, links, and code
+    When a person runs "htb ticket show SITE-1" or "htb ticket comments SITE-1"
+    Then the CLI displays the Markdown as readable terminal text
+    And control sequences supplied in the content cannot affect the terminal
+
   Scenario: A user story shows progress as a bar
     Given a user story with two completed technical tasks out of three
     When a person runs "htb ticket list"

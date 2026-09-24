@@ -74,6 +74,26 @@ func TestProgressBarAndColorsRespectConfiguration(t *testing.T) {
 	}
 }
 
+func TestRenderMarkdownMakesTicketTextReadableWithoutColors(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	got := renderMarkdown("# Demande\n\n- [ ] Vérifier **le flux**\n- [x] Lire [le guide](https://example.test/guide)\n\n> _Réponse attendue_\n\n```go\nfmt.Println(\"ok\")\n```")
+	want := "Demande\n\n☐ Vérifier le flux\n☑ Lire le guide <https://example.test/guide>\n\n│ Réponse attendue\n\n  fmt.Println(\"ok\")"
+	if got != want {
+		t.Fatalf("rendered Markdown = %q, want %q", got, want)
+	}
+}
+
+func TestRenderMarkdownDoesNotEmitAuthorSuppliedTerminalControls(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	got := renderMarkdown("# Bonjour\x1b[2J\nTexte\r masqué\u009b2Jvisible")
+	if strings.ContainsAny(got, "\x1b\u009b\r") {
+		t.Fatalf("rendered Markdown contains a terminal control: %q", got)
+	}
+	if got != "Bonjour\nTexte masquévisible" {
+		t.Fatalf("unexpected sanitized Markdown: %q", got)
+	}
+}
+
 func TestProjectStatusViewDecodesAggregate(t *testing.T) {
 	var response struct {
 		Projects []projectStatusView `json:"projects"`

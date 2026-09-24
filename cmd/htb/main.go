@@ -789,7 +789,7 @@ func ticketComments(args []string) error {
 		return nil
 	}
 	for _, comment := range response.Comments {
-		fmt.Printf("%s — %s\n%s\n\n", comment.CreatedAt.Format(time.RFC3339), comment.Author, comment.Body)
+		fmt.Printf("%s — %s\n%s\n\n", comment.CreatedAt.Format(time.RFC3339), comment.Author, renderMarkdown(comment.Body))
 	}
 	return nil
 }
@@ -1250,7 +1250,7 @@ func printTicket(ticket ticketView) {
 		fmt.Println("Labels:", strings.Join(ticket.Labels, ", "))
 	}
 	if ticket.Description != "" {
-		fmt.Printf("\n%s\n", ticket.Description)
+		fmt.Printf("\n%s\n", renderMarkdown(ticket.Description))
 	}
 }
 
