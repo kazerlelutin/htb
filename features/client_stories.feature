@@ -28,6 +28,7 @@ Feature: User stories visible aux clients
     Given un projet possède une US publiée avec des tâches techniques
     When une personne ouvre le projet ou le détail de l’US
     Then les barres de progression sont hautes, bordées comme les séparateurs et sans piste grise
+    And leur remplissage utilise un vert doux, distinct du vert d’accent de l’interface
     And une barre à 0 % reste visible
 
   Scenario: La conversation client reste distincte des notes internes
