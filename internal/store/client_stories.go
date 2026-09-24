@@ -45,7 +45,7 @@ type ClientStoryComment struct {
 
 const clientStorySelect = `SELECT p.key || '-' || t.number::text,p.key,t.title,t.description,t.status,t.client_visibility,
 	(SELECT count(*) FROM tickets child WHERE child.parent_ticket_id=t.id AND child.type='technical_task'),
-	(SELECT count(*) FROM tickets child WHERE child.parent_ticket_id=t.id AND child.type='technical_task' AND child.status='done'),
+	(SELECT count(*) FROM tickets child WHERE child.parent_ticket_id=t.id AND child.type='technical_task' AND child.status='done')
 	FROM tickets t JOIN projects p ON p.id=t.project_id WHERE t.type='user_story'`
 
 func scanClientStory(row scanner) (ClientStory, error) {
