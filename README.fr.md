@@ -12,7 +12,7 @@ connexion. HTB gère les accès aux projets et les tickets.
 | | Utiliser la version en ligne | Auto-héberger HTB |
 | --- | --- | --- |
 | Serveur | [htb.ben-to.fr](https://htb.ben-to.fr) | Votre domaine et votre infrastructure |
-| À configurer | La CLI ; ni Zitadel ni PostgreSQL | PostgreSQL, Zitadel, HTTPS et HTB |
+| À configurer | La CLI | PostgreSQL, Zitadel, HTTPS et HTB |
 | Pour commencer | [Démarrage rapide](#utiliser-la-version-en-ligne) | [Guide d’auto-hébergement](docs/self-hosting.fr.md) |
 
 ### Utiliser la version en ligne
@@ -25,10 +25,9 @@ htb auth login
 htb project create --key SITE --name "Site web"
 ```
 
-La connexion s’ouvre dans le navigateur via Zitadel. Vous n’avez **aucune**
-application Zitadel, base de données ou serveur à configurer. Si vous avez
-reçu une invitation à un projet existant, utilisez `htb invite accept CODE`
-au lieu de créer un projet.
+La connexion s’ouvre dans le navigateur via Zitadel. Si vous avez reçu une
+invitation à un projet existant, utilisez `htb invite accept CODE` au lieu de
+créer un projet.
 
 Un client qui n’utilise pas la CLI peut ouvrir le
 [portail client](https://htb.ben-to.fr/login), se connecter et saisir un code

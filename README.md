@@ -11,7 +11,7 @@ web portal. Zitadel handles sign-in. HTB manages project access and tickets.
 | | Use the hosted service | Self-host HTB |
 | --- | --- | --- |
 | Server | [htb.ben-to.fr](https://htb.ben-to.fr) | Your own domain and infrastructure |
-| You configure | The CLI; no Zitadel or PostgreSQL setup | PostgreSQL, Zitadel, HTTPS, and HTB |
+| You configure | The CLI | PostgreSQL, Zitadel, HTTPS, and HTB |
 | Start here | [Hosted quick start](#use-the-hosted-service) | [Self-hosting guide](docs/self-hosting.md) |
 
 ### Use the hosted service
@@ -24,8 +24,7 @@ htb auth login
 htb project create --key SITE --name "Website"
 ```
 
-Sign-in opens in your browser through Zitadel. You do **not** need to set up a
-Zitadel application, database, or server. If someone invites you to an
+Sign-in opens in your browser through Zitadel. If someone invites you to an
 existing project, use `htb invite accept CODE` instead of creating one.
 
 Clients who do not use the CLI can open the
