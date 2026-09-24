@@ -42,7 +42,7 @@ type portalRequestView struct {
 }
 
 var portalProjectTemplate = template.Must(template.New("portal-project").Parse(`<!doctype html>
-<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{.Name}} — HTB</title><link rel="stylesheet" href="/assets/public.css"></head><body>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{.Name}} — HTB</title><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="stylesheet" href="/assets/public.css"></head><body>
 <a class="skip-link" href="#main">Aller au contenu</a><header class="site-header"><a class="wordmark" href="/portal">&gt;_ HTB</a><form action="/logout" method="post"><button class="link-button" type="submit">Se déconnecter</button></form></header>
 <main id="main" class="portal"><p><a href="/portal">← Mes projets</a></p><p class="eyebrow">{{.Key}}</p><h1>{{.Name}}</h1>
 <section aria-labelledby="status-title"><h2 id="status-title">Suivi</h2><p>Reçues : {{index .Counts "received"}} · En cours : {{index .Counts "in_progress"}} · Besoin d’information : {{index .Counts "needs_info"}} · Terminées : {{index .Counts "done"}}</p></section>
@@ -53,7 +53,7 @@ var portalProjectTemplate = template.Must(template.New("portal-project").Parse(`
 </main></body></html>`))
 
 var portalRequestTemplate = template.Must(template.New("portal-request").Parse(`<!doctype html>
-<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{.Title}} — HTB</title><link rel="stylesheet" href="/assets/public.css"></head><body>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{.Title}} — HTB</title><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="stylesheet" href="/assets/public.css"></head><body>
 <a class="skip-link" href="#main">Aller au contenu</a><header class="site-header"><a class="wordmark" href="/portal">&gt;_ HTB</a><form action="/logout" method="post"><button class="link-button" type="submit">Se déconnecter</button></form></header>
 <main id="main" class="portal"><p><a href="/portal/projects/{{.Project}}">← Retour au projet</a></p><p class="eyebrow">DEMANDE #{{.ID}} · {{.StatusLabel}}</p><h1>{{.Title}}</h1><div class="portal-markdown">{{.Body}}</div>
 <section aria-labelledby="conversation-title"><h2 id="conversation-title">Conversation</h2>{{if .Comments}}<ol class="portal-comments">{{range .Comments}}<li><strong>{{.Author}}</strong> <time>{{.CreatedAt.Format "02/01/2006 15:04"}}</time><div class="portal-markdown">{{.Body}}</div></li>{{end}}</ol>{{else}}<p>Aucun commentaire pour le moment.</p>{{end}}</section>
