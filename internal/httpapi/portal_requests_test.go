@@ -18,6 +18,7 @@ type clientRequestStub struct {
 	comments  []store.ClientRequestComment
 	created   bool
 	commented bool
+	deleted   bool
 }
 
 func (stub *clientRequestStub) CreateClientRequest(_ context.Context, _ store.Actor, project, title, body string) (store.ClientRequest, error) {
@@ -53,6 +54,16 @@ func (stub *clientRequestStub) AddClientRequestComment(_ context.Context, _ stor
 }
 func (stub *clientRequestStub) UpdateClientRequest(context.Context, store.Actor, int64, store.ClientRequestUpdate) (store.ClientRequest, error) {
 	return store.ClientRequest{}, nil
+}
+func (stub *clientRequestStub) DeleteClientRequest(_ context.Context, _ store.Actor, id int64) error {
+	for index, item := range stub.items {
+		if item.ID == id {
+			stub.items = append(stub.items[:index], stub.items[index+1:]...)
+			stub.deleted = true
+			return nil
+		}
+	}
+	return store.ErrNotFound
 }
 
 func portalTestServer() (*Server, *clientRequestStub, *browserSessionStub) {
@@ -110,14 +121,14 @@ func TestClientPortalUsesProjectMembershipAndEscapesMarkdown(t *testing.T) {
 
 func TestClientPortalFormsRequireSessionCSRF(t *testing.T) {
 	s, requests, sessions := portalTestServer()
-	for _, path := range []string{"/portal/projects/SITE/requests", "/portal/requests/7/comments", "/portal/invitations"} {
+	for _, path := range []string{"/portal/projects/SITE/requests", "/portal/requests/7/comments", "/portal/requests/7/delete", "/portal/invitations"} {
 		w := httptest.NewRecorder()
 		s.Handler().ServeHTTP(w, portalRequest(http.MethodPost, path, url.Values{"title": {"Titre"}, "body": {"Texte"}, "code": {"invite"}}))
 		if w.Code != http.StatusForbidden {
 			t.Fatalf("%s: missing CSRF returned %d", path, w.Code)
 		}
 	}
-	if requests.created || requests.commented {
+	if requests.created || requests.commented || requests.deleted {
 		t.Fatal("form action ran without CSRF")
 	}
 	csrf := s.portalCSRF(portalRequest(http.MethodGet, "/portal", nil).WithContext(context.WithValue(context.Background(), browserSessionTokenKey{}, "valid")))
@@ -130,6 +141,35 @@ func TestClientPortalFormsRequireSessionCSRF(t *testing.T) {
 	s.Handler().ServeHTTP(w, portalRequest(http.MethodPost, "/portal/invitations", url.Values{"csrf": {csrf}, "code": {"invite"}}))
 	if w.Code != http.StatusSeeOther || sessions.acceptedCode != "invite" {
 		t.Fatalf("invitation acceptance: %d", w.Code)
+	}
+}
+
+func TestClientPortalListsAndDeletesPendingOrRejectedRequests(t *testing.T) {
+	s, requests, _ := portalTestServer()
+	requests.items = []store.ClientRequest{
+		{ID: 7, Project: "SITE", Title: "En attente", Status: "received"},
+		{ID: 8, Project: "SITE", Title: "Rejetée", Status: "rejected"},
+		{ID: 9, Project: "SITE", Title: "En cours", Status: "in_progress"},
+	}
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, portalRequest(http.MethodGet, "/portal/projects/SITE", nil))
+	body := w.Body.String()
+	for _, want := range []string{"Demandes proposées", "En attente", "Rejetée", "/portal/requests/7/delete", "/portal/requests/8/delete"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("project page does not contain %q: %s", want, body)
+		}
+	}
+	if strings.Contains(body, "En cours") {
+		t.Fatalf("project page must only list deletable requests: %s", body)
+	}
+	if strings.Contains(body, "Demandes en attente") || strings.Contains(body, "Demandes rejetées") {
+		t.Fatalf("project page must rely on request status instead of list headings: %s", body)
+	}
+	csrf := s.portalCSRF(portalRequest(http.MethodGet, "/portal", nil).WithContext(context.WithValue(context.Background(), browserSessionTokenKey{}, "valid")))
+	w = httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, portalRequest(http.MethodPost, "/portal/requests/8/delete", url.Values{"csrf": {csrf}}))
+	if w.Code != http.StatusSeeOther || w.Header().Get("Location") != "/portal/projects/SITE" || !requests.deleted {
+		t.Fatalf("request deletion: %d %q", w.Code, w.Header().Get("Location"))
 	}
 }
 

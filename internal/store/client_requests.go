@@ -211,7 +211,7 @@ func (s *Store) UpdateClientRequest(ctx context.Context, actor Actor, id int64, 
 	if update.Status != nil {
 		status = *update.Status
 	}
-	if status != "received" && status != "in_progress" && status != "needs_info" && status != "done" {
+	if status != "received" && status != "in_progress" && status != "needs_info" && status != "done" && status != "rejected" {
 		return item, fmt.Errorf("%w: invalid status", ErrInvalidClientRequest)
 	}
 	if update.LinkedTicketRef != nil {
@@ -235,4 +235,30 @@ func (s *Store) UpdateClientRequest(ctx context.Context, actor Actor, id int64, 
 		return item, err
 	}
 	return item, tx.Commit()
+}
+
+// DeleteClientRequest lets its submitter withdraw a request before the team
+// starts work, or remove one that was rejected. Linked comments are deleted by
+// the database foreign-key constraint.
+func (s *Store) DeleteClientRequest(ctx context.Context, actor Actor, id int64) error {
+	if id < 1 {
+		return ErrNotFound
+	}
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var projectID int64
+	err = tx.QueryRowContext(ctx, `DELETE FROM client_requests WHERE id=$1 AND submitted_by_credential_id=$2 AND status IN ('received','rejected') RETURNING project_id`, id, actor.CredentialID).Scan(&projectID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrForbidden
+	}
+	if err != nil {
+		return err
+	}
+	if err = writeProjectEvent(ctx, tx, projectID, actor.CredentialID, "client_request_deleted", map[string]any{"request_id": id}); err != nil {
+		return err
+	}
+	return tx.Commit()
 }

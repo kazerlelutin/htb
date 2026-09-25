@@ -89,6 +89,7 @@ type clientRequestStore interface {
 	ListClientRequestComments(context.Context, store.Actor, int64) ([]store.ClientRequestComment, error)
 	AddClientRequestComment(context.Context, store.Actor, int64, string) (store.ClientRequestComment, error)
 	UpdateClientRequest(context.Context, store.Actor, int64, store.ClientRequestUpdate) (store.ClientRequest, error)
+	DeleteClientRequest(context.Context, store.Actor, int64) error
 }
 
 type clientStoryStore interface {
@@ -149,6 +150,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /portal/projects/{project}/requests", s.browserAuthenticated(http.HandlerFunc(s.portalCreateRequest)))
 	mux.Handle("GET /portal/requests/{id}", s.browserAuthenticated(http.HandlerFunc(s.portalRequest)))
 	mux.Handle("POST /portal/requests/{id}/comments", s.browserAuthenticated(http.HandlerFunc(s.portalAddComment)))
+	mux.Handle("POST /portal/requests/{id}/delete", s.browserAuthenticated(http.HandlerFunc(s.portalDeleteRequest)))
 	mux.HandleFunc("GET /auth/device-config", s.deviceConfiguration)
 	mux.Handle("/api/v1/", s.authenticated(http.HandlerFunc(s.api)))
 	return s.logging(mux)

@@ -117,19 +117,20 @@ func TestClientStoryDashboardShowsSafeProgress(t *testing.T) {
 	s.stories = &clientStoryStub{stories: []store.ClientStory{{Ref: "SITE-12", Project: "SITE", Title: "Exporter les données", Description: "# Besoin\n<script>secret()</script>", Status: "in_progress", ChildCount: 3, DoneChildren: 2, Published: true}}}
 	w := httptest.NewRecorder()
 	s.Handler().ServeHTTP(w, portalRequest(http.MethodGet, "/portal/projects/SITE", nil))
+	body := w.Body.String()
 	if w.Code != http.StatusOK {
-		t.Fatalf("project dashboard: %d %s", w.Code, w.Body.String())
+		t.Fatalf("project dashboard: %d %s", w.Code, body)
 	}
-	for _, want := range []string{"Exporter les données", "2 / 3 (66 %)", "Tâches terminées", `href="/portal/stories/SITE-12"`, `value="2" max="3"`, `<span class="cursor" aria-hidden="true">_</span>`} {
-		if !strings.Contains(w.Body.String(), want) {
+	for _, want := range []string{"Exporter les données", "2 / 3 (66 %)", "Tâches terminées", `href="/portal/stories/SITE-12"`, `value="2" max="3"`, `<span class="cursor" aria-hidden="true">_</span>`, `SITE-12&nbsp;·&nbsp;En cours`} {
+		if !strings.Contains(body, want) {
 			t.Fatalf("dashboard missing %q", want)
 		}
 	}
-	if strings.Contains(w.Body.String(), `<p class="eyebrow">SITE</p>`) || strings.Contains(w.Body.String(), "Tâches techniques") {
-		t.Fatalf("dashboard contains redundant project key or overly technical task label: %s", w.Body.String())
+	if strings.Contains(body, `<p class="eyebrow">SITE</p>`) || strings.Contains(body, "Tâches techniques") {
+		t.Fatalf("dashboard contains redundant project key or overly technical task label: %s", body)
 	}
 	for _, private := range []string{"Implement CSV endpoint", "priority", "assignee"} {
-		if strings.Contains(w.Body.String(), private) {
+		if strings.Contains(body, private) {
 			t.Fatalf("dashboard leaked %q", private)
 		}
 	}

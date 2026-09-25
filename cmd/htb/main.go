@@ -235,7 +235,7 @@ Use "htb help ticket create" or "htb ticket create --help" for command details.
 	case "ticket restore":
 		return "Usage: htb ticket restore --version N REF REVISION\n\nRestore a revision when the ticket is still at version N.\n"
 	case "request":
-		return "Usage:\n  htb request list [--project KEY]\n  htb request show ID | comments ID\n  htb request comment ID TEXT\n  htb request status ID received|in_progress|needs_info|done\n  htb request link ID TICKET-REF\n\nClient requests are separate from internal work tickets.\n"
+		return "Usage:\n  htb request list [--project KEY]\n  htb request show ID | comments ID\n  htb request comment ID TEXT\n  htb request status ID received|in_progress|needs_info|done|rejected\n  htb request link ID TICKET-REF\n\nClient requests are separate from internal work tickets.\n"
 	case "invite":
 		return "Usage:\n  htb invite create [--project KEY] [--role read|write|admin] [--expires-at RFC3339]\n  htb invite accept CODE\n  htb invite list [--project KEY]\n  htb invite revoke ID [--project KEY]\n"
 	case "invite create":

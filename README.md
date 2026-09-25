@@ -126,13 +126,15 @@ htb request list
 htb request show 7
 htb request comment 7 "Could you add an example?"
 htb request status 7 needs_info
+htb request status 7 rejected
 htb request link 7 SITE-12
 ```
 
 `htb request link` connects a request to an existing ticket; linking does not
 publish it. Link to a published user story to show that story from the request
 page. The portal does not expose internal priority, assignment, technical task
-content, or internal ticket comments.
+content, or internal ticket comments. It shows pending and rejected requests;
+their submitter can delete them while they remain in either state.
 Authentication remains with Zitadel; a project invitation only grants access
 inside HTB.
 
