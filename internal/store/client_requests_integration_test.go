@@ -90,4 +90,17 @@ func TestClientRequestProjectFlow(t *testing.T) {
 	if err != nil || updated.Status != status || updated.LinkedTicketRef == nil || *updated.LinkedTicketRef != ticket.Ref {
 		t.Fatalf("update: %+v, %v", updated, err)
 	}
+	if err = s.DeleteClientRequest(ctx, outsider, request.ID); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("client deleted an in-progress request: %v", err)
+	}
+	rejected := "rejected"
+	if _, err = s.UpdateClientRequest(ctx, admin, request.ID, ClientRequestUpdate{Status: &rejected}); err != nil {
+		t.Fatalf("reject: %v", err)
+	}
+	if err = s.DeleteClientRequest(ctx, outsider, request.ID); err != nil {
+		t.Fatalf("delete rejected request: %v", err)
+	}
+	if _, err = s.GetClientRequest(ctx, outsider, request.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("deleted request is still available: %v", err)
+	}
 }

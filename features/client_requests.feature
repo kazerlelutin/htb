@@ -17,6 +17,13 @@ Feature: Espace client de demandes
     And il peut la retrouver dans la liste du projet et voir sa conversation
     And il peut y ajouter un commentaire
 
+  Scenario: Le client gère ses demandes en attente ou rejetées
+    Given un membre read a proposé une demande en attente et une demande rejetée dans le projet SITE
+    When il consulte le projet SITE dans le portail
+    Then chaque demande affiche son état « en attente » ou « rejetée »
+    And il peut supprimer ses propres demandes dans ces deux états
+    Et il ne peut pas supprimer une demande prise en charge
+
   Scenario: L’équipe qualifie la demande sans exposer le ticket interne
     Given une demande client du projet SITE
     When un membre write la passe en cours et la rattache à SITE-12

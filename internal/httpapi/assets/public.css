@@ -440,6 +440,15 @@ main {
 	width: 100%;
 	text-decoration: none;
 }
+.portal-projects a strong,
+.portal-requests a strong {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+.portal-requests a span {
+	flex: 0 0 auto;
+	white-space: nowrap;
+}
 .portal-projects span {
 	color: var(--lime);
 }
@@ -498,6 +507,23 @@ main {
 .portal-requests span,
 .portal-comments time {
 	color: var(--muted);
+}
+.portal-request-delete {
+	padding: 0 1.25rem 1rem;
+}
+.portal-request-delete .link-button {
+	color: var(--coral);
+}
+.visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
 }
 .portal-pagination {
 	display: flex;

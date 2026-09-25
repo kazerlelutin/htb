@@ -130,14 +130,17 @@ htb request list
 htb request show 7
 htb request comment 7 "Pouvez-vous ajouter un exemple ?"
 htb request status 7 needs_info
+htb request status 7 rejected
 htb request link 7 SITE-12
 ```
 
 `htb request link` rattache une demande à un ticket existant, sans le publier.
 Si ce ticket est une US publiée, la demande mène vers elle dans le portail.
 Le portail n’expose ni priorité, ni assignation, ni contenu des tâches ou
-commentaires internes. L’authentification reste chez Zitadel ; l’invitation donne uniquement
-accès au projet dans HTB.
+commentaires internes. Il affiche les demandes en attente et rejetées ; leur
+auteur peut les supprimer tant qu’elles sont dans l’un de ces deux états.
+L’authentification reste chez Zitadel ; l’invitation donne uniquement accès au
+projet dans HTB.
 
 ## Développement
 

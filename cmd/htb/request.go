@@ -115,7 +115,7 @@ func requestByID(args []string) error {
 		return nil
 	case "status":
 		if len(args) != 3 {
-			return errors.New("usage: htb request status ID received|in_progress|needs_info|done")
+			return errors.New("usage: htb request status ID received|in_progress|needs_info|done|rejected")
 		}
 		var item clientRequestView
 		if err := call("PATCH", path, map[string]string{"status": args[2]}, &item); err != nil {
