@@ -92,7 +92,8 @@ Le projet courant est conservé dans la configuration locale de la CLI. Les
 commandes qui acceptent `--project` peuvent cibler un autre projet. Les
 références sont numérotées par projet (`SITE-1`, `SITE-2`, …). Les descriptions
 et commentaires acceptent le Markdown ; `htb ticket list --json` et `--csv`
-sont disponibles pour les scripts.
+sont disponibles pour les scripts. Chaque ticket JSON expose aussi `published`
+afin d’indiquer si une US est visible dans le portail client.
 
 Utilisez `htb help` ou `htb help ticket create` pour connaître les options.
 Le [guide des commandes](https://htboard.xyz/commands) est aussi accessible

@@ -94,6 +94,8 @@ func (s valuesScanner) Scan(destinations ...any) error {
 			*destination = value.(int64)
 		case *int:
 			*destination = value.(int)
+		case *bool:
+			*destination = value.(bool)
 		case *string:
 			*destination = value.(string)
 		case *sql.NullString:
@@ -112,7 +114,7 @@ func (s valuesScanner) Scan(destinations ...any) error {
 func TestScanTicketDecodesLabelsAndFullRelations(t *testing.T) {
 	ticket, err := scanTicket(valuesScanner{values: []any{
 		int64(42), int64(2), "SITE", string(domain.TechnicalTask), "SITE-1", "SITE-7", "newsletter",
-		"Créer l'endpoint", "Description", string(domain.Open), "normal", 1, `["newsletter","site"]`, 0, 0,
+		"Créer l'endpoint", "Description", string(domain.Open), "normal", 1, `["newsletter","site"]`, 0, 0, false,
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -122,5 +124,31 @@ func TestScanTicketDecodesLabelsAndFullRelations(t *testing.T) {
 	}
 	if got, want := strings.Join(ticket.Labels, ","), "newsletter,site"; got != want {
 		t.Fatalf("got labels %q, want %q", got, want)
+	}
+	if ticket.Published {
+		t.Fatalf("technical ticket must not be published: %#v", ticket)
+	}
+}
+
+func TestTicketSerializesPublicationState(t *testing.T) {
+	b, err := json.Marshal(Ticket{Published: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"published":true`) {
+		t.Fatalf("missing publication state from %s", b)
+	}
+}
+
+func TestScanTicketDecodesPublicationState(t *testing.T) {
+	ticket, err := scanTicket(valuesScanner{values: []any{
+		int64(42), int64(2), "SITE", string(domain.UserStory), nil, nil, nil,
+		"Publish the website", "", string(domain.Open), "normal", 1, `[]`, 0, 0, true,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ticket.Published {
+		t.Fatalf("published state was not decoded: %#v", ticket)
 	}
 }
