@@ -130,6 +130,19 @@ func TestTicketLifecycleOverHTTP(t *testing.T) {
 	if want := key + "-1"; ticket.Ref != want {
 		t.Fatalf("first ticket ref = %q, want %q", ticket.Ref, want)
 	}
+	if ticket.Published {
+		t.Fatalf("new user story must start unpublished: %#v", ticket)
+	}
+	if response := requestJSON(t, server, http.MethodPut, "/api/v1/client-stories/"+ticket.Ref+"/publication", ""); response.Code != http.StatusOK {
+		t.Fatalf("publish ticket: %d %s", response.Code, response.Body.String())
+	}
+	listed := requestJSON(t, server, http.MethodGet, "/api/v1/tickets?project="+key, "")
+	var listResponse struct {
+		Tickets []store.Ticket `json:"tickets"`
+	}
+	if listed.Code != http.StatusOK || json.Unmarshal(listed.Body.Bytes(), &listResponse) != nil || len(listResponse.Tickets) != 1 || !listResponse.Tickets[0].Published {
+		t.Fatalf("list must expose published state: %d %s", listed.Code, listed.Body.String())
+	}
 
 	shown := requestJSON(t, server, http.MethodGet, "/api/v1/tickets/"+ticket.Ref, "")
 	if shown.Code != http.StatusOK {

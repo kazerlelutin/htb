@@ -34,13 +34,16 @@ func TestHelpRecognizesShortAndLongFlags(t *testing.T) {
 	}
 }
 
-func TestTicketViewDecodesRelationshipFields(t *testing.T) {
+func TestTicketViewDecodesRelationshipAndPublicationFields(t *testing.T) {
 	var ticket ticketView
-	if err := json.Unmarshal([]byte(`{"ref":"SITE-4","parent_ref":"SITE-3","feature_key":"newsletter"}`), &ticket); err != nil {
+	if err := json.Unmarshal([]byte(`{"ref":"SITE-4","parent_ref":"SITE-3","feature_key":"newsletter","published":true}`), &ticket); err != nil {
 		t.Fatal(err)
 	}
 	if ticket.ParentRef == nil || *ticket.ParentRef != "SITE-3" || ticket.FeatureKey == nil || *ticket.FeatureKey != "newsletter" {
 		t.Fatalf("unexpected ticket view: %#v", ticket)
+	}
+	if !ticket.Published {
+		t.Fatal("published state was not decoded")
 	}
 }
 

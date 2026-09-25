@@ -86,6 +86,7 @@ type ticketView struct {
 	Version      int      `json:"version"`
 	ChildCount   int      `json:"child_count"`
 	DoneChildren int      `json:"done_children"`
+	Published    bool     `json:"published"`
 }
 type commentView struct {
 	Body, Author string

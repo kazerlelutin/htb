@@ -31,6 +31,12 @@ Feature: CLI experience
     Then the CLI displays only tickets matching every filter
     And the same filters can be used with JSON and CSV output
 
+  Scenario: JSON ticket listings report client publication
+    Given a project contains a published user story and a private ticket
+    When they run "htb ticket list --json"
+    Then every ticket includes a "published" boolean
+    And the published user story has "published" set to true
+
   Scenario: Reading a ticket keeps its conversation and changes visible
     Given a ticket with comments and traceable changes
     When a person runs "htb ticket comments SITE-1" or "htb ticket activity SITE-1"

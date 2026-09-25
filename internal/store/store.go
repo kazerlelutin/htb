@@ -94,6 +94,7 @@ type Ticket struct {
 	Labels       []string          `json:"labels"`
 	ChildCount   int               `json:"child_count,omitempty"`
 	DoneChildren int               `json:"done_children,omitempty"`
+	Published    bool              `json:"published"`
 }
 type CreateTicket struct {
 	Project     string            `json:"project"`
@@ -1163,14 +1164,14 @@ func (s *Store) authorize(ctx context.Context, actor Actor, project string, requ
 
 type scanner interface{ Scan(...any) error }
 
-const ticketSelect = `SELECT t.id,t.number,p.key,t.type,CASE WHEN pt.id IS NULL THEN NULL ELSE pp.key || '-' || pt.number::text END,CASE WHEN rt.id IS NULL THEN NULL ELSE rtp.key || '-' || rt.number::text END,f.key,t.title,t.description,t.status,t.priority,t.version, COALESCE((SELECT json_agg(l.name ORDER BY l.name) FROM ticket_labels tl JOIN labels l ON l.id=tl.label_id WHERE tl.ticket_id=t.id),'[]'::json), (SELECT count(*) FROM tickets c WHERE c.parent_ticket_id=t.id), (SELECT count(*) FROM tickets c WHERE c.parent_ticket_id=t.id AND c.status='done') FROM tickets t JOIN projects p ON p.id=t.project_id LEFT JOIN tickets pt ON pt.id=t.parent_ticket_id LEFT JOIN projects pp ON pp.id=pt.project_id LEFT JOIN tickets rt ON rt.id=t.related_ticket_id LEFT JOIN projects rtp ON rtp.id=rt.project_id LEFT JOIN features f ON f.id=t.feature_id`
+const ticketSelect = `SELECT t.id,t.number,p.key,t.type,CASE WHEN pt.id IS NULL THEN NULL ELSE pp.key || '-' || pt.number::text END,CASE WHEN rt.id IS NULL THEN NULL ELSE rtp.key || '-' || rt.number::text END,f.key,t.title,t.description,t.status,t.priority,t.version, COALESCE((SELECT json_agg(l.name ORDER BY l.name) FROM ticket_labels tl JOIN labels l ON l.id=tl.label_id WHERE tl.ticket_id=t.id),'[]'::json), (SELECT count(*) FROM tickets c WHERE c.parent_ticket_id=t.id), (SELECT count(*) FROM tickets c WHERE c.parent_ticket_id=t.id AND c.status='done'), t.client_visibility='published' FROM tickets t JOIN projects p ON p.id=t.project_id LEFT JOIN tickets pt ON pt.id=t.parent_ticket_id LEFT JOIN projects pp ON pp.id=pt.project_id LEFT JOIN tickets rt ON rt.id=t.related_ticket_id LEFT JOIN projects rtp ON rtp.id=rt.project_id LEFT JOIN features f ON f.id=t.feature_id`
 
 func scanTicket(row scanner) (Ticket, error) {
 	var t Ticket
 	var parent, related, feature sql.NullString
 	var labelsJSON []byte
 	var typ, status string
-	err := row.Scan(&t.ID, &t.Number, &t.Project, &typ, &parent, &related, &feature, &t.Title, &t.Description, &status, &t.Priority, &t.Version, &labelsJSON, &t.ChildCount, &t.DoneChildren)
+	err := row.Scan(&t.ID, &t.Number, &t.Project, &typ, &parent, &related, &feature, &t.Title, &t.Description, &status, &t.Priority, &t.Version, &labelsJSON, &t.ChildCount, &t.DoneChildren, &t.Published)
 	if err != nil {
 		return t, err
 	}

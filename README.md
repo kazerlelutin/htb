@@ -88,7 +88,9 @@ htb ticket comment SITE-1 "Ready for review"
 The current project is stored in your local CLI configuration. Commands that
 support `--project` can target another project. Ticket references are numbered
 per project (`SITE-1`, `SITE-2`, …). Descriptions and comments support
-Markdown; `htb ticket list --json` and `--csv` are available for scripts.
+Markdown; `htb ticket list --json` and `--csv` are available for scripts. Each
+JSON ticket also exposes `published` to indicate whether a user story is
+visible in the client portal.
 
 Run `htb help` or `htb help ticket create` for command options. The
 [command guide](https://htboard.xyz/commands) is also available on the web.
