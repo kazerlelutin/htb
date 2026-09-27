@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/kazerlelutin/htb/internal/auth"
 	"github.com/kazerlelutin/htb/internal/store"
 )
@@ -195,6 +196,14 @@ func TestOpenAPIDocumentIsPublicAndVersioned(t *testing.T) {
 	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/openapi.v1.yaml", nil))
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "openapi: 3.1.0") || !strings.Contains(w.Body.String(), "version: v1") {
 		t.Fatalf("unexpected OpenAPI response: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestStoreErrorDoesNotExposePostgresDetails(t *testing.T) {
+	w := httptest.NewRecorder()
+	writeStoreError(w, &pgconn.PgError{Message: "relation private_accounts does not exist"})
+	if w.Code != http.StatusInternalServerError || strings.Contains(w.Body.String(), "private_accounts") || !strings.Contains(w.Body.String(), "server_error") {
+		t.Fatalf("database error was exposed: %d %s", w.Code, w.Body.String())
 	}
 }
 

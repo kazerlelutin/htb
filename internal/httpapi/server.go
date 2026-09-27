@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/kazerlelutin/htb/internal/auth"
 	"github.com/kazerlelutin/htb/internal/domain"
 	"github.com/kazerlelutin/htb/internal/store"
@@ -728,7 +729,14 @@ func writeStoreError(w http.ResponseWriter, err error) {
 	case errors.Is(err, store.ErrNamespaceReserved):
 		writeError(w, 403, "namespace_reserved", "This namespace is reserved by another account", nil)
 	default:
-		writeError(w, 422, "invalid_request", err.Error(), nil)
+		var databaseError *pgconn.PgError
+		if errors.As(err, &databaseError) {
+			writeError(w, http.StatusInternalServerError, "server_error", "Unable to process the request", nil)
+			return
+		}
+		// Store validation errors are intentionally terse. Detailed database and
+		// implementation errors must never be reflected to an API client.
+		writeError(w, http.StatusUnprocessableEntity, "invalid_request", "Request could not be processed", nil)
 	}
 }
 func (s *Server) logging(next http.Handler) http.Handler {
