@@ -176,6 +176,37 @@ PostgreSQL holds HTB's persistent data: back it up and test restoration. If
 the session key and Zitadel connectivity. To turn off the portal without
 delete its data, clear `HTBD_ZITADEL_WEB_CLIENT_ID` and redeploy.
 
+### Backup, restore, and monitoring runbook
+
+Schedule a daily encrypted PostgreSQL backup outside the HTB container. Keep a
+copy in a separate location and retain it according to your organisation's
+policy. A typical logical backup is:
+
+```bash
+pg_dump --format=custom --no-owner "$HTBD_DATABASE_URL" > htb-$(date +%F).dump
+```
+
+At least once per quarter, restore a recent backup into an **empty,
+non-production** database with `pg_restore --clean --if-exists`, start HTBD
+against it, and check `/health`, login, a project list, and a ticket read.
+Never test a restore against the production database.
+
+Monitor `https://your-domain/health` from outside your infrastructure. Alert on
+non-200 responses and record the deployed Git revision with each incident.
+`/health` checks PostgreSQL connectivity and is appropriate for readiness and
+external availability monitoring.
+
+### Account data requests
+
+HTB delegates identity management to Zitadel. For an access, export,
+correction, or erasure request, first verify the requester through the Zitadel
+account, then record the request and its outcome. Export or remove HTB data
+only after a backup exists and the project owner has approved any project-level
+impact. Account removal requires revoking web sessions, credentials,
+memberships, invitations, and authored content according to retention duties;
+do not run ad-hoc deletion SQL in production. Until a self-service workflow
+exists, handle requests through the publisher contact in the privacy notice.
+
 ### Database migrations
 
 HTB automatically applies database migrations when the server starts. The

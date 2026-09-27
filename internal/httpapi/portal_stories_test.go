@@ -120,6 +120,28 @@ func (stub *clientStoryStub) AddClientStoryComment(ctx context.Context, actor st
 	return store.ClientStoryComment{ID: 1, Body: body}, nil
 }
 
+func (stub *clientStoryStub) UpdateClientStoryComment(ctx context.Context, actor store.Actor, ref string, commentID int64, body string) (store.ClientStoryComment, error) {
+	if _, err := stub.GetClientStory(ctx, actor, ref); err != nil {
+		return store.ClientStoryComment{}, err
+	}
+	if commentID != 1 || strings.TrimSpace(body) == "" {
+		return store.ClientStoryComment{}, store.ErrInvalidClientRequest
+	}
+	stub.commented = true
+	return store.ClientStoryComment{ID: commentID, Body: body, AuthorCredentialID: actor.CredentialID}, nil
+}
+
+func (stub *clientStoryStub) DeleteClientStoryComment(ctx context.Context, actor store.Actor, ref string, commentID int64) error {
+	if _, err := stub.GetClientStory(ctx, actor, ref); err != nil {
+		return err
+	}
+	if commentID != 1 {
+		return store.ErrNotFound
+	}
+	stub.commented = true
+	return nil
+}
+
 func TestClientStoryDashboardShowsSafeProgress(t *testing.T) {
 	s, _, _ := portalTestServer()
 	s.stories = &clientStoryStub{stories: []store.ClientStory{{Ref: "SITE-12", Project: "SITE", Title: "Exporter les données", Description: "# Besoin\n<script>secret()</script>", Status: "in_progress", ChildCount: 3, DoneChildren: 2, Published: true}}}
@@ -240,6 +262,32 @@ func TestClientStoryCommentUsesPublicConversationAndCSRF(t *testing.T) {
 	s.Handler().ServeHTTP(w, portalRequest(http.MethodPost, "/portal/stories/SITE-13/comments", url.Values{"csrf": {csrf}, "body": {"Question"}}))
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("comment on hidden story returned %d", w.Code)
+	}
+}
+
+func TestClientCanEditOrDeleteOwnPortalComment(t *testing.T) {
+	s, _, _ := portalTestServer()
+	stories := &clientStoryStub{
+		stories:  []store.ClientStory{{Ref: "SITE-12", Project: "SITE", Title: "Exporter", Published: true}},
+		comments: []store.ClientStoryComment{{ID: 1, Body: "Mon message", Author: "Client", AuthorCredentialID: 1}},
+	}
+	s.stories = stories
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, portalRequest(http.MethodGet, "/portal/stories/SITE-12", nil))
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `action="/portal/stories/SITE-12/comments/1/edit"`) || !strings.Contains(w.Body.String(), "Supprimer votre commentaire") {
+		t.Fatalf("own comment controls are missing: %d %s", w.Code, w.Body.String())
+	}
+	csrf := s.portalCSRF(portalRequest(http.MethodGet, "/portal", nil).WithContext(context.WithValue(context.Background(), browserSessionTokenKey{}, "valid")))
+	w = httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, portalRequest(http.MethodPost, "/portal/stories/SITE-12/comments/1/edit", url.Values{"csrf": {csrf}, "body": {"Corrigé"}}))
+	if w.Code != http.StatusSeeOther || !stories.commented {
+		t.Fatalf("edit own comment: %d %s", w.Code, w.Body.String())
+	}
+	stories.commented = false
+	w = httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, portalRequest(http.MethodPost, "/portal/stories/SITE-12/comments/1/delete", url.Values{"csrf": {csrf}}))
+	if w.Code != http.StatusSeeOther || !stories.commented {
+		t.Fatalf("delete own comment: %d %s", w.Code, w.Body.String())
 	}
 }
 

@@ -1,0 +1,81 @@
+openapi: 3.1.0
+info:
+  title: HTB API
+  version: v1
+  description: |
+    Authenticated API for Headless Ticket Board. Send a Zitadel access token as
+    `Authorization: Bearer <token>`. Every mutation returns JSON errors with a
+    stable `error.code`; updates use `expected_version` to prevent overwrites.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+paths:
+  /me:
+    get:
+      summary: Read the current account
+      responses: { '200': { description: Current account } }
+  /projects:
+    get:
+      summary: List accessible projects
+      responses: { '200': { description: Projects } }
+    post:
+      summary: Create a project
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ProjectInput' } } }
+      responses: { '201': { description: Created }, '403': { $ref: '#/components/responses/Forbidden' } }
+  /projects/status:
+    get:
+      summary: Read progress for accessible projects
+      responses: { '200': { description: Project status } }
+  /tickets:
+    get:
+      summary: List tickets in a project
+      parameters:
+        - { name: project, in: query, required: true, schema: { type: string } }
+      responses: { '200': { description: Tickets } }
+    post:
+      summary: Create a user story, technical task, bug, or incident
+      responses: { '201': { description: Created } }
+  /tickets/{ref}:
+    get:
+      summary: Read a ticket
+      parameters: [ { $ref: '#/components/parameters/TicketRef' } ]
+      responses: { '200': { description: Ticket } }
+    patch:
+      summary: Update a ticket with optimistic concurrency
+      parameters: [ { $ref: '#/components/parameters/TicketRef' } ]
+      responses: { '200': { description: Updated }, '409': { description: Version conflict } }
+  /tickets/{ref}/comments:
+    get:
+      summary: List internal comments
+      parameters: [ { $ref: '#/components/parameters/TicketRef' } ]
+      responses: { '200': { description: Comments } }
+    post:
+      summary: Add an internal comment
+      parameters: [ { $ref: '#/components/parameters/TicketRef' } ]
+      responses: { '201': { description: Created } }
+  /namespaces:
+    get:
+      summary: List namespaces owned by the account
+      responses: { '200': { description: Namespaces } }
+    post:
+      summary: Reserve a namespace
+      responses: { '201': { description: Reserved }, '403': { $ref: '#/components/responses/Forbidden' } }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  parameters:
+    TicketRef: { name: ref, in: path, required: true, schema: { type: string, example: ALICE/SITE-1 } }
+  responses:
+    Forbidden:
+      description: The account is not allowed to perform the operation
+  schemas:
+    ProjectInput:
+      type: object
+      required: [key, name]
+      properties:
+        key: { type: string, example: ALICE/SITE }
+        name: { type: string, example: Website }
+        description: { type: string }

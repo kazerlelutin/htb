@@ -51,6 +51,12 @@ Feature: User stories visible aux clients
     And le commentaire interne n’apparaît pas dans le portail
     And l’équipe peut lire et répondre à la conversation client depuis la CLI
 
+  Scenario: Un client corrige ou retire son propre commentaire
+    Given un client a publié un commentaire sur une US publiée
+    When il modifie ou supprime ce commentaire dans le portail
+    Then seul son propre commentaire est modifié ou retiré
+    And les actions nécessitent une session de formulaire valide
+
   Scenario: Une demande peut mener à une US publiée
     Given une demande client est liée à une US publiée
     When le client ouvre sa demande

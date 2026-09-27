@@ -37,10 +37,12 @@ const (
 )
 
 type ClientStoryComment struct {
-	ID        int64     `json:"id"`
-	Body      string    `json:"body"`
-	Author    string    `json:"author"`
-	CreatedAt time.Time `json:"created_at"`
+	ID                 int64     `json:"id"`
+	Body               string    `json:"body"`
+	Author             string    `json:"author"`
+	AuthorCredentialID int64     `json:"-"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
 }
 
 const clientStorySelect = `SELECT p.key || '-' || t.number::text,p.key,t.title,t.description,t.status,t.client_visibility,
@@ -235,7 +237,7 @@ func (s *Store) ListClientStoryComments(ctx context.Context, actor Actor, ref st
 		return nil, ErrNotFound
 	}
 	project, number, _ := domain.ParseReference(ref)
-	rows, err := s.DB.QueryContext(ctx, `SELECT c.id,c.body,COALESCE(a.name,''),c.created_at
+	rows, err := s.DB.QueryContext(ctx, `SELECT c.id,c.body,COALESCE(a.name,''),c.author_credential_id,c.created_at,c.updated_at
 		FROM client_story_comments c JOIN tickets t ON t.id=c.ticket_id JOIN projects p ON p.id=t.project_id
 		JOIN credentials a ON a.id=c.author_credential_id
 		WHERE p.key=$1 AND t.number=$2 AND t.type='user_story' AND t.client_visibility='published'
@@ -247,7 +249,7 @@ func (s *Store) ListClientStoryComments(ctx context.Context, actor Actor, ref st
 	comments := []ClientStoryComment{}
 	for rows.Next() {
 		var comment ClientStoryComment
-		if err = rows.Scan(&comment.ID, &comment.Body, &comment.Author, &comment.CreatedAt); err != nil {
+		if err = rows.Scan(&comment.ID, &comment.Body, &comment.Author, &comment.AuthorCredentialID, &comment.CreatedAt, &comment.UpdatedAt); err != nil {
 			return nil, err
 		}
 		comments = append(comments, comment)
@@ -286,11 +288,85 @@ func (s *Store) AddClientStoryComment(ctx context.Context, actor Actor, ref, bod
 		return comment, err
 	}
 	comment.Body = trimmed
-	if err = tx.QueryRowContext(ctx, `INSERT INTO client_story_comments(ticket_id,body,author_credential_id) VALUES($1,$2,$3) RETURNING id,created_at`, ticketID, comment.Body, actor.CredentialID).Scan(&comment.ID, &comment.CreatedAt); err != nil {
+	comment.AuthorCredentialID = actor.CredentialID
+	if err = tx.QueryRowContext(ctx, `INSERT INTO client_story_comments(ticket_id,body,author_credential_id) VALUES($1,$2,$3) RETURNING id,created_at,updated_at`, ticketID, comment.Body, actor.CredentialID).Scan(&comment.ID, &comment.CreatedAt, &comment.UpdatedAt); err != nil {
 		return comment, err
 	}
 	if err = writeEvent(ctx, tx, projectID, ticketID, actor.CredentialID, "client_story_commented", map[string]any{"comment_id": comment.ID}); err != nil {
 		return comment, err
 	}
 	return comment, tx.Commit()
+}
+
+func (s *Store) UpdateClientStoryComment(ctx context.Context, actor Actor, ref string, commentID int64, body string) (ClientStoryComment, error) {
+	var comment ClientStoryComment
+	trimmed := strings.TrimSpace(body)
+	if commentID < 1 || trimmed == "" || len([]rune(trimmed)) > 20000 {
+		return comment, fmt.Errorf("%w: comment must contain 1 to 20000 characters", ErrInvalidClientRequest)
+	}
+	project, number, err := domain.ParseReference(ref)
+	if err != nil {
+		return comment, ErrNotFound
+	}
+	if err = s.authorize(ctx, actor, project, domain.RoleRead); err != nil {
+		return comment, err
+	}
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return comment, err
+	}
+	defer tx.Rollback()
+	var ticketID, projectID int64
+	err = tx.QueryRowContext(ctx, `UPDATE client_story_comments c SET body=$4,updated_at=now()
+		FROM tickets t JOIN projects p ON p.id=t.project_id
+		WHERE c.id=$3 AND c.ticket_id=t.id AND p.key=$1 AND t.number=$2 AND t.type='user_story'
+		AND t.client_visibility='published' AND c.author_credential_id=$5
+		RETURNING c.id,c.body,c.created_at,c.updated_at,p.id,t.id`, project, number, commentID, trimmed, actor.CredentialID).Scan(&comment.ID, &comment.Body, &comment.CreatedAt, &comment.UpdatedAt, &projectID, &ticketID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return comment, ErrNotFound
+	}
+	if err != nil {
+		return comment, err
+	}
+	comment.AuthorCredentialID = actor.CredentialID
+	if err = tx.QueryRowContext(ctx, `SELECT name FROM credentials WHERE id=$1`, actor.CredentialID).Scan(&comment.Author); err != nil {
+		return comment, err
+	}
+	if err = writeEvent(ctx, tx, projectID, ticketID, actor.CredentialID, "client_story_comment_updated", map[string]any{"comment_id": comment.ID}); err != nil {
+		return comment, err
+	}
+	return comment, tx.Commit()
+}
+
+func (s *Store) DeleteClientStoryComment(ctx context.Context, actor Actor, ref string, commentID int64) error {
+	if commentID < 1 {
+		return ErrNotFound
+	}
+	project, number, err := domain.ParseReference(ref)
+	if err != nil {
+		return ErrNotFound
+	}
+	if err = s.authorize(ctx, actor, project, domain.RoleRead); err != nil {
+		return err
+	}
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var ticketID, projectID int64
+	err = tx.QueryRowContext(ctx, `DELETE FROM client_story_comments c USING tickets t JOIN projects p ON p.id=t.project_id
+		WHERE c.id=$3 AND c.ticket_id=t.id AND p.key=$1 AND t.number=$2 AND t.type='user_story'
+		AND t.client_visibility='published' AND c.author_credential_id=$4
+		RETURNING p.id,t.id`, project, number, commentID, actor.CredentialID).Scan(&projectID, &ticketID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if err = writeEvent(ctx, tx, projectID, ticketID, actor.CredentialID, "client_story_comment_deleted", map[string]any{"comment_id": commentID}); err != nil {
+		return err
+	}
+	return tx.Commit()
 }

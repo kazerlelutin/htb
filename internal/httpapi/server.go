@@ -103,6 +103,8 @@ type clientStoryStore interface {
 	AddInternalStoryComment(context.Context, store.Actor, string, string) (store.Comment, error)
 	ListClientStoryComments(context.Context, store.Actor, string) ([]store.ClientStoryComment, error)
 	AddClientStoryComment(context.Context, store.Actor, string, string) (store.ClientStoryComment, error)
+	UpdateClientStoryComment(context.Context, store.Actor, string, int64, string) (store.ClientStoryComment, error)
+	DeleteClientStoryComment(context.Context, store.Actor, string, int64) error
 }
 
 func New(s *store.Store, verifier auth.Verifier, deviceConfig auth.DeviceConfig, releaseURL string, log *slog.Logger) *Server {
@@ -139,6 +141,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /assets/public.css", s.publicStyles)
 	mux.HandleFunc("GET /assets/public.js", s.publicScript)
 	mux.HandleFunc("GET /favicon.svg", s.favicon)
+	mux.HandleFunc("GET /openapi.v1.yaml", s.openAPI)
 	mux.HandleFunc("GET /login", s.login)
 	mux.HandleFunc("GET /auth/callback", s.browserCallback)
 	mux.HandleFunc("POST /logout", s.logout)
@@ -168,6 +171,14 @@ func (s *Server) portalProjectAction(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) portalStoryAction(w http.ResponseWriter, r *http.Request) {
 	path := r.PathValue("ref")
+	if ref, commentID, ok := portalStoryCommentAction(path, "edit"); ok {
+		s.portalUpdateStoryComment(w, r, ref, commentID)
+		return
+	}
+	if ref, commentID, ok := portalStoryCommentAction(path, "delete"); ok {
+		s.portalDeleteStoryComment(w, r, ref, commentID)
+		return
+	}
 	if ref, ok := strings.CutSuffix(path, "/ticket-comments"); ok && ref != "" {
 		s.portalAddInternalStoryComment(w, r, ref)
 		return
@@ -177,6 +188,19 @@ func (s *Server) portalStoryAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.NotFound(w, r)
+}
+
+func portalStoryCommentAction(path, action string) (string, int64, bool) {
+	path, ok := strings.CutSuffix(path, "/"+action)
+	if !ok {
+		return "", 0, false
+	}
+	ref, rawID, ok := projectItemSubresource(path, "comments")
+	if !ok {
+		return "", 0, false
+	}
+	commentID, err := strconv.ParseInt(rawID, 10, 64)
+	return ref, commentID, err == nil && commentID > 0
 }
 func (s *Server) deviceConfiguration(w http.ResponseWriter, r *http.Request) {
 	if s.deviceConfig.Issuer == "" || s.deviceConfig.ClientID == "" || s.deviceConfig.Audience == "" {
@@ -348,6 +372,22 @@ func (s *Server) createFeature(w http.ResponseWriter, r *http.Request, project s
 	writeJSON(w, 201, in)
 }
 func (s *Server) projectAdministration(w http.ResponseWriter, r *http.Request, path string) {
+	if project, ok := projectSubresource(path, "archive"); ok && r.Method == http.MethodPost {
+		if err := s.store.SetProjectArchived(r.Context(), actor(r), project, true); err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if project, ok := projectSubresource(path, "restore"); ok && r.Method == http.MethodPost {
+		if err := s.store.SetProjectArchived(r.Context(), actor(r), project, false); err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	if project, ok := projectSubresource(path, "members"); ok && r.Method == http.MethodGet {
 		members, err := s.store.ListProjectMembers(r.Context(), actor(r), project)
 		if err != nil {

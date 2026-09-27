@@ -17,9 +17,11 @@ type portalStoryRow struct {
 }
 
 type portalStoryCommentView struct {
-	Author    string
-	Body      template.HTML
-	CreatedAt time.Time
+	ID, AuthorCredentialID int64
+	Author                 string
+	Body                   template.HTML
+	CreatedAt              time.Time
+	CanManage              bool
 }
 
 type portalStoryView struct {
@@ -32,6 +34,8 @@ type portalStoryView struct {
 	InternalComments                 []portalStoryCommentView
 	CanCommentInternally             bool
 	CSRF, Error, DraftComment        string
+	EditError, DraftEditComment      string
+	DraftEditCommentID               int64
 	InternalCommentError             string
 	DraftInternalComment             string
 }
@@ -43,7 +47,7 @@ var portalStoryTemplate = template.Must(template.New("portal-story").Parse(`<!do
 <section aria-labelledby="progress-title"><h2 id="progress-title">Avancement</h2>{{if .ChildCount}}<label for="story-progress">Tâches terminées : {{.DoneChildren}} / {{.ChildCount}} ({{.Percent}} %)</label><progress id="story-progress" value="{{.DoneChildren}}" max="{{.ChildCount}}">{{.Percent}} %</progress>{{else}}<p>Cette US n’a pas encore de tâche liée.</p>{{end}}</section>
 <section aria-labelledby="description-title"><h2 id="description-title">Description</h2><div class="portal-markdown">{{.Description}}</div></section>
 {{if .CanCommentInternally}}<section aria-labelledby="internal-comments-title"><h2 id="internal-comments-title">Commentaires</h2>{{if .InternalComments}}<ol class="portal-comments">{{range .InternalComments}}<li><strong>{{.Author}}</strong> <time>{{.CreatedAt.Format "02/01/2006 15:04"}}</time><div class="portal-markdown">{{.Body}}</div></li>{{end}}</ol>{{else}}<p>Aucun commentaire pour le moment.</p>{{end}}{{if .InternalCommentError}}<p class="portal-error" role="alert">{{.InternalCommentError}}</p>{{end}}<form class="portal-form" action="/portal/stories/{{.Ref}}/ticket-comments" method="post"><input type="hidden" name="csrf" value="{{.CSRF}}"><label for="internal-comment-body">Ajouter un commentaire (Markdown accepté)</label><textarea id="internal-comment-body" name="body" maxlength="20000" rows="5" required>{{.DraftInternalComment}}</textarea><button class="button" type="submit">Publier le commentaire</button></form></section>{{end}}
-{{if .Published}}<section aria-labelledby="conversation-title"><h2 id="conversation-title">Conversation</h2>{{if .Comments}}<ol class="portal-comments">{{range .Comments}}<li><strong>{{.Author}}</strong> <time>{{.CreatedAt.Format "02/01/2006 15:04"}}</time><div class="portal-markdown">{{.Body}}</div></li>{{end}}</ol>{{else}}<p>Aucun commentaire pour le moment.</p>{{end}}</section>{{end}}
+{{if .Published}}<section aria-labelledby="conversation-title"><h2 id="conversation-title">Conversation</h2>{{if .Comments}}<ol class="portal-comments">{{range .Comments}}<li><strong>{{.Author}}</strong> <time>{{.CreatedAt.Format "02/01/2006 15:04"}}</time><div class="portal-markdown">{{.Body}}</div>{{if .CanManage}}{{if and $.EditError (eq $.DraftEditCommentID .ID)}}<p class="portal-error" role="alert">{{$.EditError}}</p>{{end}}<form class="portal-form" action="/portal/stories/{{$.Ref}}/comments/{{.ID}}/edit" method="post"><input type="hidden" name="csrf" value="{{$.CSRF}}"><label for="comment-{{.ID}}">Modifier votre commentaire</label><textarea id="comment-{{.ID}}" name="body" maxlength="20000" rows="4" required>{{if eq $.DraftEditCommentID .ID}}{{$.DraftEditComment}}{{else}}{{.Body}}{{end}}</textarea><button class="button" type="submit">Enregistrer</button></form><form action="/portal/stories/{{$.Ref}}/comments/{{.ID}}/delete" method="post"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="link-button" type="submit">Supprimer votre commentaire</button></form>{{end}}</li>{{end}}</ol>{{else}}<p>Aucun commentaire pour le moment.</p>{{end}}</section>{{end}}
 {{if .Published}}<section aria-labelledby="comment-title"><h2 id="comment-title">Ajouter un commentaire</h2>{{if .Error}}<p class="portal-error" role="alert">{{.Error}}</p>{{end}}<form class="portal-form" action="/portal/stories/{{.Ref}}/comments" method="post"><input type="hidden" name="csrf" value="{{.CSRF}}"><label for="comment-body">Votre message (Markdown accepté)</label><textarea id="comment-body" name="body" maxlength="20000" rows="5" required>{{.DraftComment}}</textarea><button class="button" type="submit">Publier le commentaire</button></form></section>{{end}}
 </main></body></html>`))
 
@@ -89,7 +93,7 @@ func (s *Server) storyView(r *http.Request, ref string) (portalStoryView, error)
 		ChildCount: story.ChildCount, DoneChildren: story.DoneChildren, Percent: progressPercent(story.DoneChildren, story.ChildCount), Published: story.Published, CSRF: s.portalCSRF(r),
 	}
 	for _, comment := range comments {
-		view.Comments = append(view.Comments, portalStoryCommentView{Author: comment.Author, Body: renderPortalMarkdown(comment.Body), CreatedAt: comment.CreatedAt})
+		view.Comments = append(view.Comments, portalStoryCommentView{ID: comment.ID, AuthorCredentialID: comment.AuthorCredentialID, Author: comment.Author, Body: renderPortalMarkdown(comment.Body), CreatedAt: comment.CreatedAt, CanManage: comment.AuthorCredentialID == actor(r).CredentialID})
 	}
 	internalComments, err := s.stories.ListInternalStoryComments(r.Context(), actor(r), ref)
 	if err == nil {
@@ -101,6 +105,43 @@ func (s *Server) storyView(r *http.Request, ref string) (portalStoryView, error)
 		return portalStoryView{}, err
 	}
 	return view, nil
+}
+
+func (s *Server) portalUpdateStoryComment(w http.ResponseWriter, r *http.Request, ref string, commentID int64) {
+	if !s.validPortalForm(w, r) {
+		return
+	}
+	body := r.PostForm.Get("body")
+	if _, err := s.stories.UpdateClientStoryComment(r.Context(), actor(r), ref, commentID, body); err == nil {
+		http.Redirect(w, r, "/portal/stories/"+strings.ToUpper(ref), http.StatusSeeOther)
+		return
+	} else if errors.Is(err, store.ErrForbidden) || errors.Is(err, store.ErrNotFound) {
+		s.portalReadError(w, err)
+		return
+	} else if !errors.Is(err, store.ErrInvalidClientRequest) {
+		s.portalReadError(w, err)
+		return
+	}
+	view, err := s.storyView(r, ref)
+	if err != nil {
+		s.portalReadError(w, err)
+		return
+	}
+	view.DraftEditCommentID, view.DraftEditComment, view.EditError = commentID, body, "Vérifiez votre commentaire, puis réessayez."
+	s.portalHeaders(w)
+	w.WriteHeader(http.StatusUnprocessableEntity)
+	_ = portalStoryTemplate.Execute(w, view)
+}
+
+func (s *Server) portalDeleteStoryComment(w http.ResponseWriter, r *http.Request, ref string, commentID int64) {
+	if !s.validPortalForm(w, r) {
+		return
+	}
+	if err := s.stories.DeleteClientStoryComment(r.Context(), actor(r), ref, commentID); err != nil {
+		s.portalReadError(w, err)
+		return
+	}
+	http.Redirect(w, r, "/portal/stories/"+strings.ToUpper(ref), http.StatusSeeOther)
 }
 
 func (s *Server) portalStory(w http.ResponseWriter, r *http.Request) {

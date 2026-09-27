@@ -103,6 +103,7 @@ indicate whether a user story is visible in the client portal.
 
 Run `htb help` or `htb help ticket create` for command options. The
 [command guide](https://htboard.xyz/commands) is also available on the web.
+Integrations can start from the versioned [OpenAPI v1 contract](/openapi.v1.yaml).
 
 ### Share a user story with clients
 

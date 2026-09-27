@@ -118,15 +118,30 @@ func TestClientStoryPublicationAndPublicConversation(t *testing.T) {
 	if _, err := s.AddInternalStoryComment(ctx, client, story.Ref, "Secret"); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("client added internal comment: %v", err)
 	}
-	if _, err = s.AddClientStoryComment(ctx, client, story.Ref, "Question client"); err != nil {
+	clientComment, err := s.AddClientStoryComment(ctx, client, story.Ref, "Question client")
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.AddClientStoryComment(ctx, admin, story.Ref, "Réponse équipe"); err != nil {
+	teamComment, err := s.AddClientStoryComment(ctx, admin, story.Ref, "Réponse équipe")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.UpdateClientStoryComment(ctx, client, story.Ref, clientComment.ID, "Question corrigée"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.UpdateClientStoryComment(ctx, client, story.Ref, teamComment.ID, "Tentative"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("client updated another author comment: %v", err)
+	}
+	comments, err = s.ListClientStoryComments(ctx, client, story.Ref)
+	if err != nil || len(comments) != 2 || comments[0].Body != "Question corrigée" || comments[1].Body != "Réponse équipe" {
+		t.Fatalf("public conversation: %+v, %v", comments, err)
+	}
+	if err = s.DeleteClientStoryComment(ctx, client, story.Ref, clientComment.ID); err != nil {
 		t.Fatal(err)
 	}
 	comments, err = s.ListClientStoryComments(ctx, client, story.Ref)
-	if err != nil || len(comments) != 2 || comments[0].Body != "Question client" || comments[1].Body != "Réponse équipe" {
-		t.Fatalf("public conversation: %+v, %v", comments, err)
+	if err != nil || len(comments) != 1 || comments[0].ID != teamComment.ID {
+		t.Fatalf("client comment deletion: %+v, %v", comments, err)
 	}
 	completed := string(domain.Done)
 	if _, err = s.UpdateTicket(ctx, admin, technical.Ref, UpdateTicket{Status: &completed, ExpectedVersion: technical.Version}); err != nil {

@@ -316,6 +316,12 @@ func TestNamespacedProjectAdministrationOverHTTP(t *testing.T) {
 	if response := requestJSON(t, server, http.MethodGet, "/api/v1/projects/"+renamedKey+"/members", ""); response.Code != http.StatusOK {
 		t.Fatalf("list renamed namespaced project members: %d %s", response.Code, response.Body.String())
 	}
+	if response := requestJSON(t, server, http.MethodPost, "/api/v1/projects/"+renamedKey+"/archive", `{}`); response.Code != http.StatusNoContent {
+		t.Fatalf("archive namespaced project: %d %s", response.Code, response.Body.String())
+	}
+	if response := requestJSON(t, server, http.MethodPost, "/api/v1/projects/"+renamedKey+"/restore", `{}`); response.Code != http.StatusNoContent {
+		t.Fatalf("restore namespaced project: %d %s", response.Code, response.Body.String())
+	}
 	otherServer := New(data, integrationVerifier{subject: otherSubject}, auth.DeviceConfig{}, "", slog.Default())
 	if response := requestJSON(t, otherServer, http.MethodPost, "/api/v1/projects", `{"key":"ALICE/OTHER","name":"Reserved namespace"}`); response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), `"namespace_reserved"`) {
 		t.Fatalf("use another account namespace: %d %s", response.Code, response.Body.String())

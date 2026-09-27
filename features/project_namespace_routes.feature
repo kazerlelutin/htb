@@ -29,3 +29,8 @@ Feature: Administration des projets namespacés
     And the user story "KAZERLELUTIN/HTB-1" is open
     When the user runs "htb ticket update --version 1 --status done KAZERLELUTIN/HTB-1"
     Then the user story status is "done"
+
+  Scenario: Archiver puis restaurer un projet namespacé
+    Given the authenticated user owns the project "ALICE/SITE"
+    When the user archives and then restores "ALICE/SITE"
+    Then its existing data and memberships remain available

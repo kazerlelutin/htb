@@ -167,6 +167,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 		{"0009_client_request_rejection", htb.ClientRequestRejectionMigration},
 		{"0010_namespaced_project_keys", htb.NamespacedProjectKeysMigration},
 		{"0011_namespace_reservations", htb.NamespaceReservationsMigration},
+		{"0012_client_story_comment_lifecycle", htb.ClientStoryCommentLifecycleMigration},
 	}
 	for _, migration := range migrations {
 		var exists bool
@@ -337,6 +338,39 @@ func (s *Store) UpdateProjectKey(ctx context.Context, actor Actor, oldKey string
 	// Update the key
 	_, err = tx.ExecContext(ctx, `UPDATE projects SET key=$1 WHERE key=$2`, normalized, strings.ToUpper(oldKey))
 	if err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// SetProjectArchived preserves a project's data while removing or restoring it
+// from active work. Only its owner (or a superadmin) can change this state.
+func (s *Store) SetProjectArchived(ctx context.Context, actor Actor, project string, archived bool) error {
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	projectID, ownerID, err := projectAdministration(ctx, tx, project)
+	if err != nil {
+		return err
+	}
+	if !actor.Superadmin && actor.UserID != ownerID {
+		return ErrForbidden
+	}
+	if archived {
+		_, err = tx.ExecContext(ctx, `UPDATE projects SET archived_at=COALESCE(archived_at,now()) WHERE id=$1`, projectID)
+	} else {
+		_, err = tx.ExecContext(ctx, `UPDATE projects SET archived_at=NULL WHERE id=$1`, projectID)
+	}
+	if err != nil {
+		return err
+	}
+	action := "project_restored"
+	if archived {
+		action = "project_archived"
+	}
+	if err = writeProjectEvent(ctx, tx, projectID, actor.CredentialID, action, map[string]any{"project": strings.ToUpper(project)}); err != nil {
 		return err
 	}
 	return tx.Commit()

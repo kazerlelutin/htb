@@ -189,6 +189,39 @@ le serveur refuse de démarrer, vérifiez aussi la clé de session et la
 connectivité vers Zitadel. Pour désactiver le portail sans supprimer ses
 données, videz `HTBD_ZITADEL_WEB_CLIENT_ID` puis redéployez.
 
+### Procédure de sauvegarde, restauration et supervision
+
+Planifiez une sauvegarde PostgreSQL quotidienne chiffrée en dehors du
+conteneur HTB. Conservez une copie dans un emplacement distinct et appliquez
+la durée de rétention de votre organisation. Exemple de sauvegarde logique :
+
+```bash
+pg_dump --format=custom --no-owner "$HTBD_DATABASE_URL" > htb-$(date +%F).dump
+```
+
+Au moins chaque trimestre, restaurez une sauvegarde récente dans une base
+**vide et hors production** avec `pg_restore --clean --if-exists`, démarrez
+HTBD dessus, puis contrôlez `/health`, la connexion, la liste d’un projet et la
+lecture d’un ticket. Ne testez jamais une restauration sur la base de
+production.
+
+Supervisez `https://votre-domaine/health` depuis l’extérieur de votre
+infrastructure. Alertez en cas de réponse différente de 200 et consignez la
+révision Git déployée pour chaque incident. `/health` vérifie PostgreSQL et
+convient au contrôle de disponibilité et de readiness.
+
+### Demandes relatives aux données de compte
+
+HTB délègue la gestion d’identité à Zitadel. Pour une demande d’accès,
+d’export, de rectification ou d’effacement, vérifiez d’abord la personne via
+son compte Zitadel, puis consignez la demande et son résultat. N’exportez ou
+ne supprimez les données HTB qu’après sauvegarde et validation du propriétaire
+concerné lorsqu’un projet est affecté. La suppression d’un compte implique les
+sessions web, identifiants, appartenances, invitations et contenus publiés :
+ne lancez pas de SQL de suppression improvisé en production. En l’absence de
+parcours libre-service, traitez ces demandes via le contact de la politique de
+confidentialité.
+
 ### Migrations de base de données
 
 HTB applique automatiquement les migrations de base de données au démarrage du

@@ -195,7 +195,7 @@ Use "htb help ticket create" or "htb ticket create --help" for command details.
 	case "auth status":
 		return "Usage: htb auth status\n\nShow whether you are connected, your accessible projects, and the current project.\n"
 	case "project":
-		return "Usage:\n  htb project list | status | use KEY\n  htb project create --key KEY --name NAME [--description TEXT]\n  htb project rename --new-key KEY [--project KEY]\n  htb project members [--project KEY]\n  htb project member set-role --user ID --role read|write|admin [--project KEY]\n  htb project member remove --user ID [--project KEY]\n\nA project key is the short identifier used in commands and ticket references, for example HTB-1 or ALICE/SITE-1. Input is normalized to uppercase. It must be 2 to 20 characters per part, start with a letter, and contain only letters, digits, or underscores. An optional namespace prefix (NAMESPACE/KEY) allows multiple projects with the same short key.\n"
+		return "Usage:\n  htb project list | status | use KEY\n  htb project create --key KEY --name NAME [--description TEXT]\n  htb project rename --new-key KEY [--project KEY]\n  htb project archive|restore [--project KEY]\n  htb project members [--project KEY]\n  htb project member set-role --user ID --role read|write|admin [--project KEY]\n  htb project member remove --user ID [--project KEY]\n\nA project key is the short identifier used in commands and ticket references, for example HTB-1 or ALICE/SITE-1. Input is normalized to uppercase. It must be 2 to 20 characters per part, start with a letter, and contain only letters, digits, or underscores. An optional namespace prefix (NAMESPACE/KEY) allows multiple projects with the same short key.\n"
 	case "project list":
 		return "Usage: htb project list\n\nList projects you can access.\n"
 	case "project status":
@@ -533,6 +533,9 @@ func projectCommand(args []string) error {
 	if len(args) > 0 && args[0] == "rename" {
 		return projectRename(args[1:])
 	}
+	if len(args) > 0 && (args[0] == "archive" || args[0] == "restore") {
+		return projectArchive(args[0], args[1:])
+	}
 	if len(args) == 2 && args[0] == "use" {
 		var response struct {
 			Projects []struct {
@@ -639,7 +642,7 @@ func projectCommand(args []string) error {
 		return nil
 	}
 	if len(args) == 0 || args[0] != "create" {
-		return errors.New("usage: htb project {list|status|use KEY|create|members|member}")
+		return errors.New("usage: htb project {list|status|use KEY|create|rename|archive|restore|members|member}")
 	}
 	fs := flag.NewFlagSet("project create", flag.ContinueOnError)
 	key := fs.String("key", "", "project key")
@@ -901,6 +904,29 @@ func projectRename(args []string) error {
 		save(c)
 	}
 	fmt.Printf("Project %s renamed to %s\n", *project, normalized)
+	return nil
+}
+
+func projectArchive(action string, args []string) error {
+	fs := flag.NewFlagSet("project "+action, flag.ContinueOnError)
+	project := fs.String("project", "", "project key")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return errors.New("usage: htb project " + action + " [--project KEY]")
+	}
+	if *project == "" {
+		var err error
+		*project, err = currentProject()
+		if err != nil {
+			return err
+		}
+	}
+	if err := call("POST", "/api/v1/projects/"+strings.ToUpper(*project)+"/"+action, map[string]any{}, &struct{}{}); err != nil {
+		return err
+	}
+	fmt.Printf("Project %s %s.\n", strings.ToUpper(*project), map[string]string{"archive": "archived", "restore": "restored"}[action])
 	return nil
 }
 

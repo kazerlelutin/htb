@@ -189,6 +189,15 @@ func TestPublicPages(t *testing.T) {
 	}
 }
 
+func TestOpenAPIDocumentIsPublicAndVersioned(t *testing.T) {
+	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "", slog.Default())
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/openapi.v1.yaml", nil))
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "openapi: 3.1.0") || !strings.Contains(w.Body.String(), "version: v1") {
+		t.Fatalf("unexpected OpenAPI response: %d %s", w.Code, w.Body.String())
+	}
+}
+
 func TestHomeShowsHostedAndSelfHostedPaths(t *testing.T) {
 	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "", slog.Default())
 	if s.publicURL != "https://htboard.xyz" {

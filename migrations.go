@@ -37,3 +37,6 @@ var NamespacedProjectKeysMigration string
 
 //go:embed migrations/0011_namespace_reservations.sql
 var NamespaceReservationsMigration string
+
+//go:embed migrations/0012_client_story_comment_lifecycle.sql
+var ClientStoryCommentLifecycleMigration string
