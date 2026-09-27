@@ -9,28 +9,27 @@ import (
 )
 
 func (s *Server) clientStoryAPI(w http.ResponseWriter, r *http.Request, tail string) {
-	parts := strings.Split(tail, "/")
-	if len(parts) != 2 || parts[0] == "" {
+	ref, resource, ok := clientStorySubresource(tail)
+	if !ok {
 		writeError(w, http.StatusNotFound, "not_found", "Route not found", nil)
 		return
 	}
-	ref := parts[0]
 	switch {
-	case parts[1] == "publication" && (r.Method == http.MethodPut || r.Method == http.MethodDelete):
+	case resource == "publication" && (r.Method == http.MethodPut || r.Method == http.MethodDelete):
 		published := r.Method == http.MethodPut
 		if err := s.stories.SetClientStoryPublished(r.Context(), actor(r), ref, published); err != nil {
 			s.writeClientStoryError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"ref": strings.ToUpper(ref), "published": published})
-	case parts[1] == "comments" && r.Method == http.MethodGet:
+	case resource == "comments" && r.Method == http.MethodGet:
 		comments, err := s.stories.ListClientStoryComments(r.Context(), actor(r), ref)
 		if err != nil {
 			s.writeClientStoryError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"comments": comments})
-	case parts[1] == "comments" && r.Method == http.MethodPost:
+	case resource == "comments" && r.Method == http.MethodPost:
 		var in struct {
 			Body string `json:"body"`
 		}
@@ -46,6 +45,15 @@ func (s *Server) clientStoryAPI(w http.ResponseWriter, r *http.Request, tail str
 	default:
 		writeError(w, http.StatusNotFound, "not_found", "Route not found", nil)
 	}
+}
+
+func clientStorySubresource(path string) (string, string, bool) {
+	for _, resource := range []string{"publication", "comments"} {
+		if ref, ok := ticketSubresource(path, resource); ok {
+			return ref, resource, true
+		}
+	}
+	return "", "", false
 }
 
 func (s *Server) writeClientStoryError(w http.ResponseWriter, err error) {

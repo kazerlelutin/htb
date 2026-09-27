@@ -97,6 +97,31 @@ func TestProjectAdministrationRouteParsersKeepNamespacedKeys(t *testing.T) {
 	}
 }
 
+func TestTicketRouteParsersKeepNamespacedReferences(t *testing.T) {
+	const ref = "ALICE/SITE-12"
+	for _, test := range []struct {
+		path, resource string
+	}{
+		{ref + "/comments", "comments"},
+		{ref + "/activity", "activity"},
+		{ref + "/claim", "claim"},
+		{ref + "/release", "release"},
+		{ref + "/versions", "versions"},
+	} {
+		got, ok := ticketSubresource(test.path, test.resource)
+		if !ok || got != ref {
+			t.Errorf("ticketSubresource(%q, %q) = (%q, %t), want (%q, true)", test.path, test.resource, got, ok, ref)
+		}
+	}
+	gotRef, revision, ok := ticketRevisionRestore(ref + "/versions/3/restore")
+	if !ok || gotRef != ref || revision != "3" {
+		t.Fatalf("ticketRevisionRestore() = (%q, %q, %t), want (%q, %q, true)", gotRef, revision, ok, ref, "3")
+	}
+	if _, ok := ticketReference("ALICE/SITE"); ok {
+		t.Fatal("ticketReference accepted a project key without a ticket number")
+	}
+}
+
 func TestPublicPages(t *testing.T) {
 	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "https://github.example/releases?x=1&y=2", slog.Default())
 	for _, path := range []string{"/", "/downloads?lang=en", "/commands?lang=en", "/mentions-legales", "/cgu", "/privacy"} {

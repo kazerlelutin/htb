@@ -245,7 +245,10 @@ func TestClientStoryCommentUsesPublicConversationAndCSRF(t *testing.T) {
 
 func TestClientStoryAPIKeepsPublicationAndCommentsSeparate(t *testing.T) {
 	s, _, _ := portalTestServer()
-	stories := &clientStoryStub{stories: []store.ClientStory{{Ref: "SITE-12", Project: "SITE", Title: "Exporter"}}}
+	stories := &clientStoryStub{stories: []store.ClientStory{
+		{Ref: "SITE-12", Project: "SITE", Title: "Exporter"},
+		{Ref: "ALICE/SITE-13", Project: "ALICE/SITE", Title: "Namespaced"},
+	}}
 	s.stories = stories
 	for _, test := range []struct {
 		method, tail string
@@ -255,6 +258,7 @@ func TestClientStoryAPIKeepsPublicationAndCommentsSeparate(t *testing.T) {
 		{http.MethodDelete, "SITE-12/publication", http.StatusOK},
 		{http.MethodGet, "SITE-12/comments", http.StatusOK},
 		{http.MethodPut, "SITE-12/comments", http.StatusNotFound},
+		{http.MethodGet, "ALICE/SITE-13/comments", http.StatusOK},
 	} {
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(test.method, "/api/v1/client-stories/"+test.tail, nil).WithContext(context.WithValue(context.Background(), actorKey{}, store.Actor{CredentialID: 1}))

@@ -23,3 +23,9 @@ Feature: Administration des projets namespacés
     When the client opens "/portal/projects/MO5/PROMEAI"
     Then the project dashboard is displayed
     And the project is grouped under the "MO5" namespace on the portal home
+
+  Scenario: Mettre à jour une US namespacée avec la CLI
+    Given an authenticated user can administer the project "KAZERLELUTIN/HTB"
+    And the user story "KAZERLELUTIN/HTB-1" is open
+    When the user runs "htb ticket update --version 1 --status done KAZERLELUTIN/HTB-1"
+    Then the user story status is "done"

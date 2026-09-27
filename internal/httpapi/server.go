@@ -441,6 +441,42 @@ func projectItemSubresource(path, resource string) (string, string, bool) {
 	}
 	return path[:idx], item, true
 }
+
+// ticketReference accepts a complete ticket reference, including a possible
+// namespace in its project key.
+func ticketReference(path string) (string, bool) {
+	if _, _, err := domain.ParseReference(path); err != nil {
+		return "", false
+	}
+	return path, true
+}
+
+// ticketSubresource extracts a complete ticket reference before a named
+// resource. A ticket reference can contain a slash when its project is
+// namespaced, so its path must be parsed from the end.
+func ticketSubresource(path, resource string) (string, bool) {
+	ref, ok := strings.CutSuffix(path, "/"+resource)
+	if !ok {
+		return "", false
+	}
+	return ticketReference(ref)
+}
+
+// ticketRevisionRestore extracts a ticket reference and a revision from a
+// restore route, preserving an optional project namespace.
+func ticketRevisionRestore(path string) (string, string, bool) {
+	path, ok := strings.CutSuffix(path, "/restore")
+	if !ok {
+		return "", "", false
+	}
+	ref, revision, ok := projectItemSubresource(path, "versions")
+	if !ok {
+		return "", "", false
+	}
+	ref, ok = ticketReference(ref)
+	return ref, revision, ok
+}
+
 func (s *Server) listTickets(w http.ResponseWriter, r *http.Request) {
 	project := r.URL.Query().Get("project")
 	if project == "" {
@@ -475,10 +511,8 @@ func (s *Server) createTicket(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 201, ticket)
 }
 func (s *Server) ticket(w http.ResponseWriter, r *http.Request, tail string) {
-	parts := strings.Split(tail, "/")
-	ref := parts[0]
-	if len(parts) == 4 && parts[1] == "versions" && parts[3] == "restore" && r.Method == "POST" {
-		revision, err := strconv.Atoi(parts[2])
+	if ref, revisionText, ok := ticketRevisionRestore(tail); ok && r.Method == "POST" {
+		revision, err := strconv.Atoi(revisionText)
 		if err != nil {
 			writeError(w, 400, "invalid_request", "Revision must be numeric", nil)
 			return
@@ -497,7 +531,7 @@ func (s *Server) ticket(w http.ResponseWriter, r *http.Request, tail string) {
 		writeJSON(w, 200, ticket)
 		return
 	}
-	if len(parts) == 2 && parts[1] == "comments" && r.Method == "GET" {
+	if ref, ok := ticketSubresource(tail, "comments"); ok && r.Method == "GET" {
 		comments, err := s.store.Comments(r.Context(), actor(r), ref)
 		if err != nil {
 			writeStoreError(w, err)
@@ -506,7 +540,7 @@ func (s *Server) ticket(w http.ResponseWriter, r *http.Request, tail string) {
 		writeJSON(w, 200, map[string]any{"comments": comments})
 		return
 	}
-	if len(parts) == 2 && parts[1] == "comments" && r.Method == "POST" {
+	if ref, ok := ticketSubresource(tail, "comments"); ok && r.Method == "POST" {
 		var in struct {
 			Body string `json:"body"`
 		}
@@ -521,7 +555,7 @@ func (s *Server) ticket(w http.ResponseWriter, r *http.Request, tail string) {
 		writeJSON(w, 201, comment)
 		return
 	}
-	if len(parts) == 2 && parts[1] == "activity" && r.Method == "GET" {
+	if ref, ok := ticketSubresource(tail, "activity"); ok && r.Method == "GET" {
 		activity, err := s.store.Activity(r.Context(), actor(r), ref)
 		if err != nil {
 			writeStoreError(w, err)
@@ -530,7 +564,7 @@ func (s *Server) ticket(w http.ResponseWriter, r *http.Request, tail string) {
 		writeJSON(w, 200, map[string]any{"activity": activity})
 		return
 	}
-	if len(parts) == 2 && parts[1] == "claim" && r.Method == "POST" {
+	if ref, ok := ticketSubresource(tail, "claim"); ok && r.Method == "POST" {
 		ticket, err := s.store.Claim(r.Context(), actor(r), ref)
 		if err != nil {
 			writeStoreError(w, err)
@@ -539,7 +573,7 @@ func (s *Server) ticket(w http.ResponseWriter, r *http.Request, tail string) {
 		writeJSON(w, 200, ticket)
 		return
 	}
-	if len(parts) == 2 && parts[1] == "release" && r.Method == "POST" {
+	if ref, ok := ticketSubresource(tail, "release"); ok && r.Method == "POST" {
 		if err := s.store.Release(r.Context(), actor(r), ref); err != nil {
 			writeStoreError(w, err)
 			return
@@ -547,7 +581,7 @@ func (s *Server) ticket(w http.ResponseWriter, r *http.Request, tail string) {
 		writeJSON(w, 200, map[string]string{"status": "released"})
 		return
 	}
-	if len(parts) == 2 && parts[1] == "versions" && r.Method == "GET" {
+	if ref, ok := ticketSubresource(tail, "versions"); ok && r.Method == "GET" {
 		versions, err := s.store.Revisions(r.Context(), actor(r), ref)
 		if err != nil {
 			writeStoreError(w, err)
@@ -556,11 +590,13 @@ func (s *Server) ticket(w http.ResponseWriter, r *http.Request, tail string) {
 		writeJSON(w, 200, map[string]any{"versions": versions})
 		return
 	}
+	ref, ok := ticketReference(tail)
+	if !ok {
+		writeError(w, 404, "not_found", "Route not found", nil)
+		return
+	}
 	switch r.Method {
 	case "GET":
-		if len(parts) != 1 {
-			break
-		}
 		ticket, err := s.store.GetTicket(r.Context(), actor(r), ref)
 		if err != nil {
 			writeStoreError(w, err)
@@ -569,9 +605,6 @@ func (s *Server) ticket(w http.ResponseWriter, r *http.Request, tail string) {
 		writeJSON(w, 200, ticket)
 		return
 	case "PATCH":
-		if len(parts) != 1 {
-			break
-		}
 		var in store.UpdateTicket
 		if !decode(w, r, &in) {
 			return
