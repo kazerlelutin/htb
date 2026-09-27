@@ -746,6 +746,7 @@ func projectMember(args []string) error {
 }
 
 func projectStatus(namespace string) error {
+	namespace = normalizeNamespaceFilter(namespace)
 	var response struct {
 		Projects []projectStatusView `json:"projects"`
 	}
@@ -818,6 +819,10 @@ func projectStatus(namespace string) error {
 		fmt.Printf("  %s\n", statusBreakdown(project.Statuses))
 	}
 	return nil
+}
+
+func normalizeNamespaceFilter(namespace string) string {
+	return strings.ToUpper(strings.TrimSpace(namespace))
 }
 
 func projectRename(args []string) error {

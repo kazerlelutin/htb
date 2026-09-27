@@ -12,3 +12,8 @@ Feature: Administration des projets namespacés
     Given an authenticated user named "123 Alice"
     When the user creates a project without a namespace
     Then the suggested namespace is a valid project-key prefix
+
+  Scenario: Filtrer un namespace sans respecter la casse
+    Given an accessible project in the "ALICE" namespace
+    When the user runs project status with namespace "alice"
+    Then the project is included in the status output

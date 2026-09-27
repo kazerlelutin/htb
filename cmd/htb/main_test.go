@@ -110,6 +110,18 @@ func TestProjectStatusViewDecodesAggregate(t *testing.T) {
 	}
 }
 
+func TestNormalizeNamespaceFilter(t *testing.T) {
+	for input, want := range map[string]string{
+		"alice":   "ALICE",
+		" Alice ": "ALICE",
+		"":        "",
+	} {
+		if got := normalizeNamespaceFilter(input); got != want {
+			t.Errorf("normalizeNamespaceFilter(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
 func TestProjectCreationValidationExplainsAndNormalizesKey(t *testing.T) {
 	key, err := validateProjectCreation(" htb ", "HTB")
 	if err != nil || key != "HTB" {

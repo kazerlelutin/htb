@@ -44,6 +44,7 @@ var downloadCommands = []commandReference{
 	{"Projects", "htb project status [--namespace NAMESPACE]", "Show progress for every accessible project, including user stories, all tickets, and their status breakdown. Use --namespace to filter by namespace; projects are grouped automatically when multiple namespaces exist."},
 	{"Projects", "htb project create --key KEY --name NAME [--description TEXT]", "Create a project and select it immediately. KEY identifies the project in commands and ticket references such as HTB-1 or ALICE/SITE-1; lowercase input is converted to uppercase. An optional namespace prefix (NAMESPACE/KEY) allows multiple projects with the same short key."},
 	{"Projects", "htb project use KEY", "Select the project used when a command does not include --project. KEY can be a short key (e.g., SITE) or a namespaced key (e.g., ALICE/SITE). If ambiguous, the CLI will list options."},
+	{"Projects", "htb project rename --new-key KEY [--project KEY]", "Rename a project key, including its namespace. Project administrators only; when the current project is renamed, the local selection is updated."},
 	{"Projects", "htb project members [--project KEY]", "List project members. Administrators can use member IDs to change roles or remove access."},
 	{"Projects", "htb project member set-role --user ID --role read|write|admin [--project KEY]", "Change a non-owner member role. The project owner cannot be demoted."},
 	{"Projects", "htb project member remove --user ID [--project KEY]", "Remove a non-owner member from a project."},

@@ -27,6 +27,8 @@ htb project create --key SITE --name "Website"
 The project key (`SITE`) is the short identifier used in commands and ticket
 references (`SITE-1`). You can optionally prefix it with a namespace
 (`ALICE/SITE`) to allow multiple projects with the same short key.
+Project administrators can rename a key later, including its namespace, with
+`htb project rename --new-key ALICE/SITE`.
 
 Sign-in opens in your browser through Zitadel. If someone invites you to an
 existing project, use `htb invite accept CODE` instead of creating one.
