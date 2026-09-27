@@ -297,9 +297,8 @@ func (s *Server) createFeature(w http.ResponseWriter, r *http.Request, project s
 	writeJSON(w, 201, in)
 }
 func (s *Server) projectAdministration(w http.ResponseWriter, r *http.Request, path string) {
-	parts := strings.Split(path, "/")
-	if len(parts) == 2 && parts[1] == "members" && r.Method == http.MethodGet {
-		members, err := s.store.ListProjectMembers(r.Context(), actor(r), parts[0])
+	if project, ok := projectSubresource(path, "members"); ok && r.Method == http.MethodGet {
+		members, err := s.store.ListProjectMembers(r.Context(), actor(r), project)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -307,8 +306,8 @@ func (s *Server) projectAdministration(w http.ResponseWriter, r *http.Request, p
 		writeJSON(w, http.StatusOK, map[string]any{"members": members})
 		return
 	}
-	if len(parts) == 3 && parts[1] == "members" && (r.Method == http.MethodPatch || r.Method == http.MethodDelete) {
-		userID, err := strconv.ParseInt(parts[2], 10, 64)
+	if project, memberID, ok := projectItemSubresource(path, "members"); ok && (r.Method == http.MethodPatch || r.Method == http.MethodDelete) {
+		userID, err := strconv.ParseInt(memberID, 10, 64)
 		if err != nil || userID < 1 {
 			writeError(w, http.StatusBadRequest, "invalid_request", "Member ID must be numeric", nil)
 			return
@@ -320,9 +319,9 @@ func (s *Server) projectAdministration(w http.ResponseWriter, r *http.Request, p
 			if !decode(w, r, &in) {
 				return
 			}
-			err = s.store.UpdateProjectMemberRole(r.Context(), actor(r), parts[0], userID, in.Role)
+			err = s.store.UpdateProjectMemberRole(r.Context(), actor(r), project, userID, in.Role)
 		} else {
-			err = s.store.RemoveProjectMember(r.Context(), actor(r), parts[0], userID)
+			err = s.store.RemoveProjectMember(r.Context(), actor(r), project, userID)
 		}
 		if err != nil {
 			writeStoreError(w, err)
@@ -331,8 +330,8 @@ func (s *Server) projectAdministration(w http.ResponseWriter, r *http.Request, p
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	if len(parts) == 2 && parts[1] == "invitations" && r.Method == http.MethodGet {
-		invitations, err := s.store.ListPendingInvitations(r.Context(), actor(r), parts[0])
+	if project, ok := projectSubresource(path, "invitations"); ok && r.Method == http.MethodGet {
+		invitations, err := s.store.ListPendingInvitations(r.Context(), actor(r), project)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -340,27 +339,27 @@ func (s *Server) projectAdministration(w http.ResponseWriter, r *http.Request, p
 		writeJSON(w, http.StatusOK, map[string]any{"invitations": invitations})
 		return
 	}
-	if len(parts) == 3 && parts[1] == "invitations" && r.Method == http.MethodDelete {
-		invitationID, err := strconv.ParseInt(parts[2], 10, 64)
+	if project, invitation, ok := projectItemSubresource(path, "invitations"); ok && r.Method == http.MethodDelete {
+		invitationID, err := strconv.ParseInt(invitation, 10, 64)
 		if err != nil || invitationID < 1 {
 			writeError(w, http.StatusBadRequest, "invalid_request", "Invitation ID must be numeric", nil)
 			return
 		}
-		if err = s.store.RevokeInvitation(r.Context(), actor(r), parts[0], invitationID); err != nil {
+		if err = s.store.RevokeInvitation(r.Context(), actor(r), project, invitationID); err != nil {
 			writeStoreError(w, err)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	if len(parts) == 2 && parts[1] == "key" && r.Method == http.MethodPut {
+	if project, ok := projectSubresource(path, "key"); ok && r.Method == http.MethodPut {
 		var in struct {
 			Key string `json:"key"`
 		}
 		if !decode(w, r, &in) {
 			return
 		}
-		if err := s.store.UpdateProjectKey(r.Context(), actor(r), parts[0], in.Key); err != nil {
+		if err := s.store.UpdateProjectKey(r.Context(), actor(r), project, in.Key); err != nil {
 			writeStoreError(w, err)
 			return
 		}
@@ -368,6 +367,28 @@ func (s *Server) projectAdministration(w http.ResponseWriter, r *http.Request, p
 		return
 	}
 	writeError(w, http.StatusNotFound, "not_found", "Route not found", nil)
+}
+
+// projectSubresource extracts a complete project key before a named resource.
+// Project keys may contain one slash as a namespace separator, so splitting the
+// path into fixed positions would lose part of the key.
+func projectSubresource(path, resource string) (string, bool) {
+	project, ok := strings.CutSuffix(path, "/"+resource)
+	return project, ok && project != ""
+}
+
+// projectItemSubresource extracts a complete project key and an item ID.
+func projectItemSubresource(path, resource string) (string, string, bool) {
+	marker := "/" + resource + "/"
+	idx := strings.LastIndex(path, marker)
+	if idx <= 0 || idx+len(marker) == len(path) {
+		return "", "", false
+	}
+	item := path[idx+len(marker):]
+	if strings.Contains(item, "/") {
+		return "", "", false
+	}
+	return path[:idx], item, true
 }
 func (s *Server) listTickets(w http.ResponseWriter, r *http.Request) {
 	project := r.URL.Query().Get("project")

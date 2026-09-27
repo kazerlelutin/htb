@@ -64,6 +64,39 @@ func (stub *browserSessionStub) AcceptInvitation(_ context.Context, _, _, _, cod
 	return nil
 }
 
+func TestProjectAdministrationRouteParsersKeepNamespacedKeys(t *testing.T) {
+	for _, test := range []struct {
+		path, resource, project, item string
+		isItem                        bool
+	}{
+		{"ALICE/SITE/key", "key", "ALICE/SITE", "", false},
+		{"ALICE/SITE/members", "members", "ALICE/SITE", "", false},
+		{"ALICE/SITE/invitations", "invitations", "ALICE/SITE", "", false},
+		{"ALICE/SITE/members/42", "members", "ALICE/SITE", "42", true},
+		{"ALICE/SITE/invitations/42", "invitations", "ALICE/SITE", "42", true},
+	} {
+		if test.isItem {
+			project, item, ok := projectItemSubresource(test.path, test.resource)
+			if !ok || project != test.project || item != test.item {
+				t.Errorf("projectItemSubresource(%q, %q) = (%q, %q, %t), want (%q, %q, true)", test.path, test.resource, project, item, ok, test.project, test.item)
+			}
+			continue
+		}
+		project, ok := projectSubresource(test.path, test.resource)
+		if !ok || project != test.project {
+			t.Errorf("projectSubresource(%q, %q) = (%q, %t), want (%q, true)", test.path, test.resource, project, ok, test.project)
+		}
+	}
+	for _, path := range []string{"/key", "ALICE/SITE/members/", "ALICE/SITE/members/42/extra", "ALICE/SITE/unknown"} {
+		if _, ok := projectSubresource(path, "key"); ok {
+			t.Errorf("projectSubresource unexpectedly accepted %q", path)
+		}
+		if _, _, ok := projectItemSubresource(path, "members"); ok {
+			t.Errorf("projectItemSubresource unexpectedly accepted %q", path)
+		}
+	}
+}
+
 func TestPublicPages(t *testing.T) {
 	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "https://github.example/releases?x=1&y=2", slog.Default())
 	for _, path := range []string{"/", "/downloads?lang=en", "/commands?lang=en", "/mentions-legales", "/cgu", "/privacy"} {

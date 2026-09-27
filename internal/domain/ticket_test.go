@@ -81,6 +81,9 @@ func TestSuggestNamespace(t *testing.T) {
 		{"alice_smith", "ALICE_SMITH"},
 		{"Alice123", "ALICE123"},
 		{"Alice@Example", "ALICE_EXAMPLE"},
+		{"123 Alice", "USER_123_ALICE"},
+		{"@Alice", "USER__ALICE"},
+		{"12345678901234567890", "USER_123456789012345"},
 		{"", "USER"},
 		{"A very long name that exceeds twenty characters", "A_VERY_LONG_NAME_THA"},
 	}
@@ -88,6 +91,9 @@ func TestSuggestNamespace(t *testing.T) {
 		got := SuggestNamespace(tc.input)
 		if got != tc.want {
 			t.Errorf("SuggestNamespace(%q) = %q, want %q", tc.input, got, tc.want)
+		}
+		if _, err := NormalizeProjectKey(got); err != nil {
+			t.Errorf("SuggestNamespace(%q) returned invalid namespace %q: %v", tc.input, got, err)
 		}
 	}
 }

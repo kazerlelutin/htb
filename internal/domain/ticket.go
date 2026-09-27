@@ -147,5 +147,11 @@ func SuggestNamespace(name string) string {
 	if len(result) == 0 {
 		return "USER"
 	}
+	if result[0] < 'A' || result[0] > 'Z' {
+		result = append([]rune("USER_"), result...)
+		if len(result) > 20 {
+			result = result[:20]
+		}
+	}
 	return string(result)
 }

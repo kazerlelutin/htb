@@ -265,6 +265,49 @@ func TestTicketLifecycleOverHTTP(t *testing.T) {
 	}
 }
 
+// TestNamespacedProjectAdministrationOverHTTP verifies that the administrative
+// routes keep the namespace portion of a project key when parsing the URL.
+func TestNamespacedProjectAdministrationOverHTTP(t *testing.T) {
+	dsn := os.Getenv("HTBD_TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("set HTBD_TEST_DATABASE_URL to run PostgreSQL integration tests")
+	}
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	ctx := context.Background()
+	data := &store.Store{DB: db}
+	if err := data.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	stamp := strings.ReplaceAll(time.Now().UTC().Format("150405.000000000"), ".", "")
+	key := "ROUTE" + stamp
+	namespacedKey := "ALICE/" + key
+	renamedKey := "BOB/" + key
+	subject := "namespace-route-" + key
+	defer cleanupIntegrationData(t, db, []string{key, namespacedKey, renamedKey}, []string{subject})
+
+	server := New(data, integrationVerifier{subject: subject}, auth.DeviceConfig{}, "", slog.Default())
+	if response := requestJSON(t, server, http.MethodPost, "/api/v1/projects", `{"key":"`+key+`","name":"Route test"}`); response.Code != http.StatusCreated {
+		t.Fatalf("create project: %d %s", response.Code, response.Body.String())
+	}
+	if response := requestJSON(t, server, http.MethodPut, "/api/v1/projects/"+key+"/key", `{"key":"`+namespacedKey+`"}`); response.Code != http.StatusNoContent {
+		t.Fatalf("add namespace: %d %s", response.Code, response.Body.String())
+	}
+	if response := requestJSON(t, server, http.MethodGet, "/api/v1/projects/"+namespacedKey+"/members", ""); response.Code != http.StatusOK {
+		t.Fatalf("list namespaced project members: %d %s", response.Code, response.Body.String())
+	}
+	if response := requestJSON(t, server, http.MethodPut, "/api/v1/projects/"+namespacedKey+"/key", `{"key":"`+renamedKey+`"}`); response.Code != http.StatusNoContent {
+		t.Fatalf("rename namespaced project: %d %s", response.Code, response.Body.String())
+	}
+	if response := requestJSON(t, server, http.MethodGet, "/api/v1/projects/"+renamedKey+"/members", ""); response.Code != http.StatusOK {
+		t.Fatalf("list renamed namespaced project members: %d %s", response.Code, response.Body.String())
+	}
+}
+
 func requestJSON(t *testing.T, server *Server, method, path, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	request := httptest.NewRequest(method, path, bytes.NewBufferString(body))
