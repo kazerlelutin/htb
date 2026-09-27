@@ -170,11 +170,11 @@ func (s *Server) portalProject(w http.ResponseWriter, r *http.Request) {
 	_ = portalProjectTemplate.Execute(w, view)
 }
 
-func (s *Server) portalCreateRequest(w http.ResponseWriter, r *http.Request) {
+func (s *Server) portalCreateRequest(w http.ResponseWriter, r *http.Request, project string) {
 	if !s.validPortalForm(w, r) {
 		return
 	}
-	key, err := domain.NormalizeProjectKey(r.PathValue("project"))
+	key, err := domain.NormalizeProjectKey(project)
 	if err != nil {
 		http.NotFound(w, r)
 		return

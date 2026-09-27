@@ -16,6 +16,7 @@ import (
 type clientRequestStub struct {
 	items     []store.ClientRequest
 	comments  []store.ClientRequestComment
+	project   string
 	created   bool
 	commented bool
 	deleted   bool
@@ -29,7 +30,11 @@ func (stub *clientRequestStub) CreateClientRequest(_ context.Context, _ store.Ac
 	return store.ClientRequest{ID: 7, Project: project, Title: title, Body: body}, nil
 }
 func (stub *clientRequestStub) ListClientRequests(_ context.Context, _ store.Actor, project string) ([]store.ClientRequest, error) {
-	if project != "SITE" {
+	allowed := stub.project
+	if allowed == "" {
+		allowed = "SITE"
+	}
+	if project != allowed {
 		return nil, store.ErrForbidden
 	}
 	return stub.items, nil
@@ -64,6 +69,46 @@ func (stub *clientRequestStub) DeleteClientRequest(_ context.Context, _ store.Ac
 		}
 	}
 	return store.ErrNotFound
+}
+
+func TestClientPortalGroupsNamespacedProjectsAndRoutes(t *testing.T) {
+	s, requests, sessions := portalTestServer()
+	key := "MO5/PROMEAI"
+	sessions.projects = []store.Project{
+		{Key: "KAZERLELUTIN/BENTO", Name: "Ben-to"},
+		{Key: "KAZERLELUTIN/HTB", Name: "HTB"},
+		{Key: "MO5/ANBY", Name: "ANBY"},
+		{Key: key, Name: "Promeai"},
+	}
+	requests.project = key
+	s.stories = &clientStoryStub{project: key, stories: []store.ClientStory{{Ref: key + "-1", Project: key, Title: "Story namespacée", Published: true}}}
+
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, portalRequest(http.MethodGet, "/portal", nil))
+	body := w.Body.String()
+	if w.Code != http.StatusOK {
+		t.Fatalf("portal home: %d %s", w.Code, body)
+	}
+	for _, want := range []string{"KAZERLELUTIN", "MO5", `href="/portal/projects/MO5/PROMEAI"`, `>PROMEAI</span>`} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("grouped portal is missing %q: %s", want, body)
+		}
+	}
+
+	for _, path := range []string{"/portal/projects/MO5/PROMEAI", "/portal/stories/MO5/PROMEAI-1"} {
+		w = httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, portalRequest(http.MethodGet, path, nil))
+		if w.Code != http.StatusOK {
+			t.Fatalf("namespaced portal route %s: %d %s", path, w.Code, w.Body.String())
+		}
+	}
+	for _, path := range []string{"/portal/projects/MO5/PROMEAI/requests", "/portal/stories/MO5/PROMEAI-1/comments"} {
+		w = httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, portalRequest(http.MethodPost, path, url.Values{"body": {"Test"}}))
+		if w.Code != http.StatusForbidden {
+			t.Fatalf("namespaced portal action %s: got %d, want CSRF rejection", path, w.Code)
+		}
+	}
 }
 
 func portalTestServer() (*Server, *clientRequestStub, *browserSessionStub) {

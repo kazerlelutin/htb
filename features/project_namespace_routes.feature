@@ -17,3 +17,9 @@ Feature: Administration des projets namespacés
     Given an accessible project in the "ALICE" namespace
     When the user runs project status with namespace "alice"
     Then the project is included in the status output
+
+  Scenario: Consulter un projet namespacé dans le portail client
+    Given a client with access to the project "MO5/PROMEAI"
+    When the client opens "/portal/projects/MO5/PROMEAI"
+    Then the project dashboard is displayed
+    And the project is grouped under the "MO5" namespace on the portal home

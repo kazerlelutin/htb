@@ -15,6 +15,7 @@ import (
 type clientStoryStub struct {
 	stories           []store.ClientStory
 	comments          []store.ClientStoryComment
+	project           string
 	internalComments  []store.Comment
 	commented         bool
 	internalCommented bool
@@ -22,14 +23,14 @@ type clientStoryStub struct {
 }
 
 func (stub *clientStoryStub) ListClientStories(_ context.Context, _ store.Actor, project string) ([]store.ClientStory, error) {
-	if project != "SITE" {
+	if project != stub.allowedProject() {
 		return nil, store.ErrForbidden
 	}
 	return stub.stories, nil
 }
 
 func (stub *clientStoryStub) ListClientStoriesPage(_ context.Context, _ store.Actor, project string, page, perPage int) (store.ClientStoryPage, error) {
-	if project != "SITE" {
+	if project != stub.allowedProject() {
 		return store.ClientStoryPage{}, store.ErrForbidden
 	}
 	result := store.ClientStoryPage{Page: page, Total: len(stub.stories)}
@@ -57,6 +58,13 @@ func (stub *clientStoryStub) ListClientStoriesPage(_ context.Context, _ store.Ac
 	}
 	result.Stories = append(result.Stories, stub.stories[start:end]...)
 	return result, nil
+}
+
+func (stub *clientStoryStub) allowedProject() string {
+	if stub.project != "" {
+		return stub.project
+	}
+	return "SITE"
 }
 
 func (stub *clientStoryStub) GetClientStory(_ context.Context, _ store.Actor, ref string) (store.ClientStory, error) {

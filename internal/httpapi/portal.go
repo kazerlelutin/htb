@@ -4,15 +4,26 @@ import (
 	"errors"
 	"html/template"
 	"net/http"
+	"sort"
 	"strings"
 
+	"github.com/kazerlelutin/htb/internal/domain"
 	"github.com/kazerlelutin/htb/internal/store"
 )
 
 type portalHomeView struct {
-	Projects []store.Project
-	CSRF     string
-	Error    string
+	Namespaces []portalNamespaceView
+	CSRF       string
+	Error      string
+}
+
+type portalNamespaceView struct {
+	Name     string
+	Projects []portalProjectLink
+}
+
+type portalProjectLink struct {
+	Name, Key, ShortKey string
 }
 
 var portalTemplate = template.Must(template.New("portal").Parse(`<!doctype html>
@@ -21,7 +32,7 @@ var portalTemplate = template.Must(template.New("portal").Parse(`<!doctype html>
 <a class="skip-link" href="#main">Aller au contenu</a>
 <header class="site-header"><a class="wordmark" href="/" aria-label="Accueil HTB"><span aria-hidden="true">&gt;</span><span class="cursor" aria-hidden="true">_</span> HTB</a><form action="/logout" method="post"><button class="link-button" type="submit">Se déconnecter</button></form></header>
 <main id="main" class="portal"><p class="eyebrow">ESPACE CLIENT</p><h1>Mes projets</h1>
-{{if .Projects}}<p>Les projets auxquels vous avez accès.</p><ul class="portal-projects">{{range .Projects}}<li><a href="/portal/projects/{{.Key}}"><strong>{{.Name}}</strong><span>{{.Key}}</span></a></li>{{end}}</ul>{{else}}<p>Aucun projet ne vous est encore attribué.</p>{{end}}
+{{if .Namespaces}}<p>Les projets auxquels vous avez accès.</p>{{range .Namespaces}}<section class="portal-namespace" aria-label="Namespace {{.Name}}"><h2>{{.Name}}</h2><ul class="portal-projects">{{range .Projects}}<li><a href="/portal/projects/{{.Key}}"><strong>{{.Name}}</strong><span>{{.ShortKey}}</span></a></li>{{end}}</ul></section>{{end}}{{else}}<p>Aucun projet ne vous est encore attribué.</p>{{end}}
 <section aria-labelledby="join-title"><h2 id="join-title">Rejoindre un projet</h2><p>Vous avez reçu un code d’invitation ? Saisissez-le ici.</p>{{if .Error}}<p class="portal-error" role="alert">{{.Error}}</p>{{end}}<form class="portal-form" action="/portal/invitations" method="post"><input type="hidden" name="csrf" value="{{.CSRF}}"><label for="invitation-code">Code d’invitation</label><input id="invitation-code" name="code" autocomplete="off" required><button class="button" type="submit">Rejoindre le projet</button></form></section>
 </main></body></html>`))
 
@@ -41,9 +52,30 @@ func (s *Server) renderPortalProjects(w http.ResponseWriter, r *http.Request, me
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
-	if err := portalTemplate.Execute(w, portalHomeView{Projects: projects, CSRF: s.portalCSRF(r), Error: message}); err != nil {
+	if err := portalTemplate.Execute(w, portalHomeView{Namespaces: groupPortalProjects(projects), CSRF: s.portalCSRF(r), Error: message}); err != nil {
 		s.log.Error("render browser projects", "error", err)
 	}
+}
+
+func groupPortalProjects(projects []store.Project) []portalNamespaceView {
+	byNamespace := make(map[string][]portalProjectLink)
+	for _, project := range projects {
+		namespace, shortKey := domain.SplitProjectKey(project.Key)
+		if namespace == "" {
+			namespace = "Sans namespace"
+		}
+		byNamespace[namespace] = append(byNamespace[namespace], portalProjectLink{Name: project.Name, Key: project.Key, ShortKey: shortKey})
+	}
+	names := make([]string, 0, len(byNamespace))
+	for namespace := range byNamespace {
+		names = append(names, namespace)
+	}
+	sort.Strings(names)
+	groups := make([]portalNamespaceView, 0, len(names))
+	for _, namespace := range names {
+		groups = append(groups, portalNamespaceView{Name: namespace, Projects: byNamespace[namespace]})
+	}
+	return groups
 }
 
 func (s *Server) portalAcceptInvitation(w http.ResponseWriter, r *http.Request) {

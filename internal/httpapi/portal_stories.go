@@ -115,11 +115,10 @@ func (s *Server) portalStory(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) portalAddInternalStoryComment(w http.ResponseWriter, r *http.Request) {
+func (s *Server) portalAddInternalStoryComment(w http.ResponseWriter, r *http.Request, ref string) {
 	if !s.validPortalForm(w, r) {
 		return
 	}
-	ref := r.PathValue("ref")
 	body := r.PostForm.Get("body")
 	if strings.TrimSpace(body) == "" || len(body) > 20000 {
 		view, err := s.storyView(r, ref)
@@ -142,11 +141,10 @@ func (s *Server) portalAddInternalStoryComment(w http.ResponseWriter, r *http.Re
 	http.Redirect(w, r, "/portal/stories/"+strings.ToUpper(ref), http.StatusSeeOther)
 }
 
-func (s *Server) portalAddStoryComment(w http.ResponseWriter, r *http.Request) {
+func (s *Server) portalAddStoryComment(w http.ResponseWriter, r *http.Request, ref string) {
 	if !s.validPortalForm(w, r) {
 		return
 	}
-	ref := r.PathValue("ref")
 	body := r.PostForm.Get("body")
 	_, err := s.stories.AddClientStoryComment(r.Context(), actor(r), ref, body)
 	if err == nil {

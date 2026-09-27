@@ -425,6 +425,12 @@ main {
 	display: grid;
 	gap: 0.75rem;
 }
+.portal-namespace h2 {
+	color: var(--lime);
+	font-size: 1rem;
+	letter-spacing: 0.08em;
+	margin: 0 0 0.75rem;
+}
 .portal-projects li {
 	background: var(--surface);
 	border: 1px solid var(--line);

@@ -145,17 +145,38 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /portal", s.browserAuthenticated(http.HandlerFunc(s.portalProjects)))
 	mux.Handle("POST /portal/invitations", s.browserAuthenticated(http.HandlerFunc(s.portalAcceptInvitation)))
 	mux.Handle("GET /portal/api/projects", s.browserAuthenticated(http.HandlerFunc(s.browserProjects)))
-	mux.Handle("GET /portal/projects/{project}", s.browserAuthenticated(http.HandlerFunc(s.portalProject)))
-	mux.Handle("GET /portal/stories/{ref}", s.browserAuthenticated(http.HandlerFunc(s.portalStory)))
-	mux.Handle("POST /portal/stories/{ref}/ticket-comments", s.browserAuthenticated(http.HandlerFunc(s.portalAddInternalStoryComment)))
-	mux.Handle("POST /portal/stories/{ref}/comments", s.browserAuthenticated(http.HandlerFunc(s.portalAddStoryComment)))
-	mux.Handle("POST /portal/projects/{project}/requests", s.browserAuthenticated(http.HandlerFunc(s.portalCreateRequest)))
+	mux.Handle("GET /portal/projects/{project...}", s.browserAuthenticated(http.HandlerFunc(s.portalProject)))
+	mux.Handle("POST /portal/projects/{project...}", s.browserAuthenticated(http.HandlerFunc(s.portalProjectAction)))
+	mux.Handle("GET /portal/stories/{ref...}", s.browserAuthenticated(http.HandlerFunc(s.portalStory)))
+	mux.Handle("POST /portal/stories/{ref...}", s.browserAuthenticated(http.HandlerFunc(s.portalStoryAction)))
 	mux.Handle("GET /portal/requests/{id}", s.browserAuthenticated(http.HandlerFunc(s.portalRequest)))
 	mux.Handle("POST /portal/requests/{id}/comments", s.browserAuthenticated(http.HandlerFunc(s.portalAddComment)))
 	mux.Handle("POST /portal/requests/{id}/delete", s.browserAuthenticated(http.HandlerFunc(s.portalDeleteRequest)))
 	mux.HandleFunc("GET /auth/device-config", s.deviceConfiguration)
 	mux.Handle("/api/v1/", s.authenticated(http.HandlerFunc(s.api)))
 	return s.logging(mux)
+}
+
+func (s *Server) portalProjectAction(w http.ResponseWriter, r *http.Request) {
+	project, ok := strings.CutSuffix(r.PathValue("project"), "/requests")
+	if !ok || project == "" {
+		http.NotFound(w, r)
+		return
+	}
+	s.portalCreateRequest(w, r, project)
+}
+
+func (s *Server) portalStoryAction(w http.ResponseWriter, r *http.Request) {
+	path := r.PathValue("ref")
+	if ref, ok := strings.CutSuffix(path, "/ticket-comments"); ok && ref != "" {
+		s.portalAddInternalStoryComment(w, r, ref)
+		return
+	}
+	if ref, ok := strings.CutSuffix(path, "/comments"); ok && ref != "" {
+		s.portalAddStoryComment(w, r, ref)
+		return
+	}
+	http.NotFound(w, r)
 }
 func (s *Server) deviceConfiguration(w http.ResponseWriter, r *http.Request) {
 	if s.deviceConfig.Issuer == "" || s.deviceConfig.ClientID == "" || s.deviceConfig.Audience == "" {
