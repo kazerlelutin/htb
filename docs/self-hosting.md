@@ -154,6 +154,10 @@ htb ticket publish SITE-1
 htb invite create --project SITE --role read
 ```
 
+The project key (`SITE`) is the short identifier used in commands and ticket
+references (`SITE-1`). You can optionally prefix it with a namespace
+(`ALICE/SITE`) to allow multiple projects with the same short key.
+
 Send the invitation code through your usual channel. The client opens
 `https://tickets.example.org/login`, signs in with your Zitadel, and enters
 the code in `/portal`. They see the published story, its progress from

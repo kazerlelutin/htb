@@ -38,8 +38,8 @@ const (
 )
 
 var (
-	projectKey = regexp.MustCompile(`^[A-Z][A-Z0-9_]{1,19}$`)
-	ticketRef  = regexp.MustCompile(`^([A-Z][A-Z0-9_]{1,19})-([1-9][0-9]*)$`)
+	projectKey = regexp.MustCompile(`^[A-Z][A-Z0-9_]{1,19}(/[A-Z][A-Z0-9_]{1,19})?$`)
+	ticketRef  = regexp.MustCompile(`^([A-Z][A-Z0-9_]{1,19}(/[A-Z][A-Z0-9_]{1,19})?)-([1-9][0-9]*)$`)
 )
 
 // NormalizeProjectKey makes project identifiers consistent across the CLI and API.
@@ -49,7 +49,10 @@ func NormalizeProjectKey(value string) (string, error) {
 		return "", fmt.Errorf("project key is required")
 	}
 	if !projectKey.MatchString(key) {
-		return "", fmt.Errorf("project key must be 2 to 20 characters, start with a letter, and contain only letters, digits, or underscores")
+		return "", fmt.Errorf("project key must be 2 to 20 characters, start with a letter, and contain only letters, digits, or underscores; optionally followed by / and another key")
+	}
+	if len(key) > 40 {
+		return "", fmt.Errorf("project key cannot exceed 40 characters")
 	}
 	return key, nil
 }
@@ -60,7 +63,7 @@ func ParseReference(ref string) (string, int64, error) {
 		return "", 0, fmt.Errorf("invalid ticket reference %q", ref)
 	}
 	var id int64
-	_, err := fmt.Sscan(m[2], &id)
+	_, err := fmt.Sscan(m[3], &id)
 	return m[1], id, err
 }
 
@@ -107,4 +110,21 @@ func Template(kind TicketType) string {
 	default:
 		return ""
 	}
+}
+
+// SplitProjectKey splits a project key into namespace and short key.
+// If the key contains a slash, the part before slash is the namespace,
+// the part after slash is the short key.
+// If there is no slash, namespace is empty and shortKey is the entire key.
+func SplitProjectKey(key string) (namespace, shortKey string) {
+	if idx := strings.Index(key, "/"); idx >= 0 {
+		return key[:idx], key[idx+1:]
+	}
+	return "", key
+}
+
+// ShortKey returns the part of the project key after the slash, or the whole key if there is no slash.
+func ShortKey(key string) string {
+	_, short := SplitProjectKey(key)
+	return short
 }

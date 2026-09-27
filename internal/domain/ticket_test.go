@@ -7,7 +7,12 @@ func TestNormalizeProjectKey(t *testing.T) {
 	if err != nil || key != "HTB_2" {
 		t.Fatalf("got key=%q err=%v", key, err)
 	}
-	for _, value := range []string{"", "A", "HTB-key", "1HTB", "THIS_PROJECT_KEY_IS_TOO_LONG"} {
+	// Test with namespace
+	key, err = NormalizeProjectKey("alice/site")
+	if err != nil || key != "ALICE/SITE" {
+		t.Fatalf("got key=%q err=%v", key, err)
+	}
+	for _, value := range []string{"", "A", "HTB-key", "1HTB", "THIS_PROJECT_KEY_IS_TOO_LONG", "ALICE/SITE/EXTRA", "ALICE/", "/SITE", "ALICE/site-extra"} {
 		if _, err := NormalizeProjectKey(value); err == nil {
 			t.Fatalf("%q should be invalid", value)
 		}
@@ -39,10 +44,29 @@ func TestParseReference(t *testing.T) {
 	if err != nil || project != "SITE" || id != 42 {
 		t.Fatalf("unexpected parse: %q %d %v", project, id, err)
 	}
+	project, id, err = ParseReference("alice/site-42")
+	if err != nil || project != "ALICE/SITE" || id != 42 {
+		t.Fatalf("unexpected parse with namespace: %q %d %v", project, id, err)
+	}
 }
 
 func TestTemplateIsSpecificToTicketType(t *testing.T) {
 	if got := Template(Incident); got == "" || got == Template(Bug) {
 		t.Fatalf("incident template should be present and distinct")
+	}
+}
+
+func TestSplitProjectKey(t *testing.T) {
+	ns, short := SplitProjectKey("SITE")
+	if ns != "" || short != "SITE" {
+		t.Fatalf("no namespace: got ns=%q short=%q", ns, short)
+	}
+	ns, short = SplitProjectKey("ALICE/SITE")
+	if ns != "ALICE" || short != "SITE" {
+		t.Fatalf("with namespace: got ns=%q short=%q", ns, short)
+	}
+	ns, short = SplitProjectKey("ALICE/SITE/EXTRA")
+	if ns != "ALICE" || short != "SITE/EXTRA" {
+		t.Fatalf("multiple slashes: got ns=%q short=%q", ns, short)
 	}
 }

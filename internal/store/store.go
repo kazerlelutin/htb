@@ -159,6 +159,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 		{"0007_client_stories", htb.ClientStoriesMigration},
 		{"0008_client_story_visibility", htb.ClientStoryVisibilityMigration},
 		{"0009_client_request_rejection", htb.ClientRequestRejectionMigration},
+		{"0010_namespaced_project_keys", htb.NamespacedProjectKeysMigration},
 	}
 	for _, migration := range migrations {
 		var exists bool

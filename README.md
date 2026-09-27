@@ -24,6 +24,10 @@ htb auth login
 htb project create --key SITE --name "Website"
 ```
 
+The project key (`SITE`) is the short identifier used in commands and ticket
+references (`SITE-1`). You can optionally prefix it with a namespace
+(`ALICE/SITE`) to allow multiple projects with the same short key.
+
 Sign-in opens in your browser through Zitadel. If someone invites you to an
 existing project, use `htb invite accept CODE` instead of creating one.
 
@@ -87,10 +91,11 @@ htb ticket comment SITE-1 "Ready for review"
 
 The current project is stored in your local CLI configuration. Commands that
 support `--project` can target another project. Ticket references are numbered
-per project (`SITE-1`, `SITE-2`, …). Descriptions and comments support
-Markdown; `htb ticket list --json` and `--csv` are available for scripts. Each
-JSON ticket also exposes `published` to indicate whether a user story is
-visible in the client portal.
+per project (`SITE-1`, `SITE-2`, …). You can optionally prefix the project key
+with a namespace (`ALICE/SITE-1`) to allow multiple projects with the same short
+key. Descriptions and comments support Markdown; `htb ticket list --json` and
+`--csv` are available for scripts. Each JSON ticket also exposes `published` to
+indicate whether a user story is visible in the client portal.
 
 Run `htb help` or `htb help ticket create` for command options. The
 [command guide](https://htboard.xyz/commands) is also available on the web.

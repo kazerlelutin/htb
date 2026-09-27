@@ -31,3 +31,6 @@ var ClientStoryVisibilityMigration string
 
 //go:embed migrations/0009_client_request_rejection.sql
 var ClientRequestRejectionMigration string
+
+//go:embed migrations/0010_namespaced_project_keys.sql
+var NamespacedProjectKeysMigration string

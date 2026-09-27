@@ -189,7 +189,7 @@ Use "htb help ticket create" or "htb ticket create --help" for command details.
 	case "auth status":
 		return "Usage: htb auth status\n\nShow whether you are connected, your accessible projects, and the current project.\n"
 	case "project":
-		return "Usage:\n  htb project list | status | use KEY\n  htb project create --key KEY --name NAME [--description TEXT]\n  htb project members [--project KEY]\n  htb project member set-role --user ID --role read|write|admin [--project KEY]\n  htb project member remove --user ID [--project KEY]\n\nA project key is the short identifier used in commands and ticket references, for example HTB-1. Input is normalized to uppercase. It must be 2 to 20 characters, start with a letter, and contain only letters, digits, or underscores.\n"
+		return "Usage:\n  htb project list | status | use KEY\n  htb project create --key KEY --name NAME [--description TEXT]\n  htb project members [--project KEY]\n  htb project member set-role --user ID --role read|write|admin [--project KEY]\n  htb project member remove --user ID [--project KEY]\n\nA project key is the short identifier used in commands and ticket references, for example HTB-1 or ALICE/SITE-1. Input is normalized to uppercase. It must be 2 to 20 characters per part, start with a letter, and contain only letters, digits, or underscores. An optional namespace prefix (NAMESPACE/KEY) allows multiple projects with the same short key.\n"
 	case "project list":
 		return "Usage: htb project list\n\nList projects you can access.\n"
 	case "project status":
@@ -197,7 +197,7 @@ Use "htb help ticket create" or "htb ticket create --help" for command details.
 	case "project use":
 		return "Usage: htb project use KEY\n\nSet the current project used by commands that do not specify --project.\n"
 	case "project create":
-		return "Usage: htb project create --key KEY --name NAME [--description TEXT]\n\nCreate a project and make it current. A project key is the short identifier used in commands and ticket references, for example HTB-1. Input is normalized to uppercase. It must be 2 to 20 characters, start with a letter, and contain only letters, digits, or underscores.\n"
+		return "Usage: htb project create --key KEY --name NAME [--description TEXT]\n\nCreate a project and make it current. A project key is the short identifier used in commands and ticket references, for example HTB-1 or ALICE/SITE-1. Input is normalized to uppercase. It must be 2 to 20 characters per part, start with a letter, and contain only letters, digits, or underscores. An optional namespace prefix (NAMESPACE/KEY) allows multiple projects with the same short key.\n"
 	case "project members":
 		return "Usage: htb project members [--project KEY]\n\nList project members. Administrators can use member IDs to change a role or remove access.\n"
 	case "project member":
@@ -517,21 +517,42 @@ func projectCommand(args []string) error {
 			return err
 		}
 		wanted := strings.ToUpper(args[1])
+		var matches []string
 		for _, project := range response.Projects {
 			if project.Key == wanted {
-				c, err := load()
-				if err != nil {
-					return err
-				}
-				c.CurrentProject = wanted
-				if err := save(c); err != nil {
-					return err
-				}
-				fmt.Println("Current project:", wanted)
-				return nil
+				matches = []string{project.Key}
+				break
 			}
 		}
-		return fmt.Errorf("project %s is not accessible", wanted)
+		if len(matches) == 0 {
+			// No exact match, try short key match
+			for _, project := range response.Projects {
+				if domain.ShortKey(project.Key) == wanted {
+					matches = append(matches, project.Key)
+				}
+			}
+		}
+		if len(matches) == 0 {
+			return fmt.Errorf("project %s is not accessible", wanted)
+		}
+		if len(matches) > 1 {
+			fmt.Printf("Multiple projects match %s:\n", wanted)
+			for _, key := range matches {
+				fmt.Printf("  %s\n", key)
+			}
+			return fmt.Errorf("specify the full key with namespace, e.g., %s", matches[0])
+		}
+		selected := matches[0]
+		c, err := load()
+		if err != nil {
+			return err
+		}
+		c.CurrentProject = selected
+		if err := save(c); err != nil {
+			return err
+		}
+		fmt.Println("Current project:", selected)
+		return nil
 	}
 	if len(args) == 1 && args[0] == "list" {
 		var response struct {
@@ -548,16 +569,46 @@ func projectCommand(args []string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Println(styledHeading("Accessible projects:"))
+		// Group by short key
+		groups := make(map[string][]projectView)
 		for _, project := range response.Projects {
-			marker := " "
-			if project.Key == c.CurrentProject {
-				marker = "*"
+			short := domain.ShortKey(project.Key)
+			groups[short] = append(groups[short], project)
+		}
+		fmt.Println(styledHeading("Accessible projects:"))
+		for short, projects := range groups {
+			if len(projects) == 1 {
+				p := projects[0]
+				marker := " "
+				if p.Key == c.CurrentProject {
+					marker = "*"
+				}
+				if marker == "*" {
+					marker = styledAccent(marker)
+				}
+				displayKey := short
+				if strings.Contains(p.Key, "/") {
+					// Keep the slash to show namespace presence
+					displayKey = p.Key
+				}
+				fmt.Printf("%s %s — %s%s\n", marker, styledReference(displayKey), p.Name, styledMuted(archivedLabel(p.Archived)))
+			} else {
+				// Multiple projects share the same short key, display each with namespace
+				for _, p := range projects {
+					marker := " "
+					if p.Key == c.CurrentProject {
+						marker = "*"
+					}
+					if marker == "*" {
+						marker = styledAccent(marker)
+					}
+					ns, _ := domain.SplitProjectKey(p.Key)
+					if ns == "" {
+						ns = "DEFAULT"
+					}
+					fmt.Printf("%s %s — %s (%s)%s\n", marker, styledReference(short), p.Name, ns, styledMuted(archivedLabel(p.Archived)))
+				}
 			}
-			if marker == "*" {
-				marker = styledAccent(marker)
-			}
-			fmt.Printf("%s %s — %s%s\n", marker, styledReference(project.Key), project.Name, styledMuted(archivedLabel(project.Archived)))
 		}
 		return nil
 	}
@@ -700,7 +751,7 @@ func projectStatus() error {
 func validateProjectCreation(key, name string) (string, error) {
 	normalizedKey, err := domain.NormalizeProjectKey(key)
 	if err != nil {
-		return "", fmt.Errorf("%w. A project key identifies the project in commands and ticket references, for example HTB-1. Use 2 to 20 characters, starting with a letter; letters, digits, and underscores are allowed", err)
+		return "", fmt.Errorf("%w. A project key identifies the project in commands and ticket references, for example HTB-1 or ALICE/SITE-1. Use 2 to 20 characters per part, start with a letter; letters, digits, underscores allowed; optional namespace prefix (NAMESPACE/KEY).", err)
 	}
 	if strings.TrimSpace(name) == "" {
 		return "", errors.New("project name is required")

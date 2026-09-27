@@ -163,6 +163,11 @@ htb ticket publish SITE-1
 htb invite create --project SITE --role read
 ```
 
+La clé du projet (`SITE`) est l’identifiant court utilisé dans les commandes et
+les références de ticket (`SITE-1`). Vous pouvez optionnellement la préfixer par
+un namespace (`ALICE/SITE`) pour permettre plusieurs projets avec la même clé
+courte.
+
 Transmettez le code d’invitation au client par votre canal habituel. Celui-ci
 ouvre `https://tickets.example.org/login`, se connecte via votre Zitadel, puis
 saisit le code dans `/portal`. Il voit l’US publiée, son avancement calculé
