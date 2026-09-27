@@ -172,4 +172,12 @@ connect one to the story. Only project admins can publish stories.
 PostgreSQL holds HTB's persistent data: back it up and test restoration. If
 `/login` returns 404, check the Web Client ID. If startup fails, also check
 the session key and Zitadel connectivity. To turn off the portal without
-deleting its data, clear `HTBD_ZITADEL_WEB_CLIENT_ID` and redeploy.
+delete its data, clear `HTBD_ZITADEL_WEB_CLIENT_ID` and redeploy.
+
+### Database migrations
+
+HTB automatically applies database migrations when the server starts. The
+migration `0010_namespaced_project_keys.sql` enables optional namespace prefixes
+in project keys (e.g., `ALICE/SITE`). If you are upgrading from a previous
+version, the migration will run automatically; existing projects remain valid.
+You can verify applied migrations with `SELECT version FROM schema_migrations;`.

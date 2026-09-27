@@ -70,3 +70,24 @@ func TestSplitProjectKey(t *testing.T) {
 		t.Fatalf("multiple slashes: got ns=%q short=%q", ns, short)
 	}
 }
+
+func TestSuggestNamespace(t *testing.T) {
+	cases := []struct {
+		input, want string
+	}{
+		{"Alice", "ALICE"},
+		{"Alice Smith", "ALICE_SMITH"},
+		{"alice-smith", "ALICE_SMITH"},
+		{"alice_smith", "ALICE_SMITH"},
+		{"Alice123", "ALICE123"},
+		{"Alice@Example", "ALICE_EXAMPLE"},
+		{"", "USER"},
+		{"A very long name that exceeds twenty characters", "A_VERY_LONG_NAME_THA"},
+	}
+	for _, tc := range cases {
+		got := SuggestNamespace(tc.input)
+		if got != tc.want {
+			t.Errorf("SuggestNamespace(%q) = %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}

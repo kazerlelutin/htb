@@ -186,3 +186,12 @@ avec `HTBD_PUBLIC_URL`. Si `/login` renvoie 404, vérifiez le Client ID Web ; si
 le serveur refuse de démarrer, vérifiez aussi la clé de session et la
 connectivité vers Zitadel. Pour désactiver le portail sans supprimer ses
 données, videz `HTBD_ZITADEL_WEB_CLIENT_ID` puis redéployez.
+
+### Migrations de base de données
+
+HTB applique automatiquement les migrations de base de données au démarrage du
+serveur. La migration `0010_namespaced_project_keys.sql` permet les préfixes de
+namespace optionnels dans les clés de projet (par exemple `ALICE/SITE`). Si vous
+mettez à jour depuis une version antérieure, la migration s’exécutera
+automatiquement ; les projets existants restent valides. Vous pouvez vérifier les
+migrations appliquées avec `SELECT version FROM schema_migrations ;`.

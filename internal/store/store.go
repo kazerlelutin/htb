@@ -297,6 +297,38 @@ func (s *Store) CreateProject(ctx context.Context, actor Actor, p Project) error
 	return tx.Commit()
 }
 
+// UpdateProjectKey changes the key of an existing project.
+// The new key must be valid and unique.
+func (s *Store) UpdateProjectKey(ctx context.Context, actor Actor, oldKey string, newKey string) error {
+	normalized, err := domain.NormalizeProjectKey(newKey)
+	if err != nil {
+		return err
+	}
+	if err := s.authorize(ctx, actor, oldKey, domain.RoleAdmin); err != nil {
+		return err
+	}
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	// Check uniqueness
+	var exists bool
+	err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM projects WHERE key=$1)`, normalized).Scan(&exists)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return ErrConflict
+	}
+	// Update the key
+	_, err = tx.ExecContext(ctx, `UPDATE projects SET key=$1 WHERE key=$2`, normalized, strings.ToUpper(oldKey))
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // checkProjectLimit serializes project creation for one account, so concurrent
 // requests cannot both pass the quota check.
 func (s *Store) checkProjectLimit(ctx context.Context, tx *sql.Tx, userID int64) error {

@@ -189,7 +189,7 @@ Use "htb help ticket create" or "htb ticket create --help" for command details.
 	case "auth status":
 		return "Usage: htb auth status\n\nShow whether you are connected, your accessible projects, and the current project.\n"
 	case "project":
-		return "Usage:\n  htb project list | status | use KEY\n  htb project create --key KEY --name NAME [--description TEXT]\n  htb project members [--project KEY]\n  htb project member set-role --user ID --role read|write|admin [--project KEY]\n  htb project member remove --user ID [--project KEY]\n\nA project key is the short identifier used in commands and ticket references, for example HTB-1 or ALICE/SITE-1. Input is normalized to uppercase. It must be 2 to 20 characters per part, start with a letter, and contain only letters, digits, or underscores. An optional namespace prefix (NAMESPACE/KEY) allows multiple projects with the same short key.\n"
+		return "Usage:\n  htb project list | status | use KEY\n  htb project create --key KEY --name NAME [--description TEXT]\n  htb project rename --new-key KEY [--project KEY]\n  htb project members [--project KEY]\n  htb project member set-role --user ID --role read|write|admin [--project KEY]\n  htb project member remove --user ID [--project KEY]\n\nA project key is the short identifier used in commands and ticket references, for example HTB-1 or ALICE/SITE-1. Input is normalized to uppercase. It must be 2 to 20 characters per part, start with a letter, and contain only letters, digits, or underscores. An optional namespace prefix (NAMESPACE/KEY) allows multiple projects with the same short key.\n"
 	case "project list":
 		return "Usage: htb project list\n\nList projects you can access.\n"
 	case "project status":
@@ -198,6 +198,8 @@ Use "htb help ticket create" or "htb ticket create --help" for command details.
 		return "Usage: htb project use KEY\n\nSet the current project used by commands that do not specify --project.\n"
 	case "project create":
 		return "Usage: htb project create --key KEY --name NAME [--description TEXT]\n\nCreate a project and make it current. A project key is the short identifier used in commands and ticket references, for example HTB-1 or ALICE/SITE-1. Input is normalized to uppercase. It must be 2 to 20 characters per part, start with a letter, and contain only letters, digits, or underscores. An optional namespace prefix (NAMESPACE/KEY) allows multiple projects with the same short key.\n"
+	case "project rename":
+		return "Usage: htb project rename --new-key KEY [--project KEY]\n\nRename a project key (including its namespace). The new key must be valid and unique. If the renamed project is the current project, the CLI updates its local configuration.\n"
 	case "project members":
 		return "Usage: htb project members [--project KEY]\n\nList project members. Administrators can use member IDs to change a role or remove access.\n"
 	case "project member":
@@ -418,6 +420,7 @@ func authStatus() error {
 	var me struct {
 		Subject    string `json:"subject"`
 		Superadmin bool   `json:"superadmin"`
+		Name       string `json:"name"`
 	}
 	if err := call("GET", "/api/v1/me", nil, &me); err != nil {
 		return err
@@ -514,6 +517,9 @@ func projectCommand(args []string) error {
 			return errors.New("usage: htb project status [--namespace NAMESPACE]")
 		}
 		return projectStatus(*namespace)
+	}
+	if len(args) > 0 && args[0] == "rename" {
+		return projectRename(args[1:])
 	}
 	if len(args) == 2 && args[0] == "use" {
 		var response struct {
@@ -633,6 +639,18 @@ func projectCommand(args []string) error {
 	normalizedKey, err := validateProjectCreation(*key, *name)
 	if err != nil {
 		return err
+	}
+	// Suggest namespace if key doesn't have one
+	if !strings.Contains(normalizedKey, "/") {
+		var me struct {
+			Name string `json:"name"`
+		}
+		if err := call("GET", "/api/v1/me", nil, &me); err == nil && me.Name != "" {
+			suggested := domain.SuggestNamespace(me.Name)
+			if suggested != "" {
+				fmt.Printf("Tip: Add a namespace prefix to avoid key conflicts, e.g., %s/%s\n", suggested, normalizedKey)
+			}
+		}
 	}
 	var created projectView
 	if err := call("POST", "/api/v1/projects", map[string]string{"key": normalizedKey, "name": *name, "description": *description}, &created); err != nil {
@@ -799,6 +817,40 @@ func projectStatus(namespace string) error {
 		fmt.Printf("  Tickets       %s\n", progressSummary(project.Tickets, "no tickets"))
 		fmt.Printf("  %s\n", statusBreakdown(project.Statuses))
 	}
+	return nil
+}
+
+func projectRename(args []string) error {
+	fs := flag.NewFlagSet("project rename", flag.ContinueOnError)
+	project := fs.String("project", "", "project key")
+	newKey := fs.String("new-key", "", "new project key")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *newKey == "" {
+		return errors.New("usage: htb project rename --new-key KEY [--project KEY]")
+	}
+	if *project == "" {
+		var err error
+		*project, err = currentProject()
+		if err != nil {
+			return err
+		}
+	}
+	normalized, err := domain.NormalizeProjectKey(*newKey)
+	if err != nil {
+		return fmt.Errorf("invalid new key: %w", err)
+	}
+	if err := call("PUT", "/api/v1/projects/"+strings.ToUpper(*project)+"/key", map[string]string{"key": normalized}, &struct{}{}); err != nil {
+		return err
+	}
+	// Update current project if it was renamed
+	c, err := load()
+	if err == nil && c.CurrentProject == strings.ToUpper(*project) {
+		c.CurrentProject = normalized
+		save(c)
+	}
+	fmt.Printf("Project %s renamed to %s\n", *project, normalized)
 	return nil
 }
 

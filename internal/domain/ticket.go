@@ -128,3 +128,24 @@ func ShortKey(key string) string {
 	_, short := SplitProjectKey(key)
 	return short
 }
+
+// SuggestNamespace converts a user name to a valid namespace slug.
+// It keeps only letters, digits, and underscores, converts to uppercase,
+// and limits length to 20 characters.
+func SuggestNamespace(name string) string {
+	var result []rune
+	for _, r := range strings.ToUpper(strings.TrimSpace(name)) {
+		if len(result) >= 20 {
+			break
+		}
+		if (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
+			result = append(result, r)
+		} else if r == ' ' || r == '-' || r == '@' || r == '.' || r == '+' {
+			result = append(result, '_')
+		}
+	}
+	if len(result) == 0 {
+		return "USER"
+	}
+	return string(result)
+}

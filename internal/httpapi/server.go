@@ -215,7 +215,8 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/")
 	switch {
 	case r.Method == "GET" && path == "me":
-		writeJSON(w, 200, actor(r))
+		a := actor(r)
+		writeJSON(w, 200, map[string]any{"subject": a.Subject, "superadmin": a.Superadmin, "name": a.Name})
 	case r.Method == "POST" && path == "projects":
 		s.createProject(w, r)
 	case r.Method == "GET" && path == "projects":
@@ -346,6 +347,20 @@ func (s *Server) projectAdministration(w http.ResponseWriter, r *http.Request, p
 			return
 		}
 		if err = s.store.RevokeInvitation(r.Context(), actor(r), parts[0], invitationID); err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if len(parts) == 2 && parts[1] == "key" && r.Method == http.MethodPut {
+		var in struct {
+			Key string `json:"key"`
+		}
+		if !decode(w, r, &in) {
+			return
+		}
+		if err := s.store.UpdateProjectKey(r.Context(), actor(r), parts[0], in.Key); err != nil {
 			writeStoreError(w, err)
 			return
 		}
