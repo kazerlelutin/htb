@@ -193,7 +193,7 @@ Use "htb help ticket create" or "htb ticket create --help" for command details.
 	case "project list":
 		return "Usage: htb project list\n\nList projects you can access.\n"
 	case "project status":
-		return "Usage: htb project status\n\nShow user-story and ticket progress, plus the status breakdown, for every project you can access.\n"
+		return "Usage: htb project status [--namespace NAMESPACE]\n\nShow user-story and ticket progress, plus the status breakdown, for every project you can access. Use --namespace to filter projects by namespace. When multiple namespaces exist, projects are grouped by namespace.\n"
 	case "project use":
 		return "Usage: htb project use KEY\n\nSet the current project used by commands that do not specify --project.\n"
 	case "project create":
@@ -504,8 +504,16 @@ func projectCommand(args []string) error {
 	if len(args) > 0 && args[0] == "member" {
 		return projectMember(args[1:])
 	}
-	if len(args) == 1 && args[0] == "status" {
-		return projectStatus()
+	if len(args) > 0 && args[0] == "status" {
+		fs := flag.NewFlagSet("project status", flag.ContinueOnError)
+		namespace := fs.String("namespace", "", "filter projects by namespace")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() > 0 {
+			return errors.New("usage: htb project status [--namespace NAMESPACE]")
+		}
+		return projectStatus(*namespace)
 	}
 	if len(args) == 2 && args[0] == "use" {
 		var response struct {
@@ -719,7 +727,7 @@ func projectMember(args []string) error {
 	return nil
 }
 
-func projectStatus() error {
+func projectStatus(namespace string) error {
 	var response struct {
 		Projects []projectStatusView `json:"projects"`
 	}
@@ -730,12 +738,58 @@ func projectStatus() error {
 		fmt.Println("No accessible projects.")
 		return nil
 	}
+	// Filter by namespace if specified
+	filtered := response.Projects
+	if namespace != "" {
+		var filteredList []projectStatusView
+		for _, project := range response.Projects {
+			ns, _ := domain.SplitProjectKey(project.Key)
+			if ns == namespace {
+				filteredList = append(filteredList, project)
+			}
+		}
+		filtered = filteredList
+		if len(filtered) == 0 {
+			fmt.Printf("No projects in namespace %s.\n", namespace)
+			return nil
+		}
+	}
 	c, err := load()
 	if err != nil {
 		return err
 	}
+	// Group by namespace if not filtered and multiple namespaces present
+	if namespace == "" {
+		namespaces := make(map[string][]projectStatusView)
+		for _, project := range filtered {
+			ns, _ := domain.SplitProjectKey(project.Key)
+			if ns == "" {
+				ns = "DEFAULT"
+			}
+			namespaces[ns] = append(namespaces[ns], project)
+		}
+		if len(namespaces) > 1 {
+			// Show grouped by namespace
+			fmt.Println(styledHeading("Project status by namespace"))
+			for ns, projects := range namespaces {
+				fmt.Printf("\n%s:\n", styledAccent(ns))
+				for _, project := range projects {
+					marker := " "
+					if project.Key == c.CurrentProject {
+						marker = styledAccent("*")
+					}
+					fmt.Printf("%s %s — %s%s\n", marker, styledReference(domain.ShortKey(project.Key)), project.Name, styledMuted(archivedLabel(project.Archived)))
+					fmt.Printf("  User stories  %s\n", progressSummary(project.UserStories, "no user stories"))
+					fmt.Printf("  Tickets       %s\n", progressSummary(project.Tickets, "no tickets"))
+					fmt.Printf("  %s\n", statusBreakdown(project.Statuses))
+				}
+			}
+			return nil
+		}
+	}
+	// Single namespace (or filtered), show flat list
 	fmt.Println(styledHeading("Project status"))
-	for _, project := range response.Projects {
+	for _, project := range filtered {
 		marker := " "
 		if project.Key == c.CurrentProject {
 			marker = styledAccent("*")

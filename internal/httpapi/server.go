@@ -41,7 +41,7 @@ var downloadCommands = []commandReference{
 	{"Connection", "htb auth login [--issuer URL --client-id ID --audience ID]", "Open the browser sign-in flow. Normally the server provides the connection settings; the optional flags are only for an advanced manual setup."},
 	{"Connection", "htb auth status", "Show whether you are connected, the projects you can access, and the project currently selected."},
 	{"Projects", "htb project list", "List projects you can access. The star marks the current project."},
-	{"Projects", "htb project status", "Show progress for every accessible project, including user stories, all tickets, and their status breakdown."},
+	{"Projects", "htb project status [--namespace NAMESPACE]", "Show progress for every accessible project, including user stories, all tickets, and their status breakdown. Use --namespace to filter by namespace; projects are grouped automatically when multiple namespaces exist."},
 	{"Projects", "htb project create --key KEY --name NAME [--description TEXT]", "Create a project and select it immediately. KEY identifies the project in commands and ticket references such as HTB-1 or ALICE/SITE-1; lowercase input is converted to uppercase. An optional namespace prefix (NAMESPACE/KEY) allows multiple projects with the same short key."},
 	{"Projects", "htb project use KEY", "Select the project used when a command does not include --project. KEY can be a short key (e.g., SITE) or a namespaced key (e.g., ALICE/SITE). If ambiguous, the CLI will list options."},
 	{"Projects", "htb project members [--project KEY]", "List project members. Administrators can use member IDs to change roles or remove access."},
