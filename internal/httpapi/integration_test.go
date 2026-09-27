@@ -286,13 +286,23 @@ func TestNamespacedProjectAdministrationOverHTTP(t *testing.T) {
 	stamp := strings.ReplaceAll(time.Now().UTC().Format("150405.000000000"), ".", "")
 	key := "ROUTE" + stamp
 	namespacedKey := "ALICE/" + key
-	renamedKey := "BOB/" + key
+	renamedKey := "ALICE/OTHER" + stamp
 	subject := "namespace-route-" + key
-	defer cleanupIntegrationData(t, db, []string{key, namespacedKey, renamedKey}, []string{subject})
+	otherSubject := "namespace-other-" + key
+	defer cleanupIntegrationData(t, db, []string{key, namespacedKey, renamedKey}, []string{subject, otherSubject})
 
 	server := New(data, integrationVerifier{subject: subject}, auth.DeviceConfig{}, "", slog.Default())
 	if response := requestJSON(t, server, http.MethodPost, "/api/v1/projects", `{"key":"`+key+`","name":"Route test"}`); response.Code != http.StatusCreated {
 		t.Fatalf("create project: %d %s", response.Code, response.Body.String())
+	}
+	if response := requestJSON(t, server, http.MethodPut, "/api/v1/projects/"+key+"/key", `{"key":"`+namespacedKey+`"}`); response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), `"namespace_required"`) {
+		t.Fatalf("rename without namespace claim: %d %s", response.Code, response.Body.String())
+	}
+	if response := requestJSON(t, server, http.MethodPost, "/api/v1/namespaces", `{"name":"ALICE"}`); response.Code != http.StatusCreated {
+		t.Fatalf("claim namespace: %d %s", response.Code, response.Body.String())
+	}
+	if response := requestJSON(t, server, http.MethodGet, "/api/v1/namespaces", ""); response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"name":"ALICE"`) {
+		t.Fatalf("list claimed namespaces: %d %s", response.Code, response.Body.String())
 	}
 	if response := requestJSON(t, server, http.MethodPut, "/api/v1/projects/"+key+"/key", `{"key":"`+namespacedKey+`"}`); response.Code != http.StatusNoContent {
 		t.Fatalf("add namespace: %d %s", response.Code, response.Body.String())
@@ -305,6 +315,13 @@ func TestNamespacedProjectAdministrationOverHTTP(t *testing.T) {
 	}
 	if response := requestJSON(t, server, http.MethodGet, "/api/v1/projects/"+renamedKey+"/members", ""); response.Code != http.StatusOK {
 		t.Fatalf("list renamed namespaced project members: %d %s", response.Code, response.Body.String())
+	}
+	otherServer := New(data, integrationVerifier{subject: otherSubject}, auth.DeviceConfig{}, "", slog.Default())
+	if response := requestJSON(t, otherServer, http.MethodPost, "/api/v1/projects", `{"key":"ALICE/OTHER","name":"Reserved namespace"}`); response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), `"namespace_reserved"`) {
+		t.Fatalf("use another account namespace: %d %s", response.Code, response.Body.String())
+	}
+	if response := requestJSON(t, server, http.MethodPost, "/api/v1/namespaces", `{"name":"BOB"}`); response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), `"namespace_limit_reached"`) {
+		t.Fatalf("community namespace quota: %d %s", response.Code, response.Body.String())
 	}
 }
 
@@ -340,6 +357,7 @@ func cleanupIntegrationData(t *testing.T, db *sql.DB, keys, subjects []string) {
 	}
 	for _, subject := range subjects {
 		for _, query := range []string{
+			`DELETE FROM namespaces WHERE owner_user_id IN (SELECT id FROM users WHERE zitadel_subject=$1)`,
 			`DELETE FROM credentials WHERE zitadel_subject=$1`,
 			`DELETE FROM users WHERE zitadel_subject=$1`,
 		} {

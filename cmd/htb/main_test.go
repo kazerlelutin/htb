@@ -139,7 +139,7 @@ func TestProjectCreationValidationExplainsAndNormalizesKey(t *testing.T) {
 
 func TestHelpIsDetailedForEveryCommand(t *testing.T) {
 	commands := [][]string{
-		{"version"}, {"config", "set-server"}, {"auth", "login"}, {"auth", "status"},
+		{"version"}, {"config", "set-server"}, {"auth", "login"}, {"auth", "status"}, {"namespace"}, {"namespace", "claim"}, {"namespace", "list"},
 		{"project", "list"}, {"project", "status"}, {"project", "use"}, {"project", "create"}, {"project", "members"}, {"project", "member"}, {"feature", "create"},
 		{"ticket", "create"}, {"ticket", "list"}, {"ticket", "show"}, {"ticket", "update"}, {"ticket", "comment"}, {"ticket", "claim"}, {"ticket", "release"}, {"ticket", "versions"}, {"ticket", "restore"},
 		{"invite", "create"}, {"invite", "accept"}, {"invite", "list"}, {"invite", "revoke"},

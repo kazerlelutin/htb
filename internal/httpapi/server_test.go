@@ -142,7 +142,7 @@ func TestPublicPages(t *testing.T) {
 		if path == "/commands?lang=en" {
 			for _, text := range []string{
 				`lang="en"`, "Command guide", "How to use it", "htb version", "htb config set-server URL", "htb auth login", "htb auth status",
-				"htb project list", "htb project create --key KEY --name NAME", "htb project use KEY", "htb project rename --new-key KEY", "htb feature create --key KEY --name NAME",
+				"htb project list", "htb project create --key KEY --name NAME", "htb project use KEY", "htb project rename --new-key KEY", "htb namespace claim NAME", "htb feature create --key KEY --name NAME",
 				"htb ticket create --title TITLE", "htb ticket list", "htb ticket show REF", "htb ticket update --version N", "htb ticket comment REF TEXT", "htb ticket claim REF", "htb ticket versions REF", "htb ticket restore --version N REF REVISION",
 				"htb invite create", "htb invite accept CODE",
 			} {

@@ -156,7 +156,9 @@ htb invite create --project SITE --role read
 
 The project key (`SITE`) is the short identifier used in commands and ticket
 references (`SITE-1`). You can optionally prefix it with a namespace
-(`ALICE/SITE`) to allow multiple projects with the same short key.
+(`ALICE/SITE`) to allow multiple projects with the same short key. Reserve a
+namespace before using it: `htb namespace claim ALICE`. The Community plan
+includes one namespace; paid plans can increase this quota.
 
 Send the invitation code through your usual channel. The client opens
 `https://tickets.example.org/login`, signs in with your Zitadel, and enters
@@ -178,6 +180,8 @@ delete its data, clear `HTBD_ZITADEL_WEB_CLIENT_ID` and redeploy.
 
 HTB automatically applies database migrations when the server starts. The
 migration `0010_namespaced_project_keys.sql` enables optional namespace prefixes
-in project keys (e.g., `ALICE/SITE`). If you are upgrading from a previous
-version, the migration will run automatically; existing projects remain valid.
+in project keys (e.g., `ALICE/SITE`). The following
+`0011_namespace_reservations.sql` reserves existing prefixes to their project
+owners and adds the plan namespace quota. If you are upgrading from a previous
+version, the migrations will run automatically; existing projects remain valid.
 You can verify applied migrations with `SELECT version FROM schema_migrations;`.

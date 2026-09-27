@@ -18,10 +18,13 @@ import (
 )
 
 var (
-	ErrNotFound     = errors.New("not found")
-	ErrForbidden    = errors.New("forbidden")
-	ErrConflict     = errors.New("conflict")
-	ErrProjectLimit = errors.New("project limit reached")
+	ErrNotFound          = errors.New("not found")
+	ErrForbidden         = errors.New("forbidden")
+	ErrConflict          = errors.New("conflict")
+	ErrProjectLimit      = errors.New("project limit reached")
+	ErrNamespaceLimit    = errors.New("namespace limit reached")
+	ErrNamespaceRequired = errors.New("namespace must be claimed before it can be used")
+	ErrNamespaceReserved = errors.New("namespace is reserved by another account")
 )
 
 type Store struct {
@@ -40,6 +43,9 @@ type Project struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Archived    bool   `json:"archived"`
+}
+type Namespace struct {
+	Name string `json:"name"`
 }
 type Progress struct {
 	Total int `json:"total"`
@@ -160,6 +166,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 		{"0008_client_story_visibility", htb.ClientStoryVisibilityMigration},
 		{"0009_client_request_rejection", htb.ClientRequestRejectionMigration},
 		{"0010_namespaced_project_keys", htb.NamespacedProjectKeysMigration},
+		{"0011_namespace_reservations", htb.NamespaceReservationsMigration},
 	}
 	for _, migration := range migrations {
 		var exists bool
@@ -282,6 +289,9 @@ func (s *Store) CreateProject(ctx context.Context, actor Actor, p Project) error
 		return err
 	}
 	defer tx.Rollback()
+	if err = s.authorizeNamespace(ctx, tx, actor, key); err != nil {
+		return err
+	}
 	if s.EnforceProjectLimits {
 		if err = s.checkProjectLimit(ctx, tx, actor.UserID); err != nil {
 			return err
@@ -312,6 +322,9 @@ func (s *Store) UpdateProjectKey(ctx context.Context, actor Actor, oldKey string
 		return err
 	}
 	defer tx.Rollback()
+	if err = s.authorizeNamespace(ctx, tx, actor, normalized); err != nil {
+		return err
+	}
 	// Check uniqueness
 	var exists bool
 	err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM projects WHERE key=$1)`, normalized).Scan(&exists)
@@ -327,6 +340,91 @@ func (s *Store) UpdateProjectKey(ctx context.Context, actor Actor, oldKey string
 		return err
 	}
 	return tx.Commit()
+}
+
+// ClaimNamespace reserves a namespace prefix for the authenticated account.
+// Repeating a claim by its owner is safe and idempotent.
+func (s *Store) ClaimNamespace(ctx context.Context, actor Actor, name string) (Namespace, error) {
+	normalized, err := domain.NormalizeNamespace(name)
+	if err != nil {
+		return Namespace{}, err
+	}
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return Namespace{}, err
+	}
+	defer tx.Rollback()
+	var ownerID int64
+	err = tx.QueryRowContext(ctx, `SELECT owner_user_id FROM namespaces WHERE name=$1 FOR UPDATE`, normalized).Scan(&ownerID)
+	if err == nil {
+		if ownerID != actor.UserID {
+			return Namespace{}, ErrNamespaceReserved
+		}
+		return Namespace{Name: normalized}, tx.Commit()
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return Namespace{}, err
+	}
+	if err = s.checkNamespaceLimit(ctx, tx, actor.UserID); err != nil {
+		return Namespace{}, err
+	}
+	err = tx.QueryRowContext(ctx, `INSERT INTO namespaces(name,owner_user_id) VALUES($1,$2) ON CONFLICT (name) DO NOTHING RETURNING owner_user_id`, normalized, actor.UserID).Scan(&ownerID)
+	if errors.Is(err, sql.ErrNoRows) {
+		if err = tx.QueryRowContext(ctx, `SELECT owner_user_id FROM namespaces WHERE name=$1`, normalized).Scan(&ownerID); err != nil {
+			return Namespace{}, err
+		}
+		if ownerID != actor.UserID {
+			return Namespace{}, ErrNamespaceReserved
+		}
+	} else if err != nil {
+		return Namespace{}, err
+	}
+	if err = tx.Commit(); err != nil {
+		return Namespace{}, err
+	}
+	return Namespace{Name: normalized}, nil
+}
+
+func (s *Store) ListNamespaces(ctx context.Context, actor Actor) ([]Namespace, error) {
+	query, args := `SELECT name FROM namespaces`, []any{}
+	if !actor.Superadmin {
+		query += ` WHERE owner_user_id=$1`
+		args = append(args, actor.UserID)
+	}
+	query += ` ORDER BY name`
+	rows, err := s.DB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var namespaces []Namespace
+	for rows.Next() {
+		var namespace Namespace
+		if err = rows.Scan(&namespace.Name); err != nil {
+			return nil, err
+		}
+		namespaces = append(namespaces, namespace)
+	}
+	return namespaces, rows.Err()
+}
+
+func (s *Store) authorizeNamespace(ctx context.Context, tx *sql.Tx, actor Actor, projectKey string) error {
+	namespace, _ := domain.SplitProjectKey(projectKey)
+	if namespace == "" {
+		return nil
+	}
+	var ownerID int64
+	err := tx.QueryRowContext(ctx, `SELECT owner_user_id FROM namespaces WHERE name=$1`, namespace).Scan(&ownerID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNamespaceRequired
+	}
+	if err != nil {
+		return err
+	}
+	if ownerID != actor.UserID {
+		return ErrNamespaceReserved
+	}
+	return nil
 }
 
 // checkProjectLimit serializes project creation for one account, so concurrent
@@ -352,6 +450,31 @@ func (s *Store) checkProjectLimit(ctx context.Context, tx *sql.Tx, userID int64)
 	}
 	if owned >= limit.Int64 {
 		return ErrProjectLimit
+	}
+	return nil
+}
+
+func (s *Store) checkNamespaceLimit(ctx context.Context, tx *sql.Tx, userID int64) error {
+	if _, err := tx.ExecContext(ctx, `SELECT id FROM users WHERE id=$1 FOR UPDATE`, userID); err != nil {
+		return err
+	}
+	var limit sql.NullInt64
+	err := tx.QueryRowContext(ctx, `
+		SELECT max_namespaces FROM plans
+		WHERE code=COALESCE((SELECT plan_code FROM user_plans WHERE user_id=$1), 'community')
+	`, userID).Scan(&limit)
+	if err != nil {
+		return err
+	}
+	if !limit.Valid {
+		return nil
+	}
+	var owned int64
+	if err = tx.QueryRowContext(ctx, `SELECT count(*) FROM namespaces WHERE owner_user_id=$1`, userID).Scan(&owned); err != nil {
+		return err
+	}
+	if owned >= limit.Int64 {
+		return ErrNamespaceLimit
 	}
 	return nil
 }

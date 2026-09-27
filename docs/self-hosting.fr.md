@@ -166,7 +166,9 @@ htb invite create --project SITE --role read
 La clé du projet (`SITE`) est l’identifiant court utilisé dans les commandes et
 les références de ticket (`SITE-1`). Vous pouvez optionnellement la préfixer par
 un namespace (`ALICE/SITE`) pour permettre plusieurs projets avec la même clé
-courte.
+courte. Réservez un namespace avant de l’utiliser : `htb namespace claim ALICE`.
+L’offre Community inclut un namespace ; les offres payantes peuvent augmenter
+ce quota.
 
 Transmettez le code d’invitation au client par votre canal habituel. Celui-ci
 ouvre `https://tickets.example.org/login`, se connecte via votre Zitadel, puis
@@ -191,7 +193,9 @@ données, videz `HTBD_ZITADEL_WEB_CLIENT_ID` puis redéployez.
 
 HTB applique automatiquement les migrations de base de données au démarrage du
 serveur. La migration `0010_namespaced_project_keys.sql` permet les préfixes de
-namespace optionnels dans les clés de projet (par exemple `ALICE/SITE`). Si vous
-mettez à jour depuis une version antérieure, la migration s’exécutera
-automatiquement ; les projets existants restent valides. Vous pouvez vérifier les
-migrations appliquées avec `SELECT version FROM schema_migrations ;`.
+namespace optionnels dans les clés de projet (par exemple `ALICE/SITE`). La
+migration suivante, `0011_namespace_reservations.sql`, réserve les préfixes
+existants à leurs propriétaires et ajoute le quota de namespaces par offre. Si
+vous mettez à jour depuis une version antérieure, les migrations s’exécuteront
+automatiquement ; les projets existants restent valides. Vous pouvez vérifier
+les migrations appliquées avec `SELECT version FROM schema_migrations ;`.

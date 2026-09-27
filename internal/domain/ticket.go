@@ -38,8 +38,9 @@ const (
 )
 
 var (
-	projectKey = regexp.MustCompile(`^[A-Z][A-Z0-9_]{1,19}(/[A-Z][A-Z0-9_]{1,19})?$`)
-	ticketRef  = regexp.MustCompile(`^([A-Z][A-Z0-9_]{1,19}(/[A-Z][A-Z0-9_]{1,19})?)-([1-9][0-9]*)$`)
+	namespaceKey = regexp.MustCompile(`^[A-Z][A-Z0-9_]{1,19}$`)
+	projectKey   = regexp.MustCompile(`^[A-Z][A-Z0-9_]{1,19}(/[A-Z][A-Z0-9_]{1,19})?$`)
+	ticketRef    = regexp.MustCompile(`^([A-Z][A-Z0-9_]{1,19}(/[A-Z][A-Z0-9_]{1,19})?)-([1-9][0-9]*)$`)
 )
 
 // NormalizeProjectKey makes project identifiers consistent across the CLI and API.
@@ -55,6 +56,18 @@ func NormalizeProjectKey(value string) (string, error) {
 		return "", fmt.Errorf("project key cannot exceed 40 characters")
 	}
 	return key, nil
+}
+
+// NormalizeNamespace makes namespace identifiers consistent across the CLI and API.
+func NormalizeNamespace(value string) (string, error) {
+	namespace := strings.ToUpper(strings.TrimSpace(value))
+	if namespace == "" {
+		return "", fmt.Errorf("namespace is required")
+	}
+	if !namespaceKey.MatchString(namespace) {
+		return "", fmt.Errorf("namespace must be 2 to 20 characters, start with a letter, and contain only letters, digits, or underscores")
+	}
+	return namespace, nil
 }
 
 func ParseReference(ref string) (string, int64, error) {

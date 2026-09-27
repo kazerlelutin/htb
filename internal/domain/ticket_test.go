@@ -97,3 +97,14 @@ func TestSuggestNamespace(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalizeNamespace(t *testing.T) {
+	if got, err := NormalizeNamespace(" alice "); err != nil || got != "ALICE" {
+		t.Fatalf("NormalizeNamespace = %q, %v", got, err)
+	}
+	for _, value := range []string{"", "123", "ALICE/SITE", "A-1"} {
+		if _, err := NormalizeNamespace(value); err == nil {
+			t.Errorf("NormalizeNamespace(%q) succeeded", value)
+		}
+	}
+}

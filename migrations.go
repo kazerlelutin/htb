@@ -34,3 +34,6 @@ var ClientRequestRejectionMigration string
 
 //go:embed migrations/0010_namespaced_project_keys.sql
 var NamespacedProjectKeysMigration string
+
+//go:embed migrations/0011_namespace_reservations.sql
+var NamespaceReservationsMigration string

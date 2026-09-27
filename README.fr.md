@@ -28,8 +28,10 @@ htb project create --key SITE --name "Site web"
 La clé du projet (`SITE`) est l’identifiant court utilisé dans les commandes et
 les références de ticket (`SITE-1`). Vous pouvez optionnellement la préfixer par
 un namespace (`ALICE/SITE`) pour permettre plusieurs projets avec la même clé
-courte. Les administrateurs peuvent renommer ultérieurement cette clé, namespace
-compris, avec `htb project rename --new-key ALICE/SITE`.
+courte. Réservez d’abord le namespace avec `htb namespace claim ALICE` ; le
+nombre de namespaces disponibles dépend de votre offre. Les administrateurs
+peuvent renommer ultérieurement cette clé, namespace compris, avec
+`htb project rename --new-key ALICE/SITE`.
 
 La connexion s’ouvre dans le navigateur via Zitadel. Si vous avez reçu une
 invitation à un projet existant, utilisez `htb invite accept CODE` au lieu de

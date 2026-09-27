@@ -33,6 +33,9 @@ type projectView struct {
 	Key, Name, Description string
 	Archived               bool
 }
+type namespaceView struct {
+	Name string `json:"name"`
+}
 
 type progressView struct {
 	Total int `json:"total"`
@@ -124,6 +127,8 @@ func main() {
 		err = authCommand(os.Args[2:])
 	case "project":
 		err = projectCommand(os.Args[2:])
+	case "namespace":
+		err = namespaceCommand(os.Args[2:])
 	case "feature":
 		err = featureCommand(os.Args[2:])
 	case "ticket":
@@ -166,6 +171,7 @@ Getting started:
 Commands:
   version                         Show the CLI version
   project list | status | create | use | members | member     Manage projects and access
+  namespace claim | list                              Reserve namespace prefixes
   feature create                  Create a roadmap feature
   ticket create | list | show     Create, browse, or view tickets
   ticket update | comment         Update or comment on a ticket
@@ -200,6 +206,12 @@ Use "htb help ticket create" or "htb ticket create --help" for command details.
 		return "Usage: htb project create --key KEY --name NAME [--description TEXT]\n\nCreate a project and make it current. A project key is the short identifier used in commands and ticket references, for example HTB-1 or ALICE/SITE-1. Input is normalized to uppercase. It must be 2 to 20 characters per part, start with a letter, and contain only letters, digits, or underscores. An optional namespace prefix (NAMESPACE/KEY) allows multiple projects with the same short key.\n"
 	case "project rename":
 		return "Usage: htb project rename --new-key KEY [--project KEY]\n\nRename a project key (including its namespace). The new key must be valid and unique. If the renamed project is the current project, the CLI updates its local configuration.\n"
+	case "namespace":
+		return "Usage:\n  htb namespace claim NAME\n  htb namespace list\n\nReserve namespace prefixes before using them in project keys. Your plan determines how many namespaces you can reserve.\n"
+	case "namespace claim":
+		return "Usage: htb namespace claim NAME\n\nReserve NAME for your account before creating or renaming a project to NAME/KEY.\n"
+	case "namespace list":
+		return "Usage: htb namespace list\n\nList namespace prefixes reserved by your account.\n"
 	case "project members":
 		return "Usage: htb project members [--project KEY]\n\nList project members. Administrators can use member IDs to change a role or remove access.\n"
 	case "project member":
@@ -648,7 +660,7 @@ func projectCommand(args []string) error {
 		if err := call("GET", "/api/v1/me", nil, &me); err == nil && me.Name != "" {
 			suggested := domain.SuggestNamespace(me.Name)
 			if suggested != "" {
-				fmt.Printf("Tip: Add a namespace prefix to avoid key conflicts, e.g., %s/%s\n", suggested, normalizedKey)
+				fmt.Printf("Tip: Reserve %s first with 'htb namespace claim %s', then use %s/%s to avoid key conflicts.\n", suggested, suggested, suggested, normalizedKey)
 			}
 		}
 	}
@@ -666,6 +678,39 @@ func projectCommand(args []string) error {
 	}
 	fmt.Printf("Project %s created: %s. It is now the current project.\n", created.Key, created.Name)
 	return nil
+}
+
+func namespaceCommand(args []string) error {
+	if len(args) == 2 && args[0] == "claim" {
+		name, err := domain.NormalizeNamespace(args[1])
+		if err != nil {
+			return fmt.Errorf("invalid namespace: %w", err)
+		}
+		var claimed namespaceView
+		if err := call("POST", "/api/v1/namespaces", map[string]string{"name": name}, &claimed); err != nil {
+			return err
+		}
+		fmt.Printf("Namespace %s reserved.\n", claimed.Name)
+		return nil
+	}
+	if len(args) == 1 && args[0] == "list" {
+		var response struct {
+			Namespaces []namespaceView `json:"namespaces"`
+		}
+		if err := call("GET", "/api/v1/namespaces", nil, &response); err != nil {
+			return err
+		}
+		if len(response.Namespaces) == 0 {
+			fmt.Println("No reserved namespaces.")
+			return nil
+		}
+		fmt.Println(styledHeading("Reserved namespaces:"))
+		for _, namespace := range response.Namespaces {
+			fmt.Println(namespace.Name)
+		}
+		return nil
+	}
+	return errors.New("usage: htb namespace {claim NAME|list}")
 }
 
 func projectMembers(args []string) error {

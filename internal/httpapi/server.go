@@ -45,6 +45,7 @@ var downloadCommands = []commandReference{
 	{"Projects", "htb project create --key KEY --name NAME [--description TEXT]", "Create a project and select it immediately. KEY identifies the project in commands and ticket references such as HTB-1 or ALICE/SITE-1; lowercase input is converted to uppercase. An optional namespace prefix (NAMESPACE/KEY) allows multiple projects with the same short key."},
 	{"Projects", "htb project use KEY", "Select the project used when a command does not include --project. KEY can be a short key (e.g., SITE) or a namespaced key (e.g., ALICE/SITE). If ambiguous, the CLI will list options."},
 	{"Projects", "htb project rename --new-key KEY [--project KEY]", "Rename a project key, including its namespace. Project administrators only; when the current project is renamed, the local selection is updated."},
+	{"Namespaces", "htb namespace claim NAME | list", "Reserve a namespace before using it in a project key. The number of reserved namespaces depends on the account plan."},
 	{"Projects", "htb project members [--project KEY]", "List project members. Administrators can use member IDs to change roles or remove access."},
 	{"Projects", "htb project member set-role --user ID --role read|write|admin [--project KEY]", "Change a non-owner member role. The project owner cannot be demoted."},
 	{"Projects", "htb project member remove --user ID [--project KEY]", "Remove a non-owner member from a project."},
@@ -218,6 +219,10 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 	case r.Method == "GET" && path == "me":
 		a := actor(r)
 		writeJSON(w, 200, map[string]any{"subject": a.Subject, "superadmin": a.Superadmin, "name": a.Name})
+	case r.Method == "GET" && path == "namespaces":
+		s.listNamespaces(w, r)
+	case r.Method == "POST" && path == "namespaces":
+		s.claimNamespace(w, r)
 	case r.Method == "POST" && path == "projects":
 		s.createProject(w, r)
 	case r.Method == "GET" && path == "projects":
@@ -251,6 +256,30 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeError(w, 404, "not_found", "Route not found", nil)
 	}
+}
+
+func (s *Server) listNamespaces(w http.ResponseWriter, r *http.Request) {
+	namespaces, err := s.store.ListNamespaces(r.Context(), actor(r))
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"namespaces": namespaces})
+}
+
+func (s *Server) claimNamespace(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Name string `json:"name"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	namespace, err := s.store.ClaimNamespace(r.Context(), actor(r), in.Name)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, namespace)
 }
 
 func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
@@ -598,6 +627,12 @@ func writeStoreError(w http.ResponseWriter, err error) {
 		writeError(w, 409, "version_conflict", "Ticket has changed; fetch it and retry", nil)
 	case errors.Is(err, store.ErrProjectLimit):
 		writeError(w, 403, "project_limit_reached", "Your account has reached its project limit", nil)
+	case errors.Is(err, store.ErrNamespaceLimit):
+		writeError(w, 403, "namespace_limit_reached", "Your account has reached its namespace limit", nil)
+	case errors.Is(err, store.ErrNamespaceRequired):
+		writeError(w, 403, "namespace_required", "Claim this namespace before using it", nil)
+	case errors.Is(err, store.ErrNamespaceReserved):
+		writeError(w, 403, "namespace_reserved", "This namespace is reserved by another account", nil)
 	default:
 		writeError(w, 422, "invalid_request", err.Error(), nil)
 	}
