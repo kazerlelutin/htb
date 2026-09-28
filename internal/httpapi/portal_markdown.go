@@ -15,6 +15,7 @@ var portalInlinePattern = regexp.MustCompile("\\[[^\\]]+\\]\\([^)]*\\)|`[^`]+`|\
 func renderPortalMarkdown(source string) template.HTML {
 	var out strings.Builder
 	inList, inCode := false, false
+	source = normalizePortalMarkdown(source)
 	closeList := func() {
 		if inList {
 			out.WriteString("</ul>")
@@ -87,6 +88,16 @@ func renderPortalMarkdown(source string) template.HTML {
 		out.WriteString("</code></pre>")
 	}
 	return template.HTML(out.String())
+}
+
+// normalizePortalMarkdown accepts descriptions submitted from command lines
+// where a newline is commonly provided as the two characters "\\n". It only
+// expands line endings, deliberately leaving every other escape sequence
+// untouched so that source text cannot become executable HTML.
+func normalizePortalMarkdown(source string) string {
+	source = strings.ReplaceAll(source, "\\r\\n", "\n")
+	source = strings.ReplaceAll(source, "\\n", "\n")
+	return strings.ReplaceAll(source, "\r\n", "\n")
 }
 
 func renderPortalInline(source string) string {

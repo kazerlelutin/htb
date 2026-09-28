@@ -144,7 +144,7 @@ func (stub *clientStoryStub) DeleteClientStoryComment(ctx context.Context, actor
 
 func TestClientStoryDashboardShowsSafeProgress(t *testing.T) {
 	s, _, _ := portalTestServer()
-	s.stories = &clientStoryStub{stories: []store.ClientStory{{Ref: "SITE-12", Project: "SITE", Title: "Exporter les données", Description: "# Besoin\n<script>secret()</script>", Status: "in_progress", ChildCount: 3, DoneChildren: 2, Published: true}}}
+	s.stories = &clientStoryStub{stories: []store.ClientStory{{Ref: "SITE-12", Project: "SITE", Title: "Exporter les données", Description: `# Besoin\n<script>secret()</script>`, Status: "in_progress", ChildCount: 3, DoneChildren: 2, Published: true}}}
 	w := httptest.NewRecorder()
 	s.Handler().ServeHTTP(w, portalRequest(http.MethodGet, "/portal/projects/SITE", nil))
 	body := w.Body.String()

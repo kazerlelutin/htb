@@ -13,6 +13,12 @@ Feature: User stories visible aux clients
     Then ce membre voit l’US, son titre et sa description
     And ce membre ne voit ni les titres des tâches techniques ni les commentaires internes
 
+  Scenario: La description Markdown d’une US est lisible dans le portail
+    Given une US publiée contient des titres et une liste Markdown avec des retours à la ligne encodés
+    When une personne ouvre le détail de cette US dans le portail
+    Then les titres et les éléments de la liste sont rendus comme du contenu HTML sémantique
+    And aucun HTML fourni dans la description ne peut être exécuté
+
   Scenario: L’avancement d’une US vient de ses tâches techniques
     Given une US publiée possède trois tâches techniques dont deux terminées
     When une personne ouvre l’US dans le portail

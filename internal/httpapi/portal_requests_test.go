@@ -225,6 +225,15 @@ func TestPortalMarkdownRejectsUnsafeLinks(t *testing.T) {
 	}
 }
 
+func TestPortalMarkdownSupportsEscapedNewlines(t *testing.T) {
+	got := string(renderPortalMarkdown(`Introduction\n\n## Périmètre\n- [ ] Première étape\n- [x] Dernière étape`))
+	for _, want := range []string{"<p>Introduction</p>", "<h3>Périmètre</h3>", "<li>☐ Première étape</li>", "<li>☑ Dernière étape</li>"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("escaped newlines did not render Markdown %q: %s", want, got)
+		}
+	}
+}
+
 func TestClientRequestOnlyLinksToPublishedStory(t *testing.T) {
 	s, requests, _ := portalTestServer()
 	linked := "SITE-12"
