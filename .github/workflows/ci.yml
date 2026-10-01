@@ -35,4 +35,16 @@ jobs:
       - run: go test ./...
       - run: go vet ./...
       - run: go build ./cmd/htbd ./cmd/htb
+      - run: CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build ./cmd/htbd ./cmd/htb
       - run: sh -n install.sh
+  windows-cli:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.25.x"
+      - run: go build ./cmd/htb
+      - shell: pwsh
+        run: |
+          [void][scriptblock]::Create((Get-Content -LiteralPath ./install.ps1 -Raw))

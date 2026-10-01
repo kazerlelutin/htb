@@ -1,4 +1,10 @@
 Feature: CLI experience
+  Scenario: A Windows user can install the CLI from PowerShell
+    Given a release contains the Windows x86_64 CLI archive and checksums
+    When they run the PowerShell installer
+    Then it verifies the archive before installing htb.exe for the current user
+    And htb is available in the current and future PowerShell sessions
+
   Scenario: Creating a project gives immediately useful feedback
     Given a connected person without a current project
     When they run "htb project create --key SITE --name Ben-to"

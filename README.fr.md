@@ -80,7 +80,15 @@ dans `~/.local/bin`, sans `sudo` :
 curl -fsSL https://github.com/kazerlelutin/htb/releases/latest/download/install.sh | sh
 ```
 
-Ouvrez un nouveau terminal si la commande est introuvable. Les
+Sous Windows, ouvrez PowerShell puis lancez l’installateur. Il vérifie la
+somme de contrôle, installe `htb.exe` dans `%LOCALAPPDATA%\HTB\bin` et ajoute
+ce dossier au `PATH` utilisateur :
+
+```powershell
+irm https://github.com/kazerlelutin/htb/releases/latest/download/install.ps1 | iex
+```
+
+La release Windows cible actuellement x86_64. Les
 [fichiers de release](https://github.com/kazerlelutin/htb/releases) peuvent
 aussi être consultés avant l’installation.
 
