@@ -114,7 +114,7 @@ func (s valuesScanner) Scan(destinations ...any) error {
 func TestScanTicketDecodesLabelsAndFullRelations(t *testing.T) {
 	ticket, err := scanTicket(valuesScanner{values: []any{
 		int64(42), int64(2), "SITE", string(domain.TechnicalTask), "SITE-1", "SITE-7", "newsletter",
-		"Créer l'endpoint", "Description", string(domain.Open), "normal", 1, `["newsletter","site"]`, 0, 0, false,
+		"Créer l'endpoint", "Description", string(domain.Open), "normal", 1, `["newsletter","site"]`, 0, 0, false, false,
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -143,12 +143,22 @@ func TestTicketSerializesPublicationState(t *testing.T) {
 func TestScanTicketDecodesPublicationState(t *testing.T) {
 	ticket, err := scanTicket(valuesScanner{values: []any{
 		int64(42), int64(2), "SITE", string(domain.UserStory), nil, nil, nil,
-		"Publish the website", "", string(domain.Open), "normal", 1, `[]`, 0, 0, true,
+		"Publish the website", "", string(domain.Open), "normal", 1, `[]`, 0, 0, true, false,
 	}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !ticket.Published {
 		t.Fatalf("published state was not decoded: %#v", ticket)
+	}
+}
+
+func TestTicketSerializesArchiveState(t *testing.T) {
+	b, err := json.Marshal(Ticket{Archived: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"archived":true`) {
+		t.Fatalf("missing archive state from %s", b)
 	}
 }

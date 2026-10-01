@@ -40,3 +40,6 @@ var NamespaceReservationsMigration string
 
 //go:embed migrations/0012_client_story_comment_lifecycle.sql
 var ClientStoryCommentLifecycleMigration string
+
+//go:embed migrations/0013_ticket_lifecycle.sql
+var TicketLifecycleMigration string

@@ -90,6 +90,7 @@ type ticketView struct {
 	ChildCount   int      `json:"child_count"`
 	DoneChildren int      `json:"done_children"`
 	Published    bool     `json:"published"`
+	Archived     bool     `json:"archived"`
 }
 type commentView struct {
 	Body, Author string
@@ -219,11 +220,11 @@ Use "htb help ticket create" or "htb ticket create --help" for command details.
 	case "feature", "feature create":
 		return "Usage: htb feature create --key KEY --name NAME [--project KEY] [--description TEXT] [--due-date YYYY-MM-DD]\n\nCreate a roadmap feature. Example: htb feature create --key newsletter --name Newsletter --due-date 2026-09-30\n"
 	case "ticket":
-		return "Usage:\n  htb ticket create --title TITLE [options]\n  htb ticket list [options]\n  htb ticket show REF | comments REF | activity REF\n  htb ticket update --version N [options] REF\n  htb ticket comment REF TEXT\n  htb ticket publish REF | unpublish REF\n  htb ticket client-comments REF | client-comment REF TEXT\n  htb ticket claim REF | htb ticket release REF\n  htb ticket versions REF | restore --version N REF REVISION\n"
+		return "Usage:\n  htb ticket create --title TITLE [options]\n  htb ticket list [options]\n  htb ticket show REF | comments REF | activity REF\n  htb ticket update --version N [options] REF\n  htb ticket comment REF TEXT\n  htb ticket publish REF | unpublish REF\n  htb ticket client-comments REF | client-comment REF TEXT\n  htb ticket claim REF | htb ticket release REF\n  htb ticket versions REF | restore --version N REF REVISION\n  htb ticket archive REF | unarchive REF\n  htb ticket delete --confirm REF\n"
 	case "ticket create":
 		return "Usage: htb ticket create --title TITLE [--type user_story|technical_task|bug|incident] [--project KEY] [--parent REF] [--related REF] [--feature KEY] [--description TEXT] [--priority low|normal|high|urgent] [--label TAG]\n\nA technical task requires --parent STORY-REF. Repeat --label to add multiple labels.\n"
 	case "ticket list":
-		return "Usage: htb ticket list [--project KEY] [--feature KEY] [--status STATUS] [--priority PRIORITY] [--label LABEL] [--query TEXT] [--tree] [--json|--csv]\n\nFilter daily work by status, priority, label, or text in a title or description. Terminal output is used by default; use --json or --csv for scripts.\n"
+		return "Usage: htb ticket list [--project KEY] [--feature KEY] [--status STATUS] [--priority PRIORITY] [--label LABEL] [--query TEXT] [--archived] [--tree] [--json|--csv]\n\nFilter daily work by status, priority, label, or text in a title or description. Active tickets are shown by default; use --archived to list archived tickets. Terminal output is used by default; use --json or --csv for scripts.\n"
 	case "ticket show":
 		return "Usage: htb ticket show REF\n\nShow a ticket and its current version.\n"
 	case "ticket update":
@@ -248,6 +249,10 @@ Use "htb help ticket create" or "htb ticket create --help" for command details.
 		return "Usage: htb ticket versions REF\n\nList a ticket's revisions.\n"
 	case "ticket restore":
 		return "Usage: htb ticket restore --version N REF REVISION\n\nRestore a revision when the ticket is still at version N.\n"
+	case "ticket archive", "ticket unarchive":
+		return "Usage: htb " + command + " REF\n\nOnly the ticket creator or a project administrator can archive or restore it.\n"
+	case "ticket delete":
+		return "Usage: htb ticket delete --confirm REF\n\nPermanently delete a ticket. Use this only for entry mistakes or duplicates; the ticket creator or a project administrator is required.\n"
 	case "request":
 		return "Usage:\n  htb request list [--project KEY]\n  htb request show ID | comments ID\n  htb request comment ID TEXT\n  htb request status ID received|in_progress|needs_info|done|rejected\n  htb request link ID TICKET-REF\n\nClient requests are separate from internal work tickets.\n"
 	case "invite":
@@ -997,6 +1002,10 @@ func ticketCommand(args []string) error {
 		return ticketVersions(args[1:])
 	case "restore":
 		return ticketRestore(args[1:])
+	case "archive", "unarchive":
+		return ticketArchive(args[0], args[1:])
+	case "delete":
+		return ticketDelete(args[1:])
 	case "comment":
 		return ticketComment(args[1:])
 	case "comments":
@@ -1085,6 +1094,38 @@ func ticketAction(args []string, action string) error {
 	fmt.Printf("Ticket %s claimed.\n", ticket.Ref)
 	return nil
 }
+
+func ticketArchive(action string, args []string) error {
+	if len(args) != 1 {
+		return fmt.Errorf("usage: htb ticket %s REF", action)
+	}
+	if err := call("POST", "/api/v1/tickets/"+args[0]+"/"+action, map[string]any{}, &struct{}{}); err != nil {
+		return err
+	}
+	verb := "archived"
+	if action == "unarchive" {
+		verb = "restored"
+	}
+	fmt.Printf("Ticket %s %s.\n", strings.ToUpper(args[0]), verb)
+	return nil
+}
+
+func ticketDelete(args []string) error {
+	fs := flag.NewFlagSet("ticket delete", flag.ContinueOnError)
+	confirmed := fs.Bool("confirm", false, "confirm permanent deletion")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 || !*confirmed {
+		return errors.New("usage: htb ticket delete --confirm REF")
+	}
+	ref := fs.Arg(0)
+	if err := call("DELETE", "/api/v1/tickets/"+ref, nil, &struct{}{}); err != nil {
+		return err
+	}
+	fmt.Printf("Ticket %s permanently deleted.\n", strings.ToUpper(ref))
+	return nil
+}
 func ticketCreate(args []string) error {
 	fs := flag.NewFlagSet("ticket create", flag.ContinueOnError)
 	project := fs.String("project", "", "project")
@@ -1118,6 +1159,7 @@ func ticketList(args []string) error {
 	fs := flag.NewFlagSet("ticket list", flag.ContinueOnError)
 	project := fs.String("project", "", "project")
 	tree := fs.Bool("tree", false, "include child tickets")
+	archived := fs.Bool("archived", false, "list archived tickets")
 	feature := fs.String("feature", "", "feature key")
 	status := fs.String("status", "", "open|in_progress|review|blocked|done")
 	priority := fs.String("priority", "", "low|normal|high|urgent")
@@ -1136,6 +1178,9 @@ func ticketList(args []string) error {
 		}
 	}
 	query := url.Values{"project": {*project}, "tree": {fmt.Sprint(*tree)}}
+	if *archived {
+		query.Set("archived", "true")
+	}
 	if *feature != "" {
 		query.Set("feature", *feature)
 	}
@@ -1496,7 +1541,7 @@ func archivedLabel(archived bool) string {
 
 func printTicket(ticket ticketView) {
 	fmt.Printf("%s — %s\n", styledReference(ticket.Ref), ticket.Title)
-	fmt.Printf("Project: %s | Type: %s | Status: %s | Priority: %s | Version: %d\n", ticket.Project, ticket.Type, styledStatus(ticket.Status), ticket.Priority, ticket.Version)
+	fmt.Printf("Project: %s | Type: %s | Status: %s | Priority: %s | Version: %d%s\n", ticket.Project, ticket.Type, styledStatus(ticket.Status), ticket.Priority, ticket.Version, styledMuted(archivedLabel(ticket.Archived)))
 	if ticket.Type == "user_story" {
 		fmt.Println("Progress:", ticketProgress(ticket))
 	}

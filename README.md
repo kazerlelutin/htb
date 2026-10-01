@@ -105,6 +105,21 @@ Run `htb help` or `htb help ticket create` for command options. The
 [command guide](https://htboard.xyz/commands) is also available on the web.
 Integrations can start from the versioned [OpenAPI v1 contract](/openapi.v1.yaml).
 
+### Archive or delete a ticket
+
+```bash
+htb ticket archive SITE-1
+htb ticket list --archived
+htb ticket unarchive SITE-1
+htb ticket delete --confirm SITE-1
+```
+
+Archiving removes a ticket from active work without losing its history and can
+be undone. Only its creator or a project administrator can archive, restore,
+or delete it. Deletion is permanent: reserve it for data-entry mistakes and
+duplicates. A ticket still referenced by a task, link, or client request must
+first be corrected or archived.
+
 ### Share a user story with clients
 
 ```bash

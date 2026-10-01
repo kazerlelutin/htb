@@ -109,6 +109,22 @@ Utilisez `htb help` ou `htb help ticket create` pour connaître les options.
 Le [guide des commandes](https://htboard.xyz/commands) est aussi accessible
 sur le web.
 
+### Archiver ou supprimer un ticket
+
+```bash
+htb ticket archive SITE-1
+htb ticket list --archived
+htb ticket unarchive SITE-1
+htb ticket delete --confirm SITE-1
+```
+
+L’archivage retire un ticket du travail actif sans perdre son historique et
+peut être annulé. Seul son créateur ou un administrateur du projet peut
+archiver, restaurer ou supprimer un ticket. La suppression est définitive :
+réservez-la aux erreurs de saisie et aux doublons. Un ticket encore référencé
+par une tâche, un lien ou une demande client doit d’abord être corrigé ou
+archivé.
+
 ### Partager une US avec un client
 
 ```bash

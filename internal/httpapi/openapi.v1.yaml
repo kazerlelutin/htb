@@ -34,6 +34,7 @@ paths:
       summary: List tickets in a project
       parameters:
         - { name: project, in: query, required: true, schema: { type: string } }
+        - { name: archived, in: query, required: false, schema: { type: boolean, default: false }, description: List archived rather than active tickets }
       responses: { '200': { description: Tickets } }
     post:
       summary: Create a user story, technical task, bug, or incident
@@ -47,6 +48,20 @@ paths:
       summary: Update a ticket with optimistic concurrency
       parameters: [ { $ref: '#/components/parameters/TicketRef' } ]
       responses: { '200': { description: Updated }, '409': { description: Version conflict } }
+    delete:
+      summary: Permanently delete a ticket created by the caller or by a project administrator
+      parameters: [ { $ref: '#/components/parameters/TicketRef' } ]
+      responses: { '204': { description: Deleted }, '403': { $ref: '#/components/responses/Forbidden' }, '409': { description: Ticket has dependencies } }
+  /tickets/{ref}/archive:
+    post:
+      summary: Archive a ticket created by the caller or by a project administrator
+      parameters: [ { $ref: '#/components/parameters/TicketRef' } ]
+      responses: { '204': { description: Archived }, '403': { $ref: '#/components/responses/Forbidden' } }
+  /tickets/{ref}/unarchive:
+    post:
+      summary: Restore an archived ticket created by the caller or by a project administrator
+      parameters: [ { $ref: '#/components/parameters/TicketRef' } ]
+      responses: { '204': { description: Restored }, '403': { $ref: '#/components/responses/Forbidden' } }
   /tickets/{ref}/comments:
     get:
       summary: List internal comments

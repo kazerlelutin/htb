@@ -36,7 +36,7 @@ func TestHelpRecognizesShortAndLongFlags(t *testing.T) {
 
 func TestTicketViewDecodesRelationshipAndPublicationFields(t *testing.T) {
 	var ticket ticketView
-	if err := json.Unmarshal([]byte(`{"ref":"SITE-4","parent_ref":"SITE-3","feature_key":"newsletter","published":true}`), &ticket); err != nil {
+	if err := json.Unmarshal([]byte(`{"ref":"SITE-4","parent_ref":"SITE-3","feature_key":"newsletter","published":true,"archived":true}`), &ticket); err != nil {
 		t.Fatal(err)
 	}
 	if ticket.ParentRef == nil || *ticket.ParentRef != "SITE-3" || ticket.FeatureKey == nil || *ticket.FeatureKey != "newsletter" {
@@ -44,6 +44,9 @@ func TestTicketViewDecodesRelationshipAndPublicationFields(t *testing.T) {
 	}
 	if !ticket.Published {
 		t.Fatal("published state was not decoded")
+	}
+	if !ticket.Archived {
+		t.Fatal("archive state was not decoded")
 	}
 }
 
@@ -141,7 +144,7 @@ func TestHelpIsDetailedForEveryCommand(t *testing.T) {
 	commands := [][]string{
 		{"version"}, {"config", "set-server"}, {"auth", "login"}, {"auth", "status"}, {"namespace"}, {"namespace", "claim"}, {"namespace", "list"},
 		{"project", "list"}, {"project", "status"}, {"project", "use"}, {"project", "create"}, {"project", "members"}, {"project", "member"}, {"feature", "create"},
-		{"ticket", "create"}, {"ticket", "list"}, {"ticket", "show"}, {"ticket", "update"}, {"ticket", "comment"}, {"ticket", "claim"}, {"ticket", "release"}, {"ticket", "versions"}, {"ticket", "restore"},
+		{"ticket", "create"}, {"ticket", "list"}, {"ticket", "show"}, {"ticket", "update"}, {"ticket", "comment"}, {"ticket", "claim"}, {"ticket", "release"}, {"ticket", "versions"}, {"ticket", "restore"}, {"ticket", "archive"}, {"ticket", "unarchive"}, {"ticket", "delete"},
 		{"invite", "create"}, {"invite", "accept"}, {"invite", "list"}, {"invite", "revoke"},
 	}
 	for _, command := range commands {
@@ -157,7 +160,7 @@ func TestHelpIsDetailedForEveryCommand(t *testing.T) {
 
 func TestTicketListHelpExplainsDailyWorkFilters(t *testing.T) {
 	help := helpText([]string{"ticket", "list"})
-	for _, flag := range []string{"--status STATUS", "--priority PRIORITY", "--label LABEL", "--query TEXT", "--json", "--csv"} {
+	for _, flag := range []string{"--status STATUS", "--priority PRIORITY", "--label LABEL", "--query TEXT", "--archived", "--json", "--csv"} {
 		if !strings.Contains(help, flag) {
 			t.Fatalf("ticket list help is missing %q: %s", flag, help)
 		}

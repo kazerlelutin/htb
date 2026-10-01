@@ -52,7 +52,7 @@ var downloadCommands = []commandReference{
 	{"Projects", "htb project member remove --user ID [--project KEY]", "Remove a non-owner member from a project."},
 	{"Roadmap", "htb feature create --key KEY --name NAME [--project KEY] [--description TEXT] [--due-date YYYY-MM-DD]", "Create a roadmap feature. It uses the current project unless --project is provided; --due-date is optional."},
 	{"Tickets", "htb ticket create --title TITLE [--type user_story|technical_task|bug|incident] [--project KEY] [--parent REF] [--related REF] [--feature KEY] [--description TEXT] [--priority low|normal|high|urgent] [--label TAG]", "Create a ticket in the current project by default. A technical task must use --parent with a user-story reference; repeat --label to attach several labels."},
-	{"Tickets", "htb ticket list [--project KEY] [--feature KEY] [--status STATUS] [--priority PRIORITY] [--label LABEL] [--query TEXT] [--tree] [--json|--csv]", "List tickets from the current project. Combine feature, status, priority, label, and text filters; include child tickets with --tree or select JSON/CSV for scripts."},
+	{"Tickets", "htb ticket list [--project KEY] [--feature KEY] [--status STATUS] [--priority PRIORITY] [--label LABEL] [--query TEXT] [--archived] [--tree] [--json|--csv]", "List active tickets by default, or archived tickets with --archived."},
 	{"Tickets", "htb ticket show REF", "Display one ticket, including its status, relationships, labels, and current version."},
 	{"Tickets", "htb ticket update --version N [--title TITLE] [--description TEXT] [--status open|in_progress|review|blocked|done] [--priority low|normal|high|urgent] [--feature KEY] REF", "Update a ticket safely. Use the version shown by 'htb ticket show REF' so concurrent changes are not overwritten."},
 	{"Tickets", "htb ticket comment REF TEXT", "Add a comment to a ticket."},
@@ -65,6 +65,8 @@ var downloadCommands = []commandReference{
 	{"Tickets", "htb ticket release REF", "Remove your claim from a ticket so another person can take it."},
 	{"Tickets", "htb ticket versions REF", "List the saved revisions of a ticket."},
 	{"Tickets", "htb ticket restore --version N REF REVISION", "Restore a saved revision only when the ticket is still at version N, preventing accidental overwrites."},
+	{"Tickets", "htb ticket archive REF | unarchive REF", "Archive or restore a ticket. Only its creator or a project administrator can do this."},
+	{"Tickets", "htb ticket delete --confirm REF", "Permanently delete a ticket created by you, or as project administrator. Use only to correct entry mistakes or duplicates."},
 	{"Invitations", "htb invite create [--project KEY] [--role read|write|admin] [--expires-at RFC3339]", "Create a shareable invitation for the current project or --project. Choose the member role and an expiry time; it defaults to 7 days."},
 	{"Invitations", "htb invite accept CODE", "Accept an invitation code and gain access to its project."},
 	{"Invitations", "htb invite list [--project KEY]", "List active invitations without exposing their codes."},
@@ -526,6 +528,7 @@ func (s *Server) listTickets(w http.ResponseWriter, r *http.Request) {
 	}
 	filter := store.TicketFilter{
 		ParentOnly: r.URL.Query().Get("tree") != "true",
+		Archived:   r.URL.Query().Get("archived") == "true",
 		FeatureKey: r.URL.Query().Get("feature"),
 		Status:     domain.Status(r.URL.Query().Get("status")),
 		Priority:   r.URL.Query().Get("priority"),
@@ -622,6 +625,22 @@ func (s *Server) ticket(w http.ResponseWriter, r *http.Request, tail string) {
 		writeJSON(w, 200, map[string]string{"status": "released"})
 		return
 	}
+	if ref, ok := ticketSubresource(tail, "archive"); ok && r.Method == "POST" {
+		if err := s.store.SetTicketArchived(r.Context(), actor(r), ref, true); err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if ref, ok := ticketSubresource(tail, "unarchive"); ok && r.Method == "POST" {
+		if err := s.store.SetTicketArchived(r.Context(), actor(r), ref, false); err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	if ref, ok := ticketSubresource(tail, "versions"); ok && r.Method == "GET" {
 		versions, err := s.store.Revisions(r.Context(), actor(r), ref)
 		if err != nil {
@@ -657,6 +676,13 @@ func (s *Server) ticket(w http.ResponseWriter, r *http.Request, tail string) {
 		}
 		w.Header().Set("ETag", strconv.Itoa(ticket.Version))
 		writeJSON(w, 200, ticket)
+		return
+	case "DELETE":
+		if err := s.store.DeleteTicket(r.Context(), actor(r), ref); err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 		return
 	default:
 	}
@@ -720,6 +746,8 @@ func writeStoreError(w http.ResponseWriter, err error) {
 		writeError(w, 404, "not_found", "Resource not found", nil)
 	case errors.Is(err, store.ErrConflict):
 		writeError(w, 409, "version_conflict", "Ticket has changed; fetch it and retry", nil)
+	case errors.Is(err, store.ErrTicketHasDependencies):
+		writeError(w, 409, "ticket_has_dependencies", "Remove ticket links or dependent tickets before deleting it", nil)
 	case errors.Is(err, store.ErrProjectLimit):
 		writeError(w, 403, "project_limit_reached", "Your account has reached its project limit", nil)
 	case errors.Is(err, store.ErrNamespaceLimit):

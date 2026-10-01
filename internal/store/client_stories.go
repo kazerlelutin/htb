@@ -46,9 +46,9 @@ type ClientStoryComment struct {
 }
 
 const clientStorySelect = `SELECT p.key || '-' || t.number::text,p.key,t.title,t.description,t.status,t.client_visibility,
-	(SELECT count(*) FROM tickets child WHERE child.parent_ticket_id=t.id AND child.type='technical_task'),
-	(SELECT count(*) FROM tickets child WHERE child.parent_ticket_id=t.id AND child.type='technical_task' AND child.status='done')
-	FROM tickets t JOIN projects p ON p.id=t.project_id WHERE t.type='user_story'`
+	(SELECT count(*) FROM tickets child WHERE child.parent_ticket_id=t.id AND child.type='technical_task' AND child.archived_at IS NULL),
+	(SELECT count(*) FROM tickets child WHERE child.parent_ticket_id=t.id AND child.type='technical_task' AND child.status='done' AND child.archived_at IS NULL)
+	FROM tickets t JOIN projects p ON p.id=t.project_id WHERE t.type='user_story' AND t.archived_at IS NULL`
 
 func scanClientStory(row scanner) (ClientStory, error) {
 	var story ClientStory
@@ -106,10 +106,10 @@ func (s *Store) ListClientStoriesPage(ctx context.Context, actor Actor, project 
 	err = s.DB.QueryRowContext(ctx, `SELECT
 		count(*),
 		count(*) FILTER (WHERE t.status='done'),
-		COALESCE(sum((SELECT count(*) FROM tickets child WHERE child.parent_ticket_id=t.id AND child.type='technical_task')), 0),
-		COALESCE(sum((SELECT count(*) FROM tickets child WHERE child.parent_ticket_id=t.id AND child.type='technical_task' AND child.status='done')), 0)
+		COALESCE(sum((SELECT count(*) FROM tickets child WHERE child.parent_ticket_id=t.id AND child.type='technical_task' AND child.archived_at IS NULL)), 0),
+		COALESCE(sum((SELECT count(*) FROM tickets child WHERE child.parent_ticket_id=t.id AND child.type='technical_task' AND child.status='done' AND child.archived_at IS NULL)), 0)
 		FROM tickets t JOIN projects p ON p.id=t.project_id
-		WHERE t.type='user_story' AND p.key=$1 AND ($2 OR t.client_visibility='published')`, project, preview).Scan(&result.Total, &result.StoryDone, &result.TaskCount, &result.TaskDone)
+		WHERE t.type='user_story' AND t.archived_at IS NULL AND p.key=$1 AND ($2 OR t.client_visibility='published')`, project, preview).Scan(&result.Total, &result.StoryDone, &result.TaskCount, &result.TaskDone)
 	if err != nil {
 		return ClientStoryPage{}, err
 	}
@@ -173,7 +173,7 @@ func (s *Store) SetClientStoryPublished(ctx context.Context, actor Actor, ref st
 		visibility = ClientStoryPublished
 	}
 	err = tx.QueryRowContext(ctx, `UPDATE tickets t SET client_visibility=$3,client_published_at=CASE WHEN $3='published' THEN COALESCE(t.client_published_at,now()) ELSE NULL END
-		FROM projects p WHERE p.id=t.project_id AND p.key=$1 AND t.number=$2 AND t.type='user_story'
+		FROM projects p WHERE p.id=t.project_id AND p.key=$1 AND t.number=$2 AND t.type='user_story' AND t.archived_at IS NULL
 		RETURNING t.id,p.id`, project, number, visibility).Scan(&ticketID, &projectID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
@@ -218,7 +218,7 @@ func (s *Store) authorizeInternalStoryComments(ctx context.Context, actor Actor,
 		return err
 	}
 	var exists bool
-	err = s.DB.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM tickets t JOIN projects p ON p.id=t.project_id WHERE p.key=$1 AND t.number=$2 AND t.type='user_story')`, project, number).Scan(&exists)
+	err = s.DB.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM tickets t JOIN projects p ON p.id=t.project_id WHERE p.key=$1 AND t.number=$2 AND t.type='user_story' AND t.archived_at IS NULL)`, project, number).Scan(&exists)
 	if err != nil {
 		return err
 	}
@@ -240,7 +240,7 @@ func (s *Store) ListClientStoryComments(ctx context.Context, actor Actor, ref st
 	rows, err := s.DB.QueryContext(ctx, `SELECT c.id,c.body,COALESCE(a.name,''),c.author_credential_id,c.created_at,c.updated_at
 		FROM client_story_comments c JOIN tickets t ON t.id=c.ticket_id JOIN projects p ON p.id=t.project_id
 		JOIN credentials a ON a.id=c.author_credential_id
-		WHERE p.key=$1 AND t.number=$2 AND t.type='user_story' AND t.client_visibility='published'
+		WHERE p.key=$1 AND t.number=$2 AND t.type='user_story' AND t.archived_at IS NULL AND t.client_visibility='published'
 		ORDER BY c.created_at,c.id`, project, number)
 	if err != nil {
 		return nil, err
@@ -277,7 +277,7 @@ func (s *Store) AddClientStoryComment(ctx context.Context, actor Actor, ref, bod
 	defer tx.Rollback()
 	var ticketID, projectID int64
 	err = tx.QueryRowContext(ctx, `SELECT t.id,p.id FROM tickets t JOIN projects p ON p.id=t.project_id
-		WHERE p.key=$1 AND t.number=$2 AND t.type='user_story' AND t.client_visibility='published' FOR UPDATE OF t`, project, number).Scan(&ticketID, &projectID)
+		WHERE p.key=$1 AND t.number=$2 AND t.type='user_story' AND t.archived_at IS NULL AND t.client_visibility='published' FOR UPDATE OF t`, project, number).Scan(&ticketID, &projectID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return comment, ErrNotFound
 	}
@@ -320,7 +320,7 @@ func (s *Store) UpdateClientStoryComment(ctx context.Context, actor Actor, ref s
 	err = tx.QueryRowContext(ctx, `UPDATE client_story_comments c SET body=$4,updated_at=now()
 		FROM tickets t JOIN projects p ON p.id=t.project_id
 		WHERE c.id=$3 AND c.ticket_id=t.id AND p.key=$1 AND t.number=$2 AND t.type='user_story'
-		AND t.client_visibility='published' AND c.author_credential_id=$5
+		AND t.archived_at IS NULL AND t.client_visibility='published' AND c.author_credential_id=$5
 		RETURNING c.id,c.body,c.created_at,c.updated_at,p.id,t.id`, project, number, commentID, trimmed, actor.CredentialID).Scan(&comment.ID, &comment.Body, &comment.CreatedAt, &comment.UpdatedAt, &projectID, &ticketID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return comment, ErrNotFound
@@ -357,7 +357,7 @@ func (s *Store) DeleteClientStoryComment(ctx context.Context, actor Actor, ref s
 	var ticketID, projectID int64
 	err = tx.QueryRowContext(ctx, `DELETE FROM client_story_comments c USING tickets t JOIN projects p ON p.id=t.project_id
 		WHERE c.id=$3 AND c.ticket_id=t.id AND p.key=$1 AND t.number=$2 AND t.type='user_story'
-		AND t.client_visibility='published' AND c.author_credential_id=$4
+		AND t.archived_at IS NULL AND t.client_visibility='published' AND c.author_credential_id=$4
 		RETURNING p.id,t.id`, project, number, commentID, actor.CredentialID).Scan(&projectID, &ticketID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound

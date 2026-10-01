@@ -18,13 +18,14 @@ import (
 )
 
 var (
-	ErrNotFound          = errors.New("not found")
-	ErrForbidden         = errors.New("forbidden")
-	ErrConflict          = errors.New("conflict")
-	ErrProjectLimit      = errors.New("project limit reached")
-	ErrNamespaceLimit    = errors.New("namespace limit reached")
-	ErrNamespaceRequired = errors.New("namespace must be claimed before it can be used")
-	ErrNamespaceReserved = errors.New("namespace is reserved by another account")
+	ErrNotFound              = errors.New("not found")
+	ErrForbidden             = errors.New("forbidden")
+	ErrConflict              = errors.New("conflict")
+	ErrProjectLimit          = errors.New("project limit reached")
+	ErrNamespaceLimit        = errors.New("namespace limit reached")
+	ErrNamespaceRequired     = errors.New("namespace must be claimed before it can be used")
+	ErrNamespaceReserved     = errors.New("namespace is reserved by another account")
+	ErrTicketHasDependencies = errors.New("ticket has dependent records")
 )
 
 type Store struct {
@@ -101,6 +102,7 @@ type Ticket struct {
 	ChildCount   int               `json:"child_count,omitempty"`
 	DoneChildren int               `json:"done_children,omitempty"`
 	Published    bool              `json:"published"`
+	Archived     bool              `json:"archived"`
 }
 type CreateTicket struct {
 	Project     string            `json:"project"`
@@ -115,6 +117,7 @@ type CreateTicket struct {
 }
 type TicketFilter struct {
 	ParentOnly bool
+	Archived   bool
 	FeatureKey string
 	Status     domain.Status
 	Priority   string
@@ -168,6 +171,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 		{"0010_namespaced_project_keys", htb.NamespacedProjectKeysMigration},
 		{"0011_namespace_reservations", htb.NamespaceReservationsMigration},
 		{"0012_client_story_comment_lifecycle", htb.ClientStoryCommentLifecycleMigration},
+		{"0013_ticket_lifecycle", htb.TicketLifecycleMigration},
 	}
 	for _, migration := range migrations {
 		var exists bool
@@ -547,7 +551,7 @@ func (s *Store) ListProjectStatuses(ctx context.Context, actor Actor) ([]Project
 		count(t.id) FILTER (WHERE t.status='in_progress'),
 		count(t.id) FILTER (WHERE t.status='review'),
 		count(t.id) FILTER (WHERE t.status='blocked')
-		FROM projects p LEFT JOIN tickets t ON t.project_id=p.id`
+		FROM projects p LEFT JOIN tickets t ON t.project_id=p.id AND t.archived_at IS NULL`
 	args := []any{}
 	if !actor.Superadmin {
 		query += ` JOIN project_memberships pm ON pm.project_id=p.id WHERE pm.user_id=$1`
@@ -678,7 +682,11 @@ func (s *Store) GetTicket(ctx context.Context, actor Actor, ref string) (Ticket,
 	}
 	project, number, _ := domain.ParseReference(ref)
 	row := s.DB.QueryRowContext(ctx, ticketSelect+` WHERE p.key=$1 AND t.number=$2`, project, number)
-	return scanTicket(row)
+	result, err = scanTicket(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return result, ErrNotFound
+	}
+	return result, err
 }
 
 func (s *Store) ListTickets(ctx context.Context, actor Actor, project string, filter TicketFilter) ([]Ticket, error) {
@@ -691,8 +699,8 @@ func (s *Store) ListTickets(ctx context.Context, actor Actor, project string, fi
 	if filter.Priority != "" && !validPriority(filter.Priority) {
 		return nil, fmt.Errorf("invalid ticket priority")
 	}
-	query := ticketSelect + ` WHERE p.key=$1`
-	arguments := []any{strings.ToUpper(project)}
+	query := ticketSelect + ` WHERE p.key=$1 AND (t.archived_at IS NOT NULL)=$2`
+	arguments := []any{strings.ToUpper(project), filter.Archived}
 	nextArgument := func(value any) string {
 		arguments = append(arguments, value)
 		return fmt.Sprintf("$%d", len(arguments))
@@ -831,6 +839,116 @@ func (s *Store) UpdateTicket(ctx context.Context, actor Actor, ref string, in Up
 		return result, err
 	}
 	return result, nil
+}
+
+// SetTicketArchived removes or restores a ticket from active work. Its creator
+// and project administrators can perform the operation.
+func (s *Store) SetTicketArchived(ctx context.Context, actor Actor, ref string, archived bool) error {
+	project, _, err := domain.ParseReference(ref)
+	if err != nil {
+		return err
+	}
+	if err = s.authorize(ctx, actor, project, domain.RoleRead); err != nil {
+		return err
+	}
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	projectID, err := projectID(ctx, tx, project)
+	if err != nil {
+		return err
+	}
+	id, _, err := ticketID(ctx, tx, ref, projectID)
+	if err != nil {
+		return err
+	}
+	var creator int64
+	var parentRef sql.NullString
+	err = tx.QueryRowContext(ctx, `SELECT t.created_by_credential_id,CASE WHEN parent.id IS NULL THEN NULL ELSE p.key || '-' || parent.number::text END FROM tickets t LEFT JOIN tickets parent ON parent.id=t.parent_ticket_id LEFT JOIN projects p ON p.id=parent.project_id WHERE t.id=$1 FOR UPDATE`, id).Scan(&creator, &parentRef)
+	if err != nil {
+		return err
+	}
+	if !actor.Superadmin && creator != actor.CredentialID {
+		if err = s.authorize(ctx, actor, project, domain.RoleAdmin); err != nil {
+			return err
+		}
+	}
+	if archived {
+		_, err = tx.ExecContext(ctx, `UPDATE tickets SET archived_at=COALESCE(archived_at,now()),updated_at=now() WHERE id=$1`, id)
+	} else {
+		_, err = tx.ExecContext(ctx, `UPDATE tickets SET archived_at=NULL,updated_at=now() WHERE id=$1`, id)
+	}
+	if err != nil {
+		return err
+	}
+	action := "ticket_restored"
+	if archived {
+		action = "ticket_archived"
+	}
+	if err = writeEvent(ctx, tx, projectID, id, actor.CredentialID, action, map[string]any{"ref": strings.ToUpper(ref)}); err != nil {
+		return err
+	}
+	if parentRef.Valid {
+		if err = refreshStory(ctx, tx, parentRef.String, actor.CredentialID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// DeleteTicket permanently removes a ticket that is no longer referenced. The
+// project audit trail retains a deletion event without retaining ticket data.
+func (s *Store) DeleteTicket(ctx context.Context, actor Actor, ref string) error {
+	project, _, err := domain.ParseReference(ref)
+	if err != nil {
+		return err
+	}
+	if err = s.authorize(ctx, actor, project, domain.RoleRead); err != nil {
+		return err
+	}
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	projectID, err := projectID(ctx, tx, project)
+	if err != nil {
+		return err
+	}
+	id, _, err := ticketID(ctx, tx, ref, projectID)
+	if err != nil {
+		return err
+	}
+	var creator int64
+	if err = tx.QueryRowContext(ctx, `SELECT created_by_credential_id FROM tickets WHERE id=$1 FOR UPDATE`, id).Scan(&creator); err != nil {
+		return err
+	}
+	if !actor.Superadmin && creator != actor.CredentialID {
+		if err = s.authorize(ctx, actor, project, domain.RoleAdmin); err != nil {
+			return err
+		}
+	}
+	var hasDependencies bool
+	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM tickets WHERE parent_ticket_id=$1 OR related_ticket_id=$1) OR EXISTS(SELECT 1 FROM client_requests WHERE linked_ticket_id=$1)`, id).Scan(&hasDependencies); err != nil {
+		return err
+	}
+	if hasDependencies {
+		return ErrTicketHasDependencies
+	}
+	for _, table := range []string{"comments", "ticket_revisions", "activity_events"} {
+		if _, err = tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE ticket_id=$1`, id); err != nil {
+			return err
+		}
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM tickets WHERE id=$1`, id); err != nil {
+		return err
+	}
+	if err = writeProjectEvent(ctx, tx, projectID, actor.CredentialID, "ticket_deleted", map[string]any{"ref": strings.ToUpper(ref)}); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) Revisions(ctx context.Context, actor Actor, ref string) ([]Revision, error) {
@@ -1355,14 +1473,14 @@ func (s *Store) authorize(ctx context.Context, actor Actor, project string, requ
 
 type scanner interface{ Scan(...any) error }
 
-const ticketSelect = `SELECT t.id,t.number,p.key,t.type,CASE WHEN pt.id IS NULL THEN NULL ELSE pp.key || '-' || pt.number::text END,CASE WHEN rt.id IS NULL THEN NULL ELSE rtp.key || '-' || rt.number::text END,f.key,t.title,t.description,t.status,t.priority,t.version, COALESCE((SELECT json_agg(l.name ORDER BY l.name) FROM ticket_labels tl JOIN labels l ON l.id=tl.label_id WHERE tl.ticket_id=t.id),'[]'::json), (SELECT count(*) FROM tickets c WHERE c.parent_ticket_id=t.id), (SELECT count(*) FROM tickets c WHERE c.parent_ticket_id=t.id AND c.status='done'), t.client_visibility='published' FROM tickets t JOIN projects p ON p.id=t.project_id LEFT JOIN tickets pt ON pt.id=t.parent_ticket_id LEFT JOIN projects pp ON pp.id=pt.project_id LEFT JOIN tickets rt ON rt.id=t.related_ticket_id LEFT JOIN projects rtp ON rtp.id=rt.project_id LEFT JOIN features f ON f.id=t.feature_id`
+const ticketSelect = `SELECT t.id,t.number,p.key,t.type,CASE WHEN pt.id IS NULL THEN NULL ELSE pp.key || '-' || pt.number::text END,CASE WHEN rt.id IS NULL THEN NULL ELSE rtp.key || '-' || rt.number::text END,f.key,t.title,t.description,t.status,t.priority,t.version, COALESCE((SELECT json_agg(l.name ORDER BY l.name) FROM ticket_labels tl JOIN labels l ON l.id=tl.label_id WHERE tl.ticket_id=t.id),'[]'::json), (SELECT count(*) FROM tickets c WHERE c.parent_ticket_id=t.id AND c.archived_at IS NULL), (SELECT count(*) FROM tickets c WHERE c.parent_ticket_id=t.id AND c.status='done' AND c.archived_at IS NULL), t.client_visibility='published',t.archived_at IS NOT NULL FROM tickets t JOIN projects p ON p.id=t.project_id LEFT JOIN tickets pt ON pt.id=t.parent_ticket_id LEFT JOIN projects pp ON pp.id=pt.project_id LEFT JOIN tickets rt ON rt.id=t.related_ticket_id LEFT JOIN projects rtp ON rtp.id=rt.project_id LEFT JOIN features f ON f.id=t.feature_id`
 
 func scanTicket(row scanner) (Ticket, error) {
 	var t Ticket
 	var parent, related, feature sql.NullString
 	var labelsJSON []byte
 	var typ, status string
-	err := row.Scan(&t.ID, &t.Number, &t.Project, &typ, &parent, &related, &feature, &t.Title, &t.Description, &status, &t.Priority, &t.Version, &labelsJSON, &t.ChildCount, &t.DoneChildren, &t.Published)
+	err := row.Scan(&t.ID, &t.Number, &t.Project, &typ, &parent, &related, &feature, &t.Title, &t.Description, &status, &t.Priority, &t.Version, &labelsJSON, &t.ChildCount, &t.DoneChildren, &t.Published, &t.Archived)
 	if err != nil {
 		return t, err
 	}
@@ -1415,6 +1533,9 @@ func ticketID(ctx context.Context, q interface {
 	var id int64
 	var typ string
 	err = q.QueryRowContext(ctx, `SELECT t.id,t.type FROM tickets t JOIN projects p ON p.id=t.project_id WHERE t.project_id=$1 AND p.key=$2 AND t.number=$3`, projectID, project, number).Scan(&id, &typ)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = ErrNotFound
+	}
 	return id, typ, err
 }
 func setLabels(ctx context.Context, tx *sql.Tx, ticketID, projectID int64, labels []string) error {
@@ -1478,7 +1599,7 @@ func refreshStory(ctx context.Context, tx *sql.Tx, parentRef string, actor int64
 	if err != nil {
 		return err
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT status FROM tickets WHERE parent_ticket_id=$1`, id)
+	rows, err := tx.QueryContext(ctx, `SELECT status FROM tickets WHERE parent_ticket_id=$1 AND archived_at IS NULL`, id)
 	if err != nil {
 		return err
 	}
