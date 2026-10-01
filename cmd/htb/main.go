@@ -24,6 +24,8 @@ import (
 
 var version = "dev"
 
+const defaultServer = "https://htboard.xyz"
+
 type config struct {
 	Server, Token, RefreshToken, Issuer, ClientID, Audience, CurrentProject string
 	ExpiresAt                                                               time.Time
@@ -165,9 +167,9 @@ func helpText(parts []string) string {
 Usage: htb <command> [options]
 
 Getting started:
-  htb config set-server URL       Set the HTB server
   htb auth login                  Sign in through the browser
   htb auth status                 Show connection and current project
+  htb config set-server URL       Change the HTB server
 
 Commands:
   version                         Show the CLI version
@@ -188,7 +190,7 @@ Use "htb help ticket create" or "htb ticket create --help" for command details.
 	case "version":
 		return "Usage: htb version\n\nShow the installed CLI version.\n"
 	case "config", "config set-server":
-		return "Usage: htb config set-server URL\n\nSet the HTB server URL. Example: htb config set-server https://tickets.example.org\n"
+		return "Usage: htb config set-server URL\n\nChange the HTB server URL. The default is https://htboard.xyz. Example: htb config set-server https://tickets.example.org\n"
 	case "auth":
 		return "Usage:\n  htb auth login [--issuer URL --client-id ID --audience ID]\n  htb auth status\n\nSign in or show your connection and current project.\n"
 	case "auth login":
@@ -1496,13 +1498,19 @@ func load() (config, error) {
 	}
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return config{}, nil
+		return config{Server: defaultServer}, nil
 	}
 	if err != nil {
 		return config{}, err
 	}
 	var c config
-	return c, json.Unmarshal(data, &c)
+	if err := json.Unmarshal(data, &c); err != nil {
+		return config{}, err
+	}
+	if c.Server == "" {
+		c.Server = defaultServer
+	}
+	return c, nil
 }
 func save(c config) error {
 	path, err := configPath()

@@ -12,18 +12,20 @@ accès aux projets et les tickets.
 | | Utiliser la version en ligne | Auto-héberger HTB |
 | --- | --- | --- |
 | Serveur | [htboard.xyz](https://htboard.xyz) | Votre domaine et votre infrastructure |
-| À configurer | La CLI | PostgreSQL, Zitadel, HTTPS et HTB |
+| À configurer | Rien avant la connexion | PostgreSQL, Zitadel, HTTPS et HTB |
 | Pour commencer | [Démarrage rapide](#utiliser-la-version-en-ligne) | [Guide d’auto-hébergement](docs/self-hosting.fr.md) |
 
 ### Utiliser la version en ligne
 
-Installez la [CLI](#installer-la-cli), puis connectez-la au serveur hébergé :
+Installez la [CLI](#installer-la-cli), puis connectez-vous :
 
 ```bash
-htb config set-server https://htboard.xyz
 htb auth login
 htb project create --key SITE --name "Site web"
 ```
+
+La CLI utilise `https://htboard.xyz` par défaut. Utilisez `htb config set-server URL`
+uniquement pour la connecter à un serveur HTB auto-hébergé.
 
 La clé du projet (`SITE`) est l’identifiant court utilisé dans les commandes et
 les références de ticket (`SITE-1`). Vous pouvez optionnellement la préfixer par

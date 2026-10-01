@@ -1,4 +1,10 @@
 Feature: CLI experience
+  Scenario: The hosted server is ready without configuration
+    Given a person has installed the CLI without a local configuration file
+    When they run "htb auth login"
+    Then the CLI requests its connection settings from "https://htboard.xyz"
+    And they only need "htb config set-server URL" to use another server
+
   Scenario: A Windows user can install the CLI from PowerShell
     Given a release contains the Windows x86_64 CLI archive and checksums
     When they run the PowerShell installer

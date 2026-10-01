@@ -11,18 +11,20 @@ requests. Zitadel handles sign-in; HTB manages project access and tickets.
 | | Use the hosted service | Self-host HTB |
 | --- | --- | --- |
 | Server | [htboard.xyz](https://htboard.xyz) | Your own domain and infrastructure |
-| You configure | The CLI | PostgreSQL, Zitadel, HTTPS, and HTB |
+| You configure | Nothing before signing in | PostgreSQL, Zitadel, HTTPS, and HTB |
 | Start here | [Hosted quick start](#use-the-hosted-service) | [Self-hosting guide](docs/self-hosting.md) |
 
 ### Use the hosted service
 
-Install the [CLI](#install-the-cli), then connect it to the hosted server:
+Install the [CLI](#install-the-cli), then sign in:
 
 ```bash
-htb config set-server https://htboard.xyz
 htb auth login
 htb project create --key SITE --name "Website"
 ```
+
+The CLI uses `https://htboard.xyz` by default. Use `htb config set-server URL`
+only to connect it to a self-hosted HTB server.
 
 The project key (`SITE`) is the short identifier used in commands and ticket
 references (`SITE-1`). You can optionally prefix it with a namespace

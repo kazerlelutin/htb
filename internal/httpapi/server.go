@@ -38,7 +38,7 @@ type commandReference struct {
 var downloadCommands = []commandReference{
 	{"Help", "htb help [COMMAND]", "Show the full local guide. Pass a command path such as 'ticket create' for its options and examples."},
 	{"General", "htb version", "Show the installed CLI version when reporting an issue or checking an upgrade."},
-	{"Connection", "htb config set-server URL", "Save the HTB server URL used by all subsequent commands on this computer."},
+	{"Connection", "htb config set-server URL", "Change the HTB server URL used by all subsequent commands. The default is https://htboard.xyz."},
 	{"Connection", "htb auth login [--issuer URL --client-id ID --audience ID]", "Open the browser sign-in flow. Normally the server provides the connection settings; the optional flags are only for an advanced manual setup."},
 	{"Connection", "htb auth status", "Show whether you are connected, the projects you can access, and the project currently selected."},
 	{"Projects", "htb project list", "List projects you can access. The star marks the current project."},

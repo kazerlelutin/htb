@@ -7,6 +7,31 @@ import (
 	"testing"
 )
 
+func TestLoadUsesHostedServerByDefault(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	c, err := load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Server != defaultServer {
+		t.Fatalf("default server = %q, want %q", c.Server, defaultServer)
+	}
+}
+
+func TestLoadPreservesConfiguredServer(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := save(config{Server: "https://tickets.example.org"}); err != nil {
+		t.Fatal(err)
+	}
+	c, err := load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Server != "https://tickets.example.org" {
+		t.Fatalf("configured server = %q", c.Server)
+	}
+}
+
 func TestDeviceScopesRequestHTBAudienceAndRoles(t *testing.T) {
 	scopes := deviceScopes("123456")
 	for _, expected := range []string{

@@ -222,7 +222,7 @@ func TestHomeShowsHostedAndSelfHostedPaths(t *testing.T) {
 		`id="deployment"`, `Hosted by Ben-to`, `Self-host HTB`,
 		`href="https://htboard.xyz"`,
 		`href="https://github.com/kazerlelutin/htb/blob/main/docs/self-hosting.md"`,
-		`htb config set-server https://htboard.xyz`,
+		`htb auth login`,
 	} {
 		if !strings.Contains(w.Body.String(), want) {
 			t.Fatalf("home page is missing %q", want)
