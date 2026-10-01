@@ -169,9 +169,13 @@ func TestTicketLifecycleOverHTTP(t *testing.T) {
 	if linked.Code != http.StatusOK || !strings.Contains(linked.Body.String(), ticket.Ref) {
 		t.Fatalf("list linked tickets: %d %s", linked.Code, linked.Body.String())
 	}
-	filtered := requestJSON(t, server, http.MethodGet, "/api/v1/tickets?project="+key+"&status=open&priority=high&label=newsletter&query=avec+tags", "")
+	filtered := requestJSON(t, server, http.MethodGet, "/api/v1/tickets?project="+key+"&status=open&priority=high&label=newsletter&query=mis+%C3%A0+jour", "")
 	if filtered.Code != http.StatusOK || !strings.Contains(filtered.Body.String(), ticket.Ref) {
 		t.Fatalf("list filtered tickets: %d %s", filtered.Code, filtered.Body.String())
+	}
+	emptyFiltered := requestJSON(t, server, http.MethodGet, "/api/v1/tickets?project="+key+"&query=no-match", "")
+	if emptyFiltered.Code != http.StatusOK || !strings.Contains(emptyFiltered.Body.String(), `"tickets":[]`) {
+		t.Fatalf("empty ticket list must be an array: %d %s", emptyFiltered.Code, emptyFiltered.Body.String())
 	}
 	if response := requestJSON(t, server, http.MethodGet, "/api/v1/tickets?project="+key+"&status=unknown", ""); response.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("invalid status filter: %d %s", response.Code, response.Body.String())

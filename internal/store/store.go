@@ -32,6 +32,11 @@ type Store struct {
 	DB                   *sql.DB
 	EnforceProjectLimits bool
 }
+
+type rowQuerier interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
 type Actor struct {
 	CredentialID int64  `json:"credential_id"`
 	UserID       int64  `json:"user_id"`
@@ -729,7 +734,7 @@ func (s *Store) ListTickets(ctx context.Context, actor Actor, project string, fi
 		return nil, err
 	}
 	defer rows.Close()
-	var result []Ticket
+	result := make([]Ticket, 0)
 	for rows.Next() {
 		ticket, err := scanTicket(rows)
 		if err != nil {
@@ -866,12 +871,12 @@ func (s *Store) SetTicketArchived(ctx context.Context, actor Actor, ref string, 
 	}
 	var creator int64
 	var parentRef sql.NullString
-	err = tx.QueryRowContext(ctx, `SELECT t.created_by_credential_id,CASE WHEN parent.id IS NULL THEN NULL ELSE p.key || '-' || parent.number::text END FROM tickets t LEFT JOIN tickets parent ON parent.id=t.parent_ticket_id LEFT JOIN projects p ON p.id=parent.project_id WHERE t.id=$1 FOR UPDATE`, id).Scan(&creator, &parentRef)
+	err = tx.QueryRowContext(ctx, `SELECT t.created_by_credential_id,CASE WHEN parent.id IS NULL THEN NULL ELSE p.key || '-' || parent.number::text END FROM tickets t LEFT JOIN tickets parent ON parent.id=t.parent_ticket_id LEFT JOIN projects p ON p.id=parent.project_id WHERE t.id=$1 FOR UPDATE OF t`, id).Scan(&creator, &parentRef)
 	if err != nil {
 		return err
 	}
 	if !actor.Superadmin && creator != actor.CredentialID {
-		if err = s.authorize(ctx, actor, project, domain.RoleAdmin); err != nil {
+		if err = authorize(ctx, tx, actor, project, domain.RoleAdmin); err != nil {
 			return err
 		}
 	}
@@ -926,7 +931,7 @@ func (s *Store) DeleteTicket(ctx context.Context, actor Actor, ref string) error
 		return err
 	}
 	if !actor.Superadmin && creator != actor.CredentialID {
-		if err = s.authorize(ctx, actor, project, domain.RoleAdmin); err != nil {
+		if err = authorize(ctx, tx, actor, project, domain.RoleAdmin); err != nil {
 			return err
 		}
 	}
@@ -1230,7 +1235,7 @@ func (s *Store) Release(ctx context.Context, actor Actor, ref string) error {
 		return ErrConflict
 	}
 	if owner.Int64 != actor.CredentialID && !actor.Superadmin {
-		if err = s.authorize(ctx, actor, project, domain.RoleAdmin); err != nil {
+		if err = authorize(ctx, tx, actor, project, domain.RoleAdmin); err != nil {
 			return err
 		}
 	}
@@ -1450,11 +1455,15 @@ func projectAdministration(ctx context.Context, tx *sql.Tx, project string) (int
 }
 
 func (s *Store) authorize(ctx context.Context, actor Actor, project string, required domain.Role) error {
+	return authorize(ctx, s.DB, actor, project, required)
+}
+
+func authorize(ctx context.Context, queryer rowQuerier, actor Actor, project string, required domain.Role) error {
 	if actor.Superadmin {
 		return nil
 	}
 	var role, max string
-	err := s.DB.QueryRowContext(ctx, `SELECT pm.role,c.max_role FROM credentials c JOIN project_memberships pm ON pm.user_id=c.user_id JOIN projects p ON p.id=pm.project_id WHERE c.id=$1 AND p.key=$2 AND c.disabled_at IS NULL`, actor.CredentialID, strings.ToUpper(project)).Scan(&role, &max)
+	err := queryer.QueryRowContext(ctx, `SELECT pm.role,c.max_role FROM credentials c JOIN project_memberships pm ON pm.user_id=c.user_id JOIN projects p ON p.id=pm.project_id WHERE c.id=$1 AND p.key=$2 AND c.disabled_at IS NULL`, actor.CredentialID, strings.ToUpper(project)).Scan(&role, &max)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrForbidden
 	}
