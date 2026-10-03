@@ -48,3 +48,19 @@ func TestHasRoleSupportsStandardZitadelClaim(t *testing.T) {
 		t.Fatal("unexpected role")
 	}
 }
+
+func TestDisplayNamePrefersUsernameThenEmailOverTechnicalIdentifier(t *testing.T) {
+	const subject = "388178523472855349"
+	for _, test := range []struct {
+		name, preferred, email, want string
+	}{
+		{name: subject, preferred: "alice", email: "alice@example.test", want: "alice"},
+		{name: subject, email: "alice@example.test", want: "alice@example.test"},
+		{name: "Alice Example", want: "Alice Example"},
+		{name: subject, want: ""},
+	} {
+		if got := displayName(subject, test.preferred, test.name, test.email); got != test.want {
+			t.Errorf("displayName(%q, %q, %q) = %q, want %q", test.preferred, test.name, test.email, got, test.want)
+		}
+	}
+}

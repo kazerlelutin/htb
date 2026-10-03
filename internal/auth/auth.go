@@ -74,10 +74,7 @@ func (v *ZitadelVerifier) Verify(ctx context.Context, raw string) (Principal, er
 	if err := token.Claims(&all); err != nil {
 		return Principal{}, err
 	}
-	p := Principal{Subject: claims.Subject, Name: claims.Name, Email: claims.Email}
-	if p.Name == "" {
-		p.Name = claims.Preferred
-	}
+	p := Principal{Subject: claims.Subject, Name: displayName(claims.Subject, claims.Preferred, claims.Name, claims.Email), Email: claims.Email}
 	p.Superadmin = hasRole(all[v.superadminClaim], v.superadminRole)
 	return p, nil
 }
@@ -142,10 +139,20 @@ func (a *BrowserAuthenticator) Exchange(ctx context.Context, code, codeVerifier 
 	if claims.Subject == "" || claims.Email == "" || !claims.Verified {
 		return Principal{}, fmt.Errorf("ID token must contain a subject and verified email")
 	}
-	if claims.Name == "" {
-		claims.Name = claims.Preferred
+	return Principal{Subject: claims.Subject, Name: displayName(claims.Subject, claims.Preferred, claims.Name, claims.Email), Email: claims.Email}, nil
+}
+
+// displayName chooses a human-readable identity for HTB. Some Zitadel
+// configurations put the opaque subject identifier in the name claim, so it
+// must never take precedence over a username or email address.
+func displayName(subject, preferred, name, email string) string {
+	for _, candidate := range []string{preferred, email, name} {
+		candidate = strings.TrimSpace(candidate)
+		if candidate != "" && candidate != strings.TrimSpace(subject) {
+			return candidate
+		}
 	}
-	return Principal{Subject: claims.Subject, Name: claims.Name, Email: claims.Email}, nil
+	return ""
 }
 
 // hasRole accepts Zitadel's standard nested claim shape, while retaining

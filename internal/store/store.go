@@ -210,6 +210,15 @@ func (s *Store) ResolveActor(ctx context.Context, subject, name, email string, s
 	actor.Subject, actor.Superadmin = subject, super
 	err := s.DB.QueryRowContext(ctx, `SELECT c.id,c.user_id,c.name FROM credentials c WHERE c.zitadel_subject=$1 AND c.disabled_at IS NULL`, subject).Scan(&actor.CredentialID, &actor.UserID, &actor.Name)
 	if err == nil {
+		if name = strings.TrimSpace(name); name != "" {
+			if _, err = s.DB.ExecContext(ctx, `UPDATE users SET name=$2,email=COALESCE(NULLIF($3,''),email) WHERE id=$1`, actor.UserID, name, strings.TrimSpace(email)); err != nil {
+				return actor, err
+			}
+			if _, err = s.DB.ExecContext(ctx, `UPDATE credentials SET name=$2 WHERE id=$1`, actor.CredentialID, name); err != nil {
+				return actor, err
+			}
+			actor.Name = name
+		}
 		return actor, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {

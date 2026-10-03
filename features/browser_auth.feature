@@ -42,6 +42,12 @@ Feature: Client browser authentication
     And their technical identifier is not displayed
     And the header offers a sign-out action
 
+  Scenario: A signed-in visitor uses a human-readable identity
+    Given Zitadel provides a preferred username or verified email address
+    When the visitor signs in and opens the public HTB site
+    Then HTB displays the username, or the email address when no username is available
+    And HTB does not display the technical Zitadel identifier
+
   Scenario: Account controls stay beside the language selector
     Given HTB is configured with browser login
     When a visitor opens the public HTB site on desktop or mobile
