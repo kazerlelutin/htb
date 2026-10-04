@@ -93,7 +93,10 @@ ChatGPT registers its own client and callback URI with Zitadel through DCR.
 
    Replace `id.example.org` with the Zitadel issuer. MCP clients must register
    before a person has authenticated. Keep Zitadel rate limiting enabled and
-   restrict redirect URIs to trusted domains.
+   restrict redirect URIs to trusted domains. This HTTP route accepts writes
+   from Zitadel **4.17.0** onward; an earlier release can return `405 Method
+   Not Allowed` to `PUT` while still allowing `GET`. Upgrade Zitadel in that
+   case.
 2. Zitadel creates a `ZITADEL DCR` project. Copy its **Project ID** into
    `HTBD_ZITADEL_MCP_AUDIENCE`. DCR client tokens use this audience rather
    than the HTB project audience.

@@ -107,7 +107,10 @@ de retour auprès de Zitadel par DCR.
    Remplacez `id.example.org` par l’issuer Zitadel. C’est le mode requis par
    les clients MCP qui s’enregistrent avant qu’une personne soit connectée.
    Conservez le rate limiting de Zitadel et limitez les URI de redirection aux
-   domaines de confiance.
+   domaines de confiance. Cette route HTTP accepte l’écriture à partir de
+   Zitadel **4.17.0** ; une version antérieure peut répondre `405 Method Not
+   Allowed` au `PUT` tout en laissant le `GET` fonctionner. Mettez Zitadel à
+   jour dans ce cas.
 2. Zitadel crée le projet `ZITADEL DCR`. Copiez son **Project ID** dans
    `HTBD_ZITADEL_MCP_AUDIENCE`. Les jetons des clients DCR portent cette
    audience, différente de l’audience du projet HTB.
