@@ -75,7 +75,8 @@ pour votre installation.
 
 ### Utiliser HTB dans ChatGPT
 
-HTB peut fournir un MCP en lecture seule à l’URL `/mcp`. Sa connexion utilise
+HTB peut fournir un MCP à l’URL `/mcp` pour consulter HTB et soumettre une
+proposition de ticket confirmée via le processus de demande existant. Sa connexion utilise
 Zitadel avec OAuth PKCE, jamais le code de la CLI. Consultez la section
 [ChatGPT / MCP](docs/self-hosting.fr.md#chatgpt--mcp) du guide
 d’auto-hébergement avant de connecter `https://votre-domaine/mcp` dans

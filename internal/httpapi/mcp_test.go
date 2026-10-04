@@ -25,12 +25,18 @@ func (stub mcpVerifierStub) Verify(context.Context, string) (auth.Principal, err
 }
 
 type mcpStoreStub struct {
-	actor      store.Actor
-	projects   []store.Project
-	tickets    []store.Ticket
-	ticket     store.Ticket
-	resolveErr error
-	queryErr   error
+	actor        store.Actor
+	projects     []store.Project
+	tickets      []store.Ticket
+	ticket       store.Ticket
+	resolveErr   error
+	queryErr     error
+	request      store.ClientRequest
+	requestErr   error
+	project      string
+	title        string
+	body         string
+	requestCalls int
 }
 
 func (stub *mcpStoreStub) ResolveActor(_ context.Context, subject, _, _ string, _ bool) (store.Actor, error) {
@@ -53,6 +59,15 @@ func (stub *mcpStoreStub) ListTickets(context.Context, store.Actor, string, stor
 
 func (stub *mcpStoreStub) GetTicket(context.Context, store.Actor, string) (store.Ticket, error) {
 	return stub.ticket, stub.queryErr
+}
+
+func (stub *mcpStoreStub) CreateClientRequest(_ context.Context, _ store.Actor, project, title, body string) (store.ClientRequest, error) {
+	stub.requestCalls++
+	stub.project, stub.title, stub.body = project, title, body
+	if stub.requestErr != nil {
+		return store.ClientRequest{}, stub.requestErr
+	}
+	return stub.request, nil
 }
 
 func newMCPTestServer(data *mcpStoreStub) *Server {
@@ -131,7 +146,7 @@ func TestMCPIsDisabledUntilExplicitlyEnabled(t *testing.T) {
 	}
 }
 
-func TestMCPInitializesAndDescribesReadOnlyTools(t *testing.T) {
+func TestMCPInitializesAndDescribesReadAndProposalTools(t *testing.T) {
 	server := newMCPTestServer(&mcpStoreStub{actor: store.Actor{Subject: "person-1"}})
 
 	initialized := performMCPRequest(t, server, `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}`, "access-token")
@@ -153,7 +168,7 @@ func TestMCPInitializesAndDescribesReadOnlyTools(t *testing.T) {
 	if initializeResponse.Result.ProtocolVersion != mcpLegacyProtocolVersion {
 		t.Fatalf("protocol version = %q", initializeResponse.Result.ProtocolVersion)
 	}
-	if !strings.Contains(initializeResponse.Result.Instructions, "plan and propose") || !strings.Contains(initializeResponse.Result.Instructions, "Do not create") {
+	if !strings.Contains(initializeResponse.Result.Instructions, "plan and propose") || !strings.Contains(initializeResponse.Result.Instructions, "explicitly confirms") || !strings.Contains(initializeResponse.Result.Instructions, "Do not create") {
 		t.Fatalf("MCP instructions do not preserve the planning boundary: %q", initializeResponse.Result.Instructions)
 	}
 
@@ -161,8 +176,26 @@ func TestMCPInitializesAndDescribesReadOnlyTools(t *testing.T) {
 	if tools.Code != http.StatusOK {
 		t.Fatalf("tools/list status = %d", tools.Code)
 	}
-	if body := tools.Body.String(); !strings.Contains(body, `"htb_list_projects"`) || !strings.Contains(body, `"readOnlyHint":true`) || !strings.Contains(body, `"_meta":{"securitySchemes":[{"scopes":["openid","profile","email"],"type":"oauth2"}]}`) || strings.Contains(body, `"htb_create_ticket"`) {
+	if body := tools.Body.String(); !strings.Contains(body, `"htb_list_projects"`) || !strings.Contains(body, `"htb_submit_ticket_proposal"`) || !strings.Contains(body, `"readOnlyHint":true`) || !strings.Contains(body, `"confirmed":{"const":true,"type":"boolean"}`) || !strings.Contains(body, `"_meta":{"securitySchemes":[{"scopes":["openid","profile","email"],"type":"oauth2"}]}`) || strings.Contains(body, `"htb_create_ticket"`) {
 		t.Fatalf("unexpected tools response: %s", body)
+	}
+}
+
+func TestMCPSubmitsConfirmedProposalThroughClientRequests(t *testing.T) {
+	data := &mcpStoreStub{actor: store.Actor{Subject: "person-1"}, request: store.ClientRequest{ID: 14, Project: "SITE", Title: "Improve search", Body: "Add a filter.", Status: "received"}}
+	server := newMCPTestServer(data)
+
+	proposal := performMCPRequest(t, server, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"htb_submit_ticket_proposal","arguments":{"project":"SITE","title":"Improve search","description":"Add a filter.","confirmed":true}}}`, "access-token")
+	if proposal.Code != http.StatusOK || !strings.Contains(proposal.Body.String(), `"status":"received"`) {
+		t.Fatalf("proposal response = %d %s", proposal.Code, proposal.Body.String())
+	}
+	if data.project != "SITE" || data.title != "Improve search" || data.body != "Add a filter." {
+		t.Fatalf("unexpected client request: %#v", data)
+	}
+
+	notConfirmed := performMCPRequest(t, server, `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"htb_submit_ticket_proposal","arguments":{"project":"SITE","title":"Improve search","description":"Add a filter.","confirmed":false}}}`, "access-token")
+	if notConfirmed.Code != http.StatusOK || !strings.Contains(notConfirmed.Body.String(), `"isError":true`) || data.requestCalls != 1 {
+		t.Fatalf("unconfirmed proposal response = %d %s", notConfirmed.Code, notConfirmed.Body.String())
 	}
 }
 

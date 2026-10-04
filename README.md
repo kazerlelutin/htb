@@ -73,7 +73,8 @@ Do not use the hosted service's Zitadel IDs or domain for your installation.
 
 ### Use HTB in ChatGPT
 
-HTB can provide a read-only MCP endpoint at `/mcp`. It signs people in with
+HTB can provide an MCP endpoint at `/mcp` to read HTB data and submit a
+confirmed ticket proposal through the existing request process. It signs people in with
 Zitadel OAuth PKCE, never with a CLI code. Read the
 [ChatGPT / MCP](docs/self-hosting.md#chatgpt--mcp) section of the self-hosting
 guide before connecting `https://your-domain/mcp` in ChatGPT. The AI chat

@@ -80,7 +80,9 @@ Les rôles de projet (`read`, `write`, `admin`) sont gérés par HTB.
 
 ### ChatGPT / MCP (facultatif)
 
-HTB expose des outils MCP **en lecture seule** à `https://tickets.example.org/mcp`.
+HTB expose des outils MCP à `https://tickets.example.org/mcp` pour lire les
+projets et tickets, et soumettre une proposition confirmée dans le processus de
+demande client existant. Il ne crée ni ne modifie directement un ticket interne.
 ChatGPT ne réutilise ni le Device Code ni un jeton de la CLI : il crée un
 client OAuth PKCE éphémère par Dynamic Client Registration (DCR), puis la
 personne se connecte directement chez Zitadel.
@@ -132,9 +134,9 @@ soit une URI propre à la connexion sous
 
 Le proxy HTTPS doit également accepter et vérifier le certificat client mTLS
 présenté par ChatGPT avant de transmettre `/mcp` à HTB. Cela authentifie le
-client ChatGPT ; le jeton OAuth continue d’authentifier la personne. Ne rendez
-pas les futures actions d’écriture disponibles avant cette vérification et une
-conception de confirmation explicite.
+client ChatGPT ; le jeton OAuth continue d’authentifier la personne. L’outil de
+proposition écrit une demande : conservez cette vérification et la confirmation
+explicite avant son appel.
 
 [DCR Zitadel pour les clients MCP](https://zitadel.com/docs/guides/integrate/dynamic-client-registration) ·
 [authentification MCP selon OpenAI](https://developers.openai.com/plugins/build/auth)

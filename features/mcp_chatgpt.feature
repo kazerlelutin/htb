@@ -2,7 +2,7 @@ Feature: ChatGPT MCP access
   Scenario: A connected person reads only their HTB work
     Given a person has linked their HTB account through Zitadel in ChatGPT
     When they ask ChatGPT to list projects, search a project, or read a ticket
-    Then ChatGPT can use only the read-only HTB MCP tools
+    Then ChatGPT can use the HTB read tools
     And HTB returns only projects and tickets that the person may read
 
   Scenario: ChatGPT discovers authenticated HTB actions
@@ -23,3 +23,9 @@ Feature: ChatGPT MCP access
     When they ask for a ticket to be created or changed
     Then the MCP instructions explain that the chat may plan and propose work
     And HTB agents execute work through the existing request and triage process
+
+  Scenario: A connected person submits a confirmed ticket proposal
+    Given a person has read access to an HTB project
+    When they explicitly confirm a ticket proposal prepared by ChatGPT
+    Then ChatGPT submits it as a client request for that project
+    And HTB does not create or modify an internal ticket directly

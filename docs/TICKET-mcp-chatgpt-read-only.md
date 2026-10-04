@@ -1,4 +1,4 @@
-# Ticket — MCP HTB en lecture pour ChatGPT
+# Ticket — MCP HTB pour lire et proposer dans ChatGPT
 
 ## Problème
 
@@ -9,9 +9,10 @@ MCP ni la découverte OAuth attendue par ChatGPT.
 ## Solution
 
 Exposer un endpoint MCP Streamable HTTP à `/mcp`, protégé par les jetons
-Zitadel déjà validés par HTB. La première itération ne permet que de lire les
-projets et tickets autorisés pour la personne connectée. Elle expose également
-la ressource OAuth protégée afin que ChatGPT puisse démarrer le flux OAuth
+Zitadel déjà validés par HTB. Il permet de lire les projets et tickets autorisés
+pour la personne connectée, ainsi que de soumettre une proposition au processus
+de demande existant après confirmation explicite. Il expose également la
+ressource OAuth protégée afin que ChatGPT puisse démarrer le flux OAuth
 Authorization Code + PKCE configuré dans Zitadel.
 
 ## Critères d’acceptation
@@ -19,8 +20,11 @@ Authorization Code + PKCE configuré dans Zitadel.
 - `POST /mcp` répond à `initialize`, `tools/list` et `tools/call`.
 - Le serveur répond à `server/discover` du protocole MCP moderne (`2026-07-28`)
   afin que ChatGPT puisse découvrir les actions avant de les appeler.
-- Les outils disponibles sont en lecture seule : liste des projets, liste des
-  tickets d’un projet et lecture d’un ticket.
+- Les outils disponibles permettent la liste des projets, la liste des tickets
+  d’un projet, la lecture d’un ticket et la soumission confirmée d’une
+  proposition dans les demandes client existantes.
+- Une proposition MCP est autorisée pour un membre `read` du projet, requiert
+  une confirmation explicite et ne crée ni ne modifie directement un ticket.
 - La découverte des outils décrit OAuth par `securitySchemes` et par son miroir
   de compatibilité `_meta.securitySchemes`.
 - Les instructions MCP indiquent clairement que le chat planifie et propose ;
