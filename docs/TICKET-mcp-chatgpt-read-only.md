@@ -17,6 +17,8 @@ Authorization Code + PKCE configuré dans Zitadel.
 ## Critères d’acceptation
 
 - `POST /mcp` répond à `initialize`, `tools/list` et `tools/call`.
+- Le serveur répond à `server/discover` du protocole MCP moderne (`2026-07-28`)
+  afin que ChatGPT puisse découvrir les actions avant de les appeler.
 - Les outils disponibles sont en lecture seule : liste des projets, liste des
   tickets d’un projet et lecture d’un ticket.
 - La découverte des outils décrit OAuth par `securitySchemes` et par son miroir

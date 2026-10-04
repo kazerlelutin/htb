@@ -75,6 +75,19 @@ func performMCPRequest(t *testing.T, server *Server, body, token string) *httpte
 	return response
 }
 
+func performModernMCPRequest(t *testing.T, server *Server, body, token string) *httptest.ResponseRecorder {
+	t.Helper()
+	request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("MCP-Protocol-Version", mcpProtocolVersion)
+	if token != "" {
+		request.Header.Set("Authorization", "Bearer "+token)
+	}
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	return response
+}
+
 func TestMCPProtectedResourceMetadataAndAuthenticationChallenge(t *testing.T) {
 	server := newMCPTestServer(&mcpStoreStub{actor: store.Actor{Subject: "person-1"}})
 
@@ -125,7 +138,7 @@ func TestMCPInitializesAndDescribesReadOnlyTools(t *testing.T) {
 	if initialized.Code != http.StatusOK {
 		t.Fatalf("initialize status = %d, want 200: %s", initialized.Code, initialized.Body.String())
 	}
-	if got := initialized.Header().Get("MCP-Protocol-Version"); got != mcpProtocolVersion {
+	if got := initialized.Header().Get("MCP-Protocol-Version"); got != mcpLegacyProtocolVersion {
 		t.Fatalf("protocol header = %q", got)
 	}
 	var initializeResponse struct {
@@ -137,7 +150,7 @@ func TestMCPInitializesAndDescribesReadOnlyTools(t *testing.T) {
 	if err := json.NewDecoder(initialized.Body).Decode(&initializeResponse); err != nil {
 		t.Fatal(err)
 	}
-	if initializeResponse.Result.ProtocolVersion != mcpProtocolVersion {
+	if initializeResponse.Result.ProtocolVersion != mcpLegacyProtocolVersion {
 		t.Fatalf("protocol version = %q", initializeResponse.Result.ProtocolVersion)
 	}
 	if !strings.Contains(initializeResponse.Result.Instructions, "plan and propose") || !strings.Contains(initializeResponse.Result.Instructions, "Do not create") {
@@ -150,6 +163,26 @@ func TestMCPInitializesAndDescribesReadOnlyTools(t *testing.T) {
 	}
 	if body := tools.Body.String(); !strings.Contains(body, `"htb_list_projects"`) || !strings.Contains(body, `"readOnlyHint":true`) || !strings.Contains(body, `"_meta":{"securitySchemes":[{"scopes":["openid","profile","email"],"type":"oauth2"}]}`) || strings.Contains(body, `"htb_create_ticket"`) {
 		t.Fatalf("unexpected tools response: %s", body)
+	}
+}
+
+func TestMCPModernDiscoveryExposesTools(t *testing.T) {
+	server := newMCPTestServer(&mcpStoreStub{actor: store.Actor{Subject: "person-1"}})
+
+	discovery := performModernMCPRequest(t, server, `{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}`, "access-token")
+	if discovery.Code != http.StatusOK {
+		t.Fatalf("server/discover status = %d: %s", discovery.Code, discovery.Body.String())
+	}
+	if got := discovery.Header().Get("MCP-Protocol-Version"); got != mcpProtocolVersion {
+		t.Fatalf("protocol header = %q", got)
+	}
+	if body := discovery.Body.String(); !strings.Contains(body, `"supportedVersions":["2026-07-28"]`) || !strings.Contains(body, `"io.modelcontextprotocol/serverInfo"`) || !strings.Contains(body, `"tools":{"listChanged":false}`) {
+		t.Fatalf("unexpected discovery response: %s", body)
+	}
+
+	tools := performModernMCPRequest(t, server, `{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}`, "access-token")
+	if tools.Code != http.StatusOK || !strings.Contains(tools.Body.String(), `"htb_list_projects"`) || !strings.Contains(tools.Body.String(), `"cacheScope":"private"`) {
+		t.Fatalf("modern tools response = %d %s", tools.Code, tools.Body.String())
 	}
 }
 

@@ -7,7 +7,7 @@ Feature: ChatGPT MCP access
 
   Scenario: ChatGPT discovers authenticated HTB actions
     Given a person has linked their HTB account through Zitadel in ChatGPT
-    When ChatGPT requests the HTB MCP tool list
+    When ChatGPT starts modern MCP discovery and requests the HTB MCP tool list
     Then each HTB action declares that it requires OAuth
     And the compatibility metadata describes the same OAuth requirement
 
