@@ -5,6 +5,12 @@ Feature: ChatGPT MCP access
     Then ChatGPT can use only the read-only HTB MCP tools
     And HTB returns only projects and tickets that the person may read
 
+  Scenario: ChatGPT discovers authenticated HTB actions
+    Given a person has linked their HTB account through Zitadel in ChatGPT
+    When ChatGPT requests the HTB MCP tool list
+    Then each HTB action declares that it requires OAuth
+    And the compatibility metadata describes the same OAuth requirement
+
   Scenario: An unlinked person is asked to sign in
     Given a person has added the HTB MCP server without linking an account
     When ChatGPT invokes an HTB MCP tool

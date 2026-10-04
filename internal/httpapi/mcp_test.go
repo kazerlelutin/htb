@@ -148,7 +148,7 @@ func TestMCPInitializesAndDescribesReadOnlyTools(t *testing.T) {
 	if tools.Code != http.StatusOK {
 		t.Fatalf("tools/list status = %d", tools.Code)
 	}
-	if body := tools.Body.String(); !strings.Contains(body, `"htb_list_projects"`) || !strings.Contains(body, `"readOnlyHint":true`) || strings.Contains(body, `"htb_create_ticket"`) {
+	if body := tools.Body.String(); !strings.Contains(body, `"htb_list_projects"`) || !strings.Contains(body, `"readOnlyHint":true`) || !strings.Contains(body, `"_meta":{"securitySchemes":[{"scopes":["openid","profile","email"],"type":"oauth2"}]}`) || strings.Contains(body, `"htb_create_ticket"`) {
 		t.Fatalf("unexpected tools response: %s", body)
 	}
 }

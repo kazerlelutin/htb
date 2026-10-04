@@ -19,6 +19,8 @@ Authorization Code + PKCE configuré dans Zitadel.
 - `POST /mcp` répond à `initialize`, `tools/list` et `tools/call`.
 - Les outils disponibles sont en lecture seule : liste des projets, liste des
   tickets d’un projet et lecture d’un ticket.
+- La découverte des outils décrit OAuth par `securitySchemes` et par son miroir
+  de compatibilité `_meta.securitySchemes`.
 - Les instructions MCP indiquent clairement que le chat planifie et propose ;
   les agents HTB exécutent après le processus de demande et de tri existant.
 - Chaque appel MCP vérifie le jeton Zitadel et passe par les autorisations HTB

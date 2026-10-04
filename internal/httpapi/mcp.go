@@ -155,10 +155,13 @@ func (s *Server) handleMCP(ctx context.Context, actor store.Actor, request mcpRe
 func mcpTools() []map[string]any {
 	oauth := []map[string]any{{"type": "oauth2", "scopes": []string{"openid", "profile", "email"}}}
 	readOnly := map[string]bool{"readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false}
+	// ChatGPT reads securitySchemes from the descriptor. Some compatible
+	// discovery clients still read only the legacy _meta mirror.
+	metadata := map[string]any{"securitySchemes": oauth}
 	return []map[string]any{
-		{"name": "htb_list_projects", "title": "List HTB projects", "description": "List the HTB projects that the connected person can access.", "inputSchema": map[string]any{"type": "object", "additionalProperties": false}, "securitySchemes": oauth, "annotations": readOnly},
-		{"name": "htb_list_tickets", "title": "List HTB tickets", "description": "List non-archived tickets in one accessible HTB project. Use a project key from htb_list_projects.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"project": map[string]any{"type": "string", "minLength": 2}, "status": map[string]any{"type": "string", "enum": []string{"open", "in_progress", "review", "blocked", "done"}}, "query": map[string]any{"type": "string", "maxLength": 240}}, "required": []string{"project"}, "additionalProperties": false}, "securitySchemes": oauth, "annotations": readOnly},
-		{"name": "htb_get_ticket", "title": "Read an HTB ticket", "description": "Read one HTB ticket by reference, for example SITE-12 or ALICE/SITE-12.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"ref": map[string]any{"type": "string", "minLength": 3}}, "required": []string{"ref"}, "additionalProperties": false}, "securitySchemes": oauth, "annotations": readOnly},
+		{"name": "htb_list_projects", "title": "List HTB projects", "description": "List the HTB projects that the connected person can access.", "inputSchema": map[string]any{"type": "object", "additionalProperties": false}, "securitySchemes": oauth, "_meta": metadata, "annotations": readOnly},
+		{"name": "htb_list_tickets", "title": "List HTB tickets", "description": "List non-archived tickets in one accessible HTB project. Use a project key from htb_list_projects.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"project": map[string]any{"type": "string", "minLength": 2}, "status": map[string]any{"type": "string", "enum": []string{"open", "in_progress", "review", "blocked", "done"}}, "query": map[string]any{"type": "string", "maxLength": 240}}, "required": []string{"project"}, "additionalProperties": false}, "securitySchemes": oauth, "_meta": metadata, "annotations": readOnly},
+		{"name": "htb_get_ticket", "title": "Read an HTB ticket", "description": "Read one HTB ticket by reference, for example SITE-12 or ALICE/SITE-12.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"ref": map[string]any{"type": "string", "minLength": 3}}, "required": []string{"ref"}, "additionalProperties": false}, "securitySchemes": oauth, "_meta": metadata, "annotations": readOnly},
 	}
 }
 
