@@ -49,6 +49,15 @@ func main() {
 	publicURL := valueOr("HTBD_PUBLIC_URL", "https://htboard.xyz")
 	server := httpapi.New(store, verifier, deviceConfig, os.Getenv("HTBD_RELEASE_URL"), logger)
 	server.SetPublicURL(publicURL)
+	server.SetMCPEnabled(os.Getenv("HTBD_MCP_ENABLED") == "true")
+	if mcpAudience := os.Getenv("HTBD_ZITADEL_MCP_AUDIENCE"); mcpAudience != "" {
+		mcpVerifier, mcpErr := auth.NewZitadelVerifier(ctx, issuer, mcpAudience, os.Getenv("HTBD_ZITADEL_SUPERADMIN_CLAIM"), os.Getenv("HTBD_ZITADEL_SUPERADMIN_ROLE"))
+		if mcpErr != nil {
+			logger.Error("initialize Zitadel MCP verifier", "error", mcpErr)
+			os.Exit(1)
+		}
+		server.SetMCPVerifier(mcpVerifier)
+	}
 	if clientID := os.Getenv("HTBD_ZITADEL_WEB_CLIENT_ID"); clientID != "" {
 		browser, err := auth.NewBrowserAuthenticator(ctx, issuer, clientID, publicURL+"/auth/callback")
 		if err != nil {

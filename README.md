@@ -71,6 +71,15 @@ htb auth login
 
 Do not use the hosted service's Zitadel IDs or domain for your installation.
 
+### Use HTB in ChatGPT
+
+HTB can provide a read-only MCP endpoint at `/mcp`. It signs people in with
+Zitadel OAuth PKCE, never with a CLI code. Read the
+[ChatGPT / MCP](docs/self-hosting.md#chatgpt--mcp) section of the self-hosting
+guide before connecting `https://your-domain/mcp` in ChatGPT. The AI chat
+plans and proposes work; HTB agents execute it after the existing request and
+triage process.
+
 ## Install the CLI
 
 On Linux, the release installer verifies the checksum and installs `htb`

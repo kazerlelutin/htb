@@ -66,6 +66,37 @@ HTB does not use a Client Secret or call Zitadel's logout endpoint.
 Project roles (`read`, `write`, `admin`) are managed by HTB.
 [Zitadel role settings](https://zitadel.com/docs/guides/manage/console/projects-overview)
 
+### ChatGPT / MCP (optional)
+
+HTB exposes **read-only** MCP tools at `https://tickets.example.org/mcp`.
+ChatGPT does not reuse Device Code or a CLI token: it creates a PKCE OAuth
+client through Dynamic Client Registration (DCR), then the person signs in
+directly with Zitadel.
+
+1. In Zitadel security settings, enable **Dynamic Client Registration** and
+   **Open registration** (`allowUnauthenticated`). MCP clients must register
+   before a person has authenticated. Keep Zitadel rate limiting enabled and
+   restrict redirect URIs to trusted domains.
+2. Zitadel creates a `ZITADEL DCR` project. Copy its **Project ID** into
+   `HTBD_ZITADEL_MCP_AUDIENCE`. DCR client tokens use this audience rather
+   than the HTB project audience.
+3. Set `HTBD_MCP_ENABLED=true` in HTB. The endpoint is off by default so it
+   is not exposed before this configuration is complete.
+4. Keep access tokens as **JWTs** and ensure `openid`, `profile`, and `email`
+   OIDC scopes are allowed for DCR clients.
+5. After deploying, enable developer mode in ChatGPT, add the HTTPS endpoint
+   `https://tickets.example.org/mcp`, and link the account when ChatGPT shows
+   the Zitadel sign-in page.
+
+Your HTTPS proxy must also accept and verify the mTLS client certificate
+presented by ChatGPT before forwarding `/mcp` to HTB. This authenticates the
+ChatGPT client; OAuth still authenticates the person. Do not expose future
+write actions before this check and an explicit confirmation design are in
+place.
+
+[Zitadel DCR for MCP clients](https://zitadel.com/docs/guides/integrate/dynamic-client-registration) ·
+[OpenAI MCP authentication](https://developers.openai.com/plugins/build/auth)
+
 ### Users
 
 1. To allow self-registration, enable **Register allowed** in Zitadel's login behavior.
@@ -97,6 +128,8 @@ Keep it secret and separate from Client IDs.
 | `HTBD_ZITADEL_AUDIENCE` | Zitadel Project ID from step 1. |
 | `HTBD_ZITADEL_DEVICE_CLIENT_ID` | Native / Device Code app Client ID. Required for CLI sign-in. |
 | `HTBD_ZITADEL_WEB_CLIENT_ID` | Web / PKCE app Client ID. Leave empty to disable `/login` and the portal. |
+| `HTBD_ZITADEL_MCP_AUDIENCE` | Project ID of the `ZITADEL DCR` project. Required to accept DCR-created ChatGPT tokens; HTB otherwise uses the primary audience. |
+| `HTBD_MCP_ENABLED` | `true` to expose `/mcp` and OAuth discovery; keep it `false` until DCR and proxy mTLS are configured. |
 | `HTBD_WEB_SESSION_KEY` | Random secret of at least 32 characters, required when the Web Client ID is set. |
 | `HTBD_PUBLIC_URL` | Exact public HTTPS origin; HTB appends `/auth/callback` for Zitadel. |
 | `HTBD_RELEASE_URL` | GitHub Releases page used by the site's download link. |
@@ -131,6 +164,7 @@ After deployment, check your domain:
 ```bash
 curl -fsS https://tickets.example.org/health
 curl -fsS https://tickets.example.org/auth/device-config
+curl -fsS https://tickets.example.org/.well-known/oauth-protected-resource
 ```
 
 `/health` returns `{"status":"ok"}`. The device-config endpoint returns

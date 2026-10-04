@@ -19,6 +19,9 @@ import (
 
 type Server struct {
 	store        *store.Store
+	mcp          mcpStore
+	mcpVerifier  auth.Verifier
+	mcpEnabled   bool
 	sessions     browserSessionStore
 	requests     clientRequestStore
 	stories      clientStoryStore
@@ -111,7 +114,7 @@ type clientStoryStore interface {
 }
 
 func New(s *store.Store, verifier auth.Verifier, deviceConfig auth.DeviceConfig, releaseURL string, log *slog.Logger) *Server {
-	return &Server{store: s, sessions: s, requests: s, stories: s, verifier: verifier, deviceConfig: deviceConfig, releaseURL: releaseURL, publicURL: "https://htboard.xyz", log: log}
+	return &Server{store: s, mcp: s, sessions: s, requests: s, stories: s, verifier: verifier, deviceConfig: deviceConfig, releaseURL: releaseURL, publicURL: "https://htboard.xyz", log: log}
 }
 
 // SetBrowserLogin enables the web entry point backed by Zitadel.
@@ -131,6 +134,14 @@ func (s *Server) SetPublicURL(value string) {
 		s.publicURL = strings.TrimRight(value, "/")
 	}
 }
+
+// SetMCPVerifier accepts access tokens issued to the separate Zitadel DCR
+// project used by ChatGPT. The REST API continues to use the primary verifier.
+func (s *Server) SetMCPVerifier(verifier auth.Verifier) { s.mcpVerifier = verifier }
+
+// SetMCPEnabled exposes the MCP and OAuth discovery endpoints. It is opt-in
+// because a public MCP endpoint needs its own Zitadel and proxy configuration.
+func (s *Server) SetMCPEnabled(enabled bool) { s.mcpEnabled = enabled }
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
@@ -159,6 +170,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /portal/requests/{id}/comments", s.browserAuthenticated(http.HandlerFunc(s.portalAddComment)))
 	mux.Handle("POST /portal/requests/{id}/delete", s.browserAuthenticated(http.HandlerFunc(s.portalDeleteRequest)))
 	mux.HandleFunc("GET /auth/device-config", s.deviceConfiguration)
+	mux.HandleFunc("GET /.well-known/oauth-protected-resource", s.mcpProtectedResourceMetadata)
+	mux.HandleFunc("/mcp", s.mcpHandler)
 	mux.Handle("/api/v1/", s.authenticated(http.HandlerFunc(s.api)))
 	return s.logging(mux)
 }
