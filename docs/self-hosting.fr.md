@@ -85,6 +85,13 @@ ChatGPT ne réutilise ni le Device Code ni un jeton de la CLI : il crée un
 client OAuth PKCE éphémère par Dynamic Client Registration (DCR), puis la
 personne se connecte directement chez Zitadel.
 
+**Il n’y a donc pas d’URL de redirection MCP fixe à saisir dans Zitadel.** Ne
+créez pas une troisième application `HTB MCP` et n’y copiez pas
+`/auth/callback` : cette URI concerne uniquement le portail web. L’URL que
+vous renseignez manuellement est `https://tickets.example.org/mcp`, dans
+ChatGPT. Lors de la liaison, ChatGPT enregistre lui-même son client et son URI
+de retour auprès de Zitadel par DCR.
+
 1. Dans les paramètres de sécurité de Zitadel, activez la **Dynamic Client
    Registration** et son mode **Open registration** (`allowUnauthenticated`).
    C’est le mode requis par les clients MCP qui s’enregistrent avant qu’une
@@ -100,6 +107,14 @@ personne se connecte directement chez Zitadel.
 5. Après déploiement, dans ChatGPT activez le mode développeur, ajoutez une
    connexion avec l’URL HTTPS `https://tickets.example.org/mcp`, puis liez le
    compte quand ChatGPT affiche la page Zitadel.
+
+Si votre politique Zitadel impose une allowlist précise des URI de redirection,
+utilisez l’URI exacte affichée dans la page de gestion de cette connexion MCP
+dans ChatGPT. Selon la prise en charge de l’identification d’issuer par votre
+instance, elle est soit `https://chatgpt.com/connector_platform_oauth_redirect`,
+soit une URI propre à la connexion sous
+`https://chatgpt.com/connector/oauth/...`; ne la devinez pas et n’utilisez pas
+`/auth/callback`.
 
 Le proxy HTTPS doit également accepter et vérifier le certificat client mTLS
 présenté par ChatGPT avant de transmettre `/mcp` à HTB. Cela authentifie le

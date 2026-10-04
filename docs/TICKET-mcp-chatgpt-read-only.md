@@ -26,6 +26,7 @@ Authorization Code + PKCE configuré dans Zitadel.
 - Une requête non authentifiée reçoit un challenge OAuth et la métadonnée
   `/.well-known/oauth-protected-resource` décrit la ressource MCP.
 - Les guides d’auto-hébergement expliquent la configuration et la connexion
-  dans ChatGPT.
+  dans ChatGPT, y compris que l’URI de redirection OAuth est enregistrée
+  dynamiquement par ChatGPT et non saisie dans une application Zitadel.
 
 Scénario : `features/mcp_chatgpt.feature`.

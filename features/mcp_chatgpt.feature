@@ -10,6 +10,7 @@ Feature: ChatGPT MCP access
     When ChatGPT invokes an HTB MCP tool
     Then HTB returns an OAuth authentication challenge
     And ChatGPT can start the Zitadel authorization flow
+    And ChatGPT registers its OAuth callback with Zitadel dynamically
 
   Scenario: A chat plans work without changing the board
     Given a person is using the HTB MCP connection
