@@ -92,11 +92,22 @@ vous renseignez manuellement est `https://tickets.example.org/mcp`, dans
 ChatGPT. Lors de la liaison, ChatGPT enregistre lui-même son client et son URI
 de retour auprès de Zitadel par DCR.
 
-1. Dans les paramètres de sécurité de Zitadel, activez la **Dynamic Client
-   Registration** et son mode **Open registration** (`allowUnauthenticated`).
-   C’est le mode requis par les clients MCP qui s’enregistrent avant qu’une
-   personne soit connectée. Conservez le rate limiting de Zitadel et limitez
-   les URI de redirection aux domaines de confiance.
+1. Activez la **Dynamic Client Registration** et son mode **Open registration**
+   (`allowUnauthenticated`) dans les paramètres **d’instance** de Zitadel. La
+   version actuelle de la console peut ne pas exposer ce réglage : un compte
+   `IAM_OWNER` peut alors l’activer via l’API :
+
+   ```bash
+   curl --request PUT https://id.example.org/v2/settings/security \
+     --header 'Authorization: Bearer <jeton-d-un-IAM_OWNER>' \
+     --header 'Content-Type: application/json' \
+     --data '{"dynamicClientRegistration":{"enabled":true,"allowUnauthenticated":true}}'
+   ```
+
+   Remplacez `id.example.org` par l’issuer Zitadel. C’est le mode requis par
+   les clients MCP qui s’enregistrent avant qu’une personne soit connectée.
+   Conservez le rate limiting de Zitadel et limitez les URI de redirection aux
+   domaines de confiance.
 2. Zitadel crée le projet `ZITADEL DCR`. Copiez son **Project ID** dans
    `HTBD_ZITADEL_MCP_AUDIENCE`. Les jetons des clients DCR portent cette
    audience, différente de l’audience du projet HTB.

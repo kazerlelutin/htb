@@ -79,8 +79,19 @@ only to the web portal. The URL you enter manually is
 `https://tickets.example.org/mcp` in ChatGPT. When the account is linked,
 ChatGPT registers its own client and callback URI with Zitadel through DCR.
 
-1. In Zitadel security settings, enable **Dynamic Client Registration** and
-   **Open registration** (`allowUnauthenticated`). MCP clients must register
+1. Enable **Dynamic Client Registration** and **Open registration**
+   (`allowUnauthenticated`) in Zitadel **instance** security settings. The
+   current Console version may not expose this setting; an `IAM_OWNER` can
+   enable it through the API:
+
+   ```bash
+   curl --request PUT https://id.example.org/v2/settings/security \
+     --header 'Authorization: Bearer <IAM_OWNER-access-token>' \
+     --header 'Content-Type: application/json' \
+     --data '{"dynamicClientRegistration":{"enabled":true,"allowUnauthenticated":true}}'
+   ```
+
+   Replace `id.example.org` with the Zitadel issuer. MCP clients must register
    before a person has authenticated. Keep Zitadel rate limiting enabled and
    restrict redirect URIs to trusted domains.
 2. Zitadel creates a `ZITADEL DCR` project. Copy its **Project ID** into
