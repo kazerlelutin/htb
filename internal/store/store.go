@@ -45,10 +45,11 @@ type Actor struct {
 	Superadmin   bool   `json:"superadmin"`
 }
 type Project struct {
-	Key         string `json:"key"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Archived    bool   `json:"archived"`
+	Key         string      `json:"key"`
+	Name        string      `json:"name"`
+	Description string      `json:"description"`
+	Archived    bool        `json:"archived"`
+	Role        domain.Role `json:"role"`
 }
 type Namespace struct {
 	Name string `json:"name"`
@@ -532,11 +533,11 @@ func (s *Store) checkNamespaceLimit(ctx context.Context, tx *sql.Tx, userID int6
 }
 
 func (s *Store) ListProjects(ctx context.Context, actor Actor) ([]Project, error) {
-	query := `SELECT p.key,p.name,p.description,p.archived_at IS NOT NULL FROM projects p`
-	args := []any{}
+	query := `SELECT p.key,p.name,p.description,p.archived_at IS NOT NULL,COALESCE(pm.role,'admin')
+		FROM projects p LEFT JOIN project_memberships pm ON pm.project_id=p.id AND pm.user_id=$1`
+	args := []any{actor.UserID}
 	if !actor.Superadmin {
-		query += ` JOIN project_memberships pm ON pm.project_id=p.id WHERE pm.user_id=$1`
-		args = []any{actor.UserID}
+		query += ` WHERE pm.user_id IS NOT NULL`
 	}
 	rows, err := s.DB.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -546,7 +547,7 @@ func (s *Store) ListProjects(ctx context.Context, actor Actor) ([]Project, error
 	var projects []Project
 	for rows.Next() {
 		var p Project
-		if err = rows.Scan(&p.Key, &p.Name, &p.Description, &p.Archived); err != nil {
+		if err = rows.Scan(&p.Key, &p.Name, &p.Description, &p.Archived, &p.Role); err != nil {
 			return nil, err
 		}
 		projects = append(projects, p)
@@ -557,7 +558,7 @@ func (s *Store) ListProjects(ctx context.Context, actor Actor) ([]Project, error
 // ListProjectStatuses returns each accessible project's ticket totals in one
 // query, so the CLI can render a portfolio view without an N+1 request loop.
 func (s *Store) ListProjectStatuses(ctx context.Context, actor Actor) ([]ProjectStatus, error) {
-	query := `SELECT p.key,p.name,p.description,p.archived_at IS NOT NULL,
+	query := `SELECT p.key,p.name,p.description,p.archived_at IS NOT NULL,COALESCE(pm.role,'admin'),
 		count(t.id) FILTER (WHERE t.type='user_story'),
 		count(t.id) FILTER (WHERE t.type='user_story' AND t.status='done'),
 		count(t.id), count(t.id) FILTER (WHERE t.status='done'),
@@ -565,13 +566,13 @@ func (s *Store) ListProjectStatuses(ctx context.Context, actor Actor) ([]Project
 		count(t.id) FILTER (WHERE t.status='in_progress'),
 		count(t.id) FILTER (WHERE t.status='review'),
 		count(t.id) FILTER (WHERE t.status='blocked')
-		FROM projects p LEFT JOIN tickets t ON t.project_id=p.id AND t.archived_at IS NULL`
-	args := []any{}
+		FROM projects p LEFT JOIN project_memberships pm ON pm.project_id=p.id AND pm.user_id=$1
+		LEFT JOIN tickets t ON t.project_id=p.id AND t.archived_at IS NULL`
+	args := []any{actor.UserID}
 	if !actor.Superadmin {
-		query += ` JOIN project_memberships pm ON pm.project_id=p.id WHERE pm.user_id=$1`
-		args = append(args, actor.UserID)
+		query += ` WHERE pm.user_id IS NOT NULL`
 	}
-	query += ` GROUP BY p.id,p.key,p.name,p.description,p.archived_at ORDER BY p.key`
+	query += ` GROUP BY p.id,p.key,p.name,p.description,p.archived_at,pm.role ORDER BY p.key`
 	rows, err := s.DB.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
@@ -581,7 +582,7 @@ func (s *Store) ListProjectStatuses(ctx context.Context, actor Actor) ([]Project
 	for rows.Next() {
 		var project ProjectStatus
 		if err = rows.Scan(
-			&project.Key, &project.Name, &project.Description, &project.Archived,
+			&project.Key, &project.Name, &project.Description, &project.Archived, &project.Role,
 			&project.UserStories.Total, &project.UserStories.Done,
 			&project.Tickets.Total, &project.Tickets.Done,
 			&project.Statuses.Open, &project.Statuses.InProgress,

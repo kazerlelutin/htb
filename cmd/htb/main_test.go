@@ -130,10 +130,10 @@ func TestProjectStatusViewDecodesAggregate(t *testing.T) {
 	var response struct {
 		Projects []projectStatusView `json:"projects"`
 	}
-	if err := json.Unmarshal([]byte(`{"projects":[{"key":"SITE","name":"Site","user_stories":{"total":3,"done":2},"tickets":{"total":5,"done":3},"statuses":{"open":1,"in_progress":1,"review":0,"blocked":0,"done":3}}]}`), &response); err != nil {
+	if err := json.Unmarshal([]byte(`{"projects":[{"key":"SITE","name":"Site","role":"read","user_stories":{"total":3,"done":2},"tickets":{"total":5,"done":3},"statuses":{"open":1,"in_progress":1,"review":0,"blocked":0,"done":3}}]}`), &response); err != nil {
 		t.Fatal(err)
 	}
-	if len(response.Projects) != 1 || response.Projects[0].Key != "SITE" || response.Projects[0].UserStories.Done != 2 || response.Projects[0].Statuses.InProgress != 1 {
+	if len(response.Projects) != 1 || response.Projects[0].Key != "SITE" || response.Projects[0].Role != "read" || response.Projects[0].UserStories.Done != 2 || response.Projects[0].Statuses.InProgress != 1 {
 		t.Fatalf("unexpected project status: %#v", response.Projects)
 	}
 }

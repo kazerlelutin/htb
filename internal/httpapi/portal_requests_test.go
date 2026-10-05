@@ -75,10 +75,10 @@ func TestClientPortalGroupsNamespacedProjectsAndRoutes(t *testing.T) {
 	s, requests, sessions := portalTestServer()
 	key := "MO5/PROMEAI"
 	sessions.projects = []store.Project{
-		{Key: "KAZERLELUTIN/BENTO", Name: "Ben-to"},
-		{Key: "KAZERLELUTIN/HTB", Name: "HTB"},
-		{Key: "MO5/ANBY", Name: "ANBY"},
-		{Key: key, Name: "Promeai"},
+		{Key: "KAZERLELUTIN/BENTO", Name: "Ben-to", Role: "read"},
+		{Key: "KAZERLELUTIN/HTB", Name: "HTB", Role: "write"},
+		{Key: "MO5/ANBY", Name: "ANBY", Role: "admin"},
+		{Key: key, Name: "Promeai", Role: "read"},
 	}
 	requests.project = key
 	s.stories = &clientStoryStub{project: key, stories: []store.ClientStory{{Ref: key + "-1", Project: key, Title: "Story namespacée", Published: true}}}
@@ -89,7 +89,7 @@ func TestClientPortalGroupsNamespacedProjectsAndRoutes(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("portal home: %d %s", w.Code, body)
 	}
-	for _, want := range []string{"KAZERLELUTIN", "MO5", `href="/portal/projects/MO5/PROMEAI"`, `>PROMEAI</span>`} {
+	for _, want := range []string{"KAZERLELUTIN", "MO5", `href="/portal/projects/MO5/PROMEAI"`, "Rôle : Écriture", "Rôle : Administration", `>PROMEAI · Rôle : Lecture</span>`} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("grouped portal is missing %q: %s", want, body)
 		}
@@ -100,6 +100,9 @@ func TestClientPortalGroupsNamespacedProjectsAndRoutes(t *testing.T) {
 		s.Handler().ServeHTTP(w, portalRequest(http.MethodGet, path, nil))
 		if w.Code != http.StatusOK {
 			t.Fatalf("namespaced portal route %s: %d %s", path, w.Code, w.Body.String())
+		}
+		if path == "/portal/projects/MO5/PROMEAI" && !strings.Contains(w.Body.String(), "Votre rôle : Lecture") {
+			t.Fatalf("project page does not show the member role: %s", w.Body.String())
 		}
 	}
 	for _, path := range []string{"/portal/projects/MO5/PROMEAI/requests", "/portal/stories/MO5/PROMEAI-1/comments"} {
@@ -113,7 +116,7 @@ func TestClientPortalGroupsNamespacedProjectsAndRoutes(t *testing.T) {
 
 func portalTestServer() (*Server, *clientRequestStub, *browserSessionStub) {
 	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "", slog.Default())
-	sessions := &browserSessionStub{actor: store.Actor{Subject: "zitadel-user", CredentialID: 1}, token: "valid", projects: []store.Project{{Key: "SITE", Name: "Site client"}}}
+	sessions := &browserSessionStub{actor: store.Actor{Subject: "zitadel-user", CredentialID: 1}, token: "valid", projects: []store.Project{{Key: "SITE", Name: "Site client", Role: "read"}}}
 	requests := &clientRequestStub{items: []store.ClientRequest{{ID: 7, Project: "SITE", Title: "Une demande", Body: "# Sujet\n<script>alert(1)</script>\n[lien](javascript:alert(1))", Status: "received"}}}
 	s.sessions, s.requests = sessions, requests
 	s.stories = &clientStoryStub{}

@@ -60,6 +60,10 @@ func TestTicketLifecycleOverHTTP(t *testing.T) {
 	if !strings.Contains(project.Body.String(), `"key":"`+key+`"`) {
 		t.Fatalf("create project should normalize its key: %s", project.Body.String())
 	}
+	projects := requestJSON(t, server, http.MethodGet, "/api/v1/projects", "")
+	if projects.Code != http.StatusOK || !strings.Contains(projects.Body.String(), `"role":"admin"`) {
+		t.Fatalf("list projects should expose the caller role: %d %s", projects.Code, projects.Body.String())
+	}
 	members := requestJSON(t, server, http.MethodGet, "/api/v1/projects/"+key+"/members", "")
 	if members.Code != http.StatusOK || !strings.Contains(members.Body.String(), `"owner":true`) {
 		t.Fatalf("list project members: %d %s", members.Code, members.Body.String())
@@ -247,7 +251,7 @@ func TestTicketLifecycleOverHTTP(t *testing.T) {
 			break
 		}
 	}
-	if otherStatus == nil || otherStatus.UserStories.Total != 1 || otherStatus.UserStories.Done != 1 || otherStatus.Tickets.Total != 2 || otherStatus.Tickets.Done != 2 || otherStatus.Statuses.Done != 2 {
+	if otherStatus == nil || otherStatus.Role != domain.RoleAdmin || otherStatus.UserStories.Total != 1 || otherStatus.UserStories.Done != 1 || otherStatus.Tickets.Total != 2 || otherStatus.Tickets.Done != 2 || otherStatus.Statuses.Done != 2 {
 		t.Fatalf("unexpected project status: %#v", otherStatus)
 	}
 	if response := requestJSON(t, server, http.MethodPost, "/api/v1/tickets/"+child.Ref+"/versions/1/restore", `{"expected_version":3}`); response.Code != http.StatusOK {

@@ -1,4 +1,9 @@
 Feature: User stories visible aux clients
+  Scenario: Le membre connaît son rôle dans le projet
+    Given une personne a un rôle de lecture dans un projet
+    When elle consulte ce projet dans le portail ou avec la CLI
+    Then son rôle « read » lui est indiqué
+
   Scenario: Un administrateur retrouve ses US non publiées
     Given une US non publiée existe dans un projet administré par une personne
     When cette personne ouvre le projet dans le portail

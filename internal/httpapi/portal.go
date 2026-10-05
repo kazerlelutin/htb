@@ -23,7 +23,7 @@ type portalNamespaceView struct {
 }
 
 type portalProjectLink struct {
-	Name, Key, ShortKey string
+	Name, Key, ShortKey, Role string
 }
 
 var portalTemplate = template.Must(template.New("portal").Parse(`<!doctype html>
@@ -32,7 +32,7 @@ var portalTemplate = template.Must(template.New("portal").Parse(`<!doctype html>
 <a class="skip-link" href="#main">Aller au contenu</a>
 <header class="site-header"><a class="wordmark" href="/" aria-label="Accueil HTB"><span aria-hidden="true">&gt;</span><span class="cursor" aria-hidden="true">_</span> HTB</a><form action="/logout" method="post"><button class="link-button" type="submit">Se déconnecter</button></form></header>
 <main id="main" class="portal"><p class="eyebrow">ESPACE CLIENT</p><h1>Mes projets</h1>
-{{if .Namespaces}}<p>Les projets auxquels vous avez accès.</p>{{range .Namespaces}}<section class="portal-namespace" aria-label="Namespace {{.Name}}"><h2>{{.Name}}</h2><ul class="portal-projects">{{range .Projects}}<li><a href="/portal/projects/{{.Key}}"><strong>{{.Name}}</strong><span>{{.ShortKey}}</span></a></li>{{end}}</ul></section>{{end}}{{else}}<p>Aucun projet ne vous est encore attribué.</p>{{end}}
+{{if .Namespaces}}<p>Les projets auxquels vous avez accès.</p>{{range .Namespaces}}<section class="portal-namespace" aria-label="Namespace {{.Name}}"><h2>{{.Name}}</h2><ul class="portal-projects">{{range .Projects}}<li><a href="/portal/projects/{{.Key}}"><strong>{{.Name}}</strong><span>{{.ShortKey}} · Rôle : {{.Role}}</span></a></li>{{end}}</ul></section>{{end}}{{else}}<p>Aucun projet ne vous est encore attribué.</p>{{end}}
 <section aria-labelledby="join-title"><h2 id="join-title">Rejoindre un projet</h2><p>Vous avez reçu un code d’invitation ? Saisissez-le ici.</p>{{if .Error}}<p class="portal-error" role="alert">{{.Error}}</p>{{end}}<form class="portal-form" action="/portal/invitations" method="post"><input type="hidden" name="csrf" value="{{.CSRF}}"><label for="invitation-code">Code d’invitation</label><input id="invitation-code" name="code" autocomplete="off" required><button class="button" type="submit">Rejoindre le projet</button></form></section>
 </main></body></html>`))
 
@@ -64,7 +64,7 @@ func groupPortalProjects(projects []store.Project) []portalNamespaceView {
 		if namespace == "" {
 			namespace = "Sans namespace"
 		}
-		byNamespace[namespace] = append(byNamespace[namespace], portalProjectLink{Name: project.Name, Key: project.Key, ShortKey: shortKey})
+		byNamespace[namespace] = append(byNamespace[namespace], portalProjectLink{Name: project.Name, Key: project.Key, ShortKey: shortKey, Role: portalRoleLabel(project.Role)})
 	}
 	names := make([]string, 0, len(byNamespace))
 	for namespace := range byNamespace {
@@ -76,6 +76,19 @@ func groupPortalProjects(projects []store.Project) []portalNamespaceView {
 		groups = append(groups, portalNamespaceView{Name: namespace, Projects: byNamespace[namespace]})
 	}
 	return groups
+}
+
+func portalRoleLabel(role domain.Role) string {
+	switch role {
+	case domain.RoleRead:
+		return "Lecture"
+	case domain.RoleWrite:
+		return "Écriture"
+	case domain.RoleAdmin:
+		return "Administration"
+	default:
+		return "Inconnu"
+	}
 }
 
 func (s *Server) portalAcceptInvitation(w http.ResponseWriter, r *http.Request) {

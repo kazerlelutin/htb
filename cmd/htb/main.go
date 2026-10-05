@@ -34,6 +34,7 @@ type config struct {
 type projectView struct {
 	Key, Name, Description string
 	Archived               bool
+	Role                   string
 }
 type namespaceView struct {
 	Name string `json:"name"`
@@ -627,7 +628,7 @@ func projectCommand(args []string) error {
 					// Keep the slash to show namespace presence
 					displayKey = p.Key
 				}
-				fmt.Printf("%s %s — %s%s\n", marker, styledReference(displayKey), p.Name, styledMuted(archivedLabel(p.Archived)))
+				fmt.Printf("%s %s — %s · role: %s%s\n", marker, styledReference(displayKey), p.Name, p.Role, styledMuted(archivedLabel(p.Archived)))
 			} else {
 				// Multiple projects share the same short key, display each with namespace
 				for _, p := range projects {
@@ -642,7 +643,7 @@ func projectCommand(args []string) error {
 					if ns == "" {
 						ns = "DEFAULT"
 					}
-					fmt.Printf("%s %s — %s (%s)%s\n", marker, styledReference(short), p.Name, ns, styledMuted(archivedLabel(p.Archived)))
+					fmt.Printf("%s %s — %s (%s) · role: %s%s\n", marker, styledReference(short), p.Name, ns, p.Role, styledMuted(archivedLabel(p.Archived)))
 				}
 			}
 		}
@@ -853,6 +854,7 @@ func projectStatus(namespace string) error {
 						marker = styledAccent("*")
 					}
 					fmt.Printf("%s %s — %s%s\n", marker, styledReference(domain.ShortKey(project.Key)), project.Name, styledMuted(archivedLabel(project.Archived)))
+					fmt.Printf("  Role          %s\n", project.Role)
 					fmt.Printf("  User stories  %s\n", progressSummary(project.UserStories, "no user stories"))
 					fmt.Printf("  Tickets       %s\n", progressSummary(project.Tickets, "no tickets"))
 					fmt.Printf("  %s\n", statusBreakdown(project.Statuses))
@@ -869,6 +871,7 @@ func projectStatus(namespace string) error {
 			marker = styledAccent("*")
 		}
 		fmt.Printf("%s %s — %s%s\n", marker, styledReference(project.Key), project.Name, styledMuted(archivedLabel(project.Archived)))
+		fmt.Printf("  Role          %s\n", project.Role)
 		fmt.Printf("  User stories  %s\n", progressSummary(project.UserStories, "no user stories"))
 		fmt.Printf("  Tickets       %s\n", progressSummary(project.Tickets, "no tickets"))
 		fmt.Printf("  %s\n", statusBreakdown(project.Statuses))
