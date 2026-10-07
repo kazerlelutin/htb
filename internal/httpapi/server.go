@@ -71,10 +71,10 @@ var downloadCommands = []commandReference{
 	{"Tickets", "htb ticket restore --version N REF REVISION", "Restore a saved revision only when the ticket is still at version N, preventing accidental overwrites."},
 	{"Tickets", "htb ticket archive REF | unarchive REF", "Archive or restore a ticket. Only its creator or a project administrator can do this."},
 	{"Tickets", "htb ticket delete --confirm REF", "Permanently delete a ticket created by you, or as project administrator. Use only to correct entry mistakes or duplicates."},
-	{"Invitations", "htb invite create [--project KEY] [--role read|write|admin] [--expires-at RFC3339]", "Create a shareable invitation for the current project or --project. Choose the member role and an expiry time; it defaults to 7 days."},
-	{"Invitations", "htb invite accept CODE", "Accept an invitation code and gain access to its project."},
-	{"Invitations", "htb invite list [--project KEY]", "List active invitations without exposing their codes."},
-	{"Invitations", "htb invite revoke ID [--project KEY]", "Revoke an active invitation."},
+	{"Invitations", "htb invite create [--project KEY | --namespace NAME] [--role read|write|admin] [--expires-at RFC3339]", "Create a shareable invitation for the current project or every project in a namespace. Choose the member role and an expiry time; it defaults to 7 days."},
+	{"Invitations", "htb invite accept CODE", "Accept an invitation code and gain access to its project or namespace."},
+	{"Invitations", "htb invite list [--project KEY | --namespace NAME]", "List active invitations without exposing their codes."},
+	{"Invitations", "htb invite revoke ID [--project KEY | --namespace NAME]", "Revoke an active invitation."},
 }
 
 type actorKey struct{}
@@ -285,6 +285,8 @@ func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 		s.listNamespaces(w, r)
 	case r.Method == "POST" && path == "namespaces":
 		s.claimNamespace(w, r)
+	case strings.HasPrefix(path, "namespaces/"):
+		s.namespaceAdministration(w, r, strings.TrimPrefix(path, "namespaces/"))
 	case r.Method == "POST" && path == "projects":
 		s.createProject(w, r)
 	case r.Method == "GET" && path == "projects":
@@ -342,6 +344,32 @@ func (s *Server) claimNamespace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, namespace)
+}
+
+func (s *Server) namespaceAdministration(w http.ResponseWriter, r *http.Request, path string) {
+	if namespace, ok := projectSubresource(path, "invitations"); ok && r.Method == http.MethodGet {
+		invitations, err := s.store.ListPendingNamespaceInvitations(r.Context(), actor(r), namespace)
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"invitations": invitations})
+		return
+	}
+	if namespace, invitation, ok := projectItemSubresource(path, "invitations"); ok && r.Method == http.MethodDelete {
+		invitationID, err := strconv.ParseInt(invitation, 10, 64)
+		if err != nil || invitationID < 1 {
+			writeError(w, http.StatusBadRequest, "invalid_request", "Invitation ID must be numeric", nil)
+			return
+		}
+		if err = s.store.RevokeNamespaceInvitation(r.Context(), actor(r), namespace, invitationID); err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	writeError(w, http.StatusNotFound, "not_found", "Route not found", nil)
 }
 
 func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
@@ -725,13 +753,26 @@ func (s *Server) ticket(w http.ResponseWriter, r *http.Request, tail string) {
 func (s *Server) createInvitation(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Project   string      `json:"project"`
+		Namespace string      `json:"namespace"`
 		Role      domain.Role `json:"role"`
 		ExpiresAt *time.Time  `json:"expires_at"`
 	}
 	if !decode(w, r, &in) {
 		return
 	}
-	code, err := s.store.CreateInvitation(r.Context(), actor(r), in.Project, in.Role, invitationExpiry(in.ExpiresAt, time.Now()))
+	in.Project = strings.TrimSpace(in.Project)
+	in.Namespace = strings.TrimSpace(in.Namespace)
+	if (in.Project == "") == (in.Namespace == "") {
+		writeError(w, http.StatusBadRequest, "invalid_request", "Specify exactly one project or namespace", nil)
+		return
+	}
+	var code string
+	var err error
+	if in.Namespace != "" {
+		code, err = s.store.CreateNamespaceInvitation(r.Context(), actor(r), in.Namespace, in.Role, invitationExpiry(in.ExpiresAt, time.Now()))
+	} else {
+		code, err = s.store.CreateInvitation(r.Context(), actor(r), in.Project, in.Role, invitationExpiry(in.ExpiresAt, time.Now()))
+	}
 	if err != nil {
 		writeStoreError(w, err)
 		return

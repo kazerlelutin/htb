@@ -79,6 +79,34 @@ paths:
     post:
       summary: Reserve a namespace
       responses: { '201': { description: Reserved }, '403': { $ref: '#/components/responses/Forbidden' } }
+  /namespaces/{name}/invitations:
+    get:
+      summary: List active namespace invitations without their secret codes
+      parameters: [ { name: name, in: path, required: true, schema: { type: string, example: MO5 } } ]
+      responses: { '200': { description: Active invitations }, '403': { $ref: '#/components/responses/Forbidden' } }
+  /namespaces/{name}/invitations/{id}:
+    delete:
+      summary: Revoke a pending namespace invitation
+      parameters:
+        - { name: name, in: path, required: true, schema: { type: string, example: MO5 } }
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses: { '204': { description: Revoked }, '403': { $ref: '#/components/responses/Forbidden' } }
+  /invitations:
+    post:
+      summary: Create an invitation for one project or every project in a namespace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                project: { type: string, example: MO5/ANBY }
+                namespace: { type: string, example: MO5, description: Exactly one of project or namespace is required }
+                role: { type: string, enum: [read, write, admin] }
+                expires_at: { type: string, format: date-time }
+      responses: { '201': { description: Invitation code }, '403': { $ref: '#/components/responses/Forbidden' } }
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }

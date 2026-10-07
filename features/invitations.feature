@@ -21,3 +21,15 @@ Feature: Invitation à un projet
     Given un administrateur consulte les membres du projet "SITE"
     When il essaie de retirer ou rétrograder le propriétaire
     Then HTB refuse l’opération
+
+  Scenario: Une invitation de namespace donne accès aux projets futurs
+    Given un propriétaire du namespace "MO5" crée une invitation "read"
+    When une identité Zitadel accepte le code
+    Then elle peut consulter les projets existants du namespace "MO5"
+    And elle peut consulter les projets ajoutés ensuite au namespace "MO5"
+
+  Scenario: Le propriétaire gère les invitations du namespace
+    Given une invitation active pour le namespace "MO5"
+    When son propriétaire liste ou révoque l’invitation
+    Then le code secret n’est pas affiché
+    And l’invitation révoquée ne peut plus être acceptée

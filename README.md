@@ -165,7 +165,8 @@ future edits.
 ### Client requests
 
 A project admin creates an invitation with `htb invite create --role read`.
-After signing in to `/login`, the client enters that code in `/portal` and can
+To grant the same access to every current and future project in a namespace,
+its owner uses `htb invite create --namespace MO5 --role read`. After signing in to `/login`, the client enters that code in `/portal` and can
 view, propose, and comment on requests for the project. The team handles
 these separately from internal tickets:
 

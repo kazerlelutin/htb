@@ -178,6 +178,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 		{"0011_namespace_reservations", htb.NamespaceReservationsMigration},
 		{"0012_client_story_comment_lifecycle", htb.ClientStoryCommentLifecycleMigration},
 		{"0013_ticket_lifecycle", htb.TicketLifecycleMigration},
+		{"0014_namespace_invitations", htb.NamespaceInvitationsMigration},
 	}
 	for _, migration := range migrations {
 		var exists bool
@@ -533,12 +534,16 @@ func (s *Store) checkNamespaceLimit(ctx context.Context, tx *sql.Tx, userID int6
 }
 
 func (s *Store) ListProjects(ctx context.Context, actor Actor) ([]Project, error) {
-	query := `SELECT p.key,p.name,p.description,p.archived_at IS NOT NULL,COALESCE(pm.role,'admin')
-		FROM projects p LEFT JOIN project_memberships pm ON pm.project_id=p.id AND pm.user_id=$1`
-	args := []any{actor.UserID}
-	if !actor.Superadmin {
-		query += ` WHERE pm.user_id IS NOT NULL`
-	}
+	query := `SELECT p.key,p.name,p.description,p.archived_at IS NOT NULL,
+		CASE WHEN $2 THEN 'admin'
+			 WHEN pm.role='admin' OR nm.role='admin' THEN 'admin'
+			 WHEN pm.role='write' OR nm.role='write' THEN 'write'
+			 ELSE 'read' END
+		FROM projects p
+		LEFT JOIN project_memberships pm ON pm.project_id=p.id AND pm.user_id=$1
+		LEFT JOIN namespace_memberships nm ON nm.user_id=$1 AND position('/' IN p.key)>0 AND nm.namespace_name=split_part(p.key,'/',1)
+		WHERE $2 OR pm.user_id IS NOT NULL OR nm.user_id IS NOT NULL`
+	args := []any{actor.UserID, actor.Superadmin}
 	rows, err := s.DB.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
@@ -558,7 +563,11 @@ func (s *Store) ListProjects(ctx context.Context, actor Actor) ([]Project, error
 // ListProjectStatuses returns each accessible project's ticket totals in one
 // query, so the CLI can render a portfolio view without an N+1 request loop.
 func (s *Store) ListProjectStatuses(ctx context.Context, actor Actor) ([]ProjectStatus, error) {
-	query := `SELECT p.key,p.name,p.description,p.archived_at IS NOT NULL,COALESCE(pm.role,'admin'),
+	query := `SELECT p.key,p.name,p.description,p.archived_at IS NOT NULL,
+		CASE WHEN $2 THEN 'admin'
+			 WHEN pm.role='admin' OR nm.role='admin' THEN 'admin'
+			 WHEN pm.role='write' OR nm.role='write' THEN 'write'
+			 ELSE 'read' END,
 		count(t.id) FILTER (WHERE t.type='user_story'),
 		count(t.id) FILTER (WHERE t.type='user_story' AND t.status='done'),
 		count(t.id), count(t.id) FILTER (WHERE t.status='done'),
@@ -567,12 +576,10 @@ func (s *Store) ListProjectStatuses(ctx context.Context, actor Actor) ([]Project
 		count(t.id) FILTER (WHERE t.status='review'),
 		count(t.id) FILTER (WHERE t.status='blocked')
 		FROM projects p LEFT JOIN project_memberships pm ON pm.project_id=p.id AND pm.user_id=$1
+		LEFT JOIN namespace_memberships nm ON nm.user_id=$1 AND position('/' IN p.key)>0 AND nm.namespace_name=split_part(p.key,'/',1)
 		LEFT JOIN tickets t ON t.project_id=p.id AND t.archived_at IS NULL`
-	args := []any{actor.UserID}
-	if !actor.Superadmin {
-		query += ` WHERE pm.user_id IS NOT NULL`
-	}
-	query += ` GROUP BY p.id,p.key,p.name,p.description,p.archived_at,pm.role ORDER BY p.key`
+	args := []any{actor.UserID, actor.Superadmin}
+	query += ` WHERE $2 OR pm.user_id IS NOT NULL OR nm.user_id IS NOT NULL GROUP BY p.id,p.key,p.name,p.description,p.archived_at,pm.role,nm.role ORDER BY p.key`
 	rows, err := s.DB.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
@@ -1275,6 +1282,29 @@ func (s *Store) CreateInvitation(ctx context.Context, actor Actor, project strin
 	return code, err
 }
 
+// CreateNamespaceInvitation grants the selected role to every current and
+// future project in a namespace once the recipient accepts its one-time code.
+func (s *Store) CreateNamespaceInvitation(ctx context.Context, actor Actor, namespace string, role domain.Role, expires time.Time) (string, error) {
+	namespace, err := domain.NormalizeNamespace(namespace)
+	if err != nil {
+		return "", err
+	}
+	if err = s.authorizeNamespaceAdministration(ctx, actor, namespace); err != nil {
+		return "", err
+	}
+	if !role.Allows(domain.RoleRead) || expires.Before(time.Now()) {
+		return "", fmt.Errorf("invalid invitation")
+	}
+	raw := make([]byte, 24)
+	if _, err = rand.Read(raw); err != nil {
+		return "", err
+	}
+	code := hex.EncodeToString(raw)
+	hash := sha256.Sum256([]byte(code))
+	_, err = s.DB.ExecContext(ctx, `INSERT INTO invitations(namespace_name,role,code_hash,expires_at,created_by_credential_id) VALUES($1,$2,$3,$4,$5)`, namespace, role, hash[:], expires, actor.CredentialID)
+	return code, err
+}
+
 func (s *Store) AcceptInvitation(ctx context.Context, subject, name, email, code string) error {
 	hash := sha256.Sum256([]byte(code))
 	tx, err := s.DB.BeginTx(ctx, nil)
@@ -1282,9 +1312,11 @@ func (s *Store) AcceptInvitation(ctx context.Context, subject, name, email, code
 		return err
 	}
 	defer tx.Rollback()
-	var projectID, userID int64
+	var projectID sql.NullInt64
+	var namespace sql.NullString
+	var userID int64
 	var role string
-	err = tx.QueryRowContext(ctx, `SELECT project_id,role FROM invitations WHERE code_hash=$1 AND accepted_at IS NULL AND expires_at>now() FOR UPDATE`, hash[:]).Scan(&projectID, &role)
+	err = tx.QueryRowContext(ctx, `SELECT project_id,namespace_name,role FROM invitations WHERE code_hash=$1 AND accepted_at IS NULL AND expires_at>now() FOR UPDATE`, hash[:]).Scan(&projectID, &namespace, &role)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -1303,13 +1335,69 @@ func (s *Store) AcceptInvitation(ctx context.Context, subject, name, email, code
 	} else if err != nil {
 		return err
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO project_memberships(project_id,user_id,role) VALUES($1,$2,$3) ON CONFLICT(project_id,user_id) DO UPDATE SET role=EXCLUDED.role`, projectID, userID, role); err != nil {
-		return err
+	if projectID.Valid {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO project_memberships(project_id,user_id,role) VALUES($1,$2,$3) ON CONFLICT(project_id,user_id) DO UPDATE SET role=EXCLUDED.role`, projectID.Int64, userID, role); err != nil {
+			return err
+		}
+	} else if namespace.Valid {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO namespace_memberships(namespace_name,user_id,role) VALUES($1,$2,$3) ON CONFLICT(namespace_name,user_id) DO UPDATE SET role=EXCLUDED.role`, namespace.String, userID, role); err != nil {
+			return err
+		}
+	} else {
+		return fmt.Errorf("invalid invitation target")
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE invitations SET accepted_by_user_id=$1,accepted_at=now() WHERE code_hash=$2`, userID, hash[:]); err != nil {
 		return err
 	}
 	return tx.Commit()
+}
+
+func (s *Store) ListPendingNamespaceInvitations(ctx context.Context, actor Actor, namespace string) ([]Invitation, error) {
+	namespace, err := domain.NormalizeNamespace(namespace)
+	if err != nil {
+		return nil, err
+	}
+	if err = s.authorizeNamespaceAdministration(ctx, actor, namespace); err != nil {
+		return nil, err
+	}
+	rows, err := s.DB.QueryContext(ctx, `SELECT id,role,expires_at,created_at FROM invitations WHERE namespace_name=$1 AND accepted_at IS NULL AND expires_at>now() ORDER BY expires_at,id`, namespace)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	invitations := []Invitation{}
+	for rows.Next() {
+		var invitation Invitation
+		var role string
+		if err = rows.Scan(&invitation.ID, &role, &invitation.ExpiresAt, &invitation.CreatedAt); err != nil {
+			return nil, err
+		}
+		invitation.Role = domain.Role(role)
+		invitations = append(invitations, invitation)
+	}
+	return invitations, rows.Err()
+}
+
+func (s *Store) RevokeNamespaceInvitation(ctx context.Context, actor Actor, namespace string, invitationID int64) error {
+	namespace, err := domain.NormalizeNamespace(namespace)
+	if err != nil {
+		return err
+	}
+	if err = s.authorizeNamespaceAdministration(ctx, actor, namespace); err != nil {
+		return err
+	}
+	result, err := s.DB.ExecContext(ctx, `DELETE FROM invitations WHERE id=$1 AND namespace_name=$2 AND accepted_at IS NULL AND expires_at>now()`, invitationID, namespace)
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (s *Store) ListProjectMembers(ctx context.Context, actor Actor, project string) ([]ProjectMember, error) {
@@ -1473,7 +1561,11 @@ func authorize(ctx context.Context, queryer rowQuerier, actor Actor, project str
 		return nil
 	}
 	var role, max string
-	err := queryer.QueryRowContext(ctx, `SELECT pm.role,c.max_role FROM credentials c JOIN project_memberships pm ON pm.user_id=c.user_id JOIN projects p ON p.id=pm.project_id WHERE c.id=$1 AND p.key=$2 AND c.disabled_at IS NULL`, actor.CredentialID, strings.ToUpper(project)).Scan(&role, &max)
+	err := queryer.QueryRowContext(ctx, `SELECT CASE WHEN pm.role='admin' OR nm.role='admin' THEN 'admin' WHEN pm.role='write' OR nm.role='write' THEN 'write' ELSE 'read' END,c.max_role
+		FROM credentials c JOIN projects p ON p.key=$2
+		LEFT JOIN project_memberships pm ON pm.user_id=c.user_id AND pm.project_id=p.id
+		LEFT JOIN namespace_memberships nm ON nm.user_id=c.user_id AND position('/' IN p.key)>0 AND nm.namespace_name=split_part(p.key,'/',1)
+		WHERE c.id=$1 AND c.disabled_at IS NULL AND (pm.user_id IS NOT NULL OR nm.user_id IS NOT NULL)`, actor.CredentialID, strings.ToUpper(project)).Scan(&role, &max)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrForbidden
 	}
@@ -1485,6 +1577,24 @@ func authorize(ctx context.Context, queryer rowQuerier, actor Actor, project str
 		effective = domain.Role(max)
 	}
 	if !effective.Allows(required) {
+		return ErrForbidden
+	}
+	return nil
+}
+
+func (s *Store) authorizeNamespaceAdministration(ctx context.Context, actor Actor, namespace string) error {
+	if actor.Superadmin {
+		return nil
+	}
+	var ownerID int64
+	err := s.DB.QueryRowContext(ctx, `SELECT owner_user_id FROM namespaces WHERE name=$1`, namespace).Scan(&ownerID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if ownerID != actor.UserID {
 		return ErrForbidden
 	}
 	return nil

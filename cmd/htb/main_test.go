@@ -217,3 +217,24 @@ func TestInvitationCreateInputUsesOptionalExpiration(t *testing.T) {
 		t.Fatalf("explicit invitation expiration missing from %#v", got)
 	}
 }
+
+func TestNamespaceInvitationInputUsesOptionalExpiration(t *testing.T) {
+	if got, want := namespaceInvitationCreateInput("MO5", "read", ""), map[string]string{"namespace": "MO5", "role": "read"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("default namespace invitation input = %#v, want %#v", got, want)
+	}
+	if got := namespaceInvitationCreateInput("MO5", "read", "2026-10-02T12:00:00Z"); got["expires_at"] != "2026-10-02T12:00:00Z" {
+		t.Fatalf("explicit namespace invitation expiration missing from %#v", got)
+	}
+}
+
+func TestInviteRejectsProjectAndNamespaceTogether(t *testing.T) {
+	for _, args := range [][]string{
+		{"create", "--project", "SITE", "--namespace", "MO5"},
+		{"list", "--project", "SITE", "--namespace", "MO5"},
+		{"revoke", "1", "--project", "SITE", "--namespace", "MO5"},
+	} {
+		if err := inviteCommand(args); err == nil || err.Error() != "--project and --namespace cannot be used together" {
+			t.Fatalf("args %v returned %v", args, err)
+		}
+	}
+}

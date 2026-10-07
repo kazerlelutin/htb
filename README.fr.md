@@ -171,7 +171,9 @@ avant publication, y compris après une modification.
 ### Demandes client
 
 Un administrateur de projet crée une invitation avec
-`htb invite create --role read`. Après la connexion sur `/login`, le client
+`htb invite create --role read`. Pour donner le même accès à tous les projets
+présents et futurs d’un namespace, son propriétaire utilise
+`htb invite create --namespace MO5 --role read`. Après la connexion sur `/login`, le client
 saisit ce code dans `/portal` et peut voir, proposer et commenter les demandes
 du projet. L’équipe les traite séparément des tickets de travail :
 

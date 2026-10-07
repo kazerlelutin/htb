@@ -43,3 +43,6 @@ var ClientStoryCommentLifecycleMigration string
 
 //go:embed migrations/0013_ticket_lifecycle.sql
 var TicketLifecycleMigration string
+
+//go:embed migrations/0014_namespace_invitations.sql
+var NamespaceInvitationsMigration string

@@ -343,6 +343,70 @@ func TestNamespacedProjectAdministrationOverHTTP(t *testing.T) {
 	}
 }
 
+func TestNamespaceInvitationOverHTTP(t *testing.T) {
+	dsn := os.Getenv("HTBD_TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("set HTBD_TEST_DATABASE_URL to run PostgreSQL integration tests")
+	}
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	ctx := context.Background()
+	data := &store.Store{DB: db}
+	if err = data.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	stamp := strings.ReplaceAll(time.Now().UTC().Format("150405.000000000"), ".", "")
+	namespace := "INV" + stamp
+	firstProject := namespace + "/ONE"
+	secondProject := namespace + "/TWO"
+	ownerSubject := "namespace-invite-owner-" + stamp
+	memberSubject := "namespace-invite-member-" + stamp
+	defer cleanupIntegrationData(t, db, []string{firstProject, secondProject}, []string{ownerSubject, memberSubject})
+
+	owner := New(data, integrationVerifier{subject: ownerSubject}, auth.DeviceConfig{}, "", slog.Default())
+	if response := requestJSON(t, owner, http.MethodPost, "/api/v1/namespaces", `{"name":"`+namespace+`"}`); response.Code != http.StatusCreated {
+		t.Fatalf("claim namespace: %d %s", response.Code, response.Body.String())
+	}
+	if response := requestJSON(t, owner, http.MethodPost, "/api/v1/projects", `{"key":"`+firstProject+`","name":"First project"}`); response.Code != http.StatusCreated {
+		t.Fatalf("create first namespaced project: %d %s", response.Code, response.Body.String())
+	}
+	invitation := requestJSON(t, owner, http.MethodPost, "/api/v1/invitations", `{"namespace":"`+namespace+`","role":"read","expires_at":"`+time.Now().Add(time.Hour).Format(time.RFC3339)+`"}`)
+	if invitation.Code != http.StatusCreated {
+		t.Fatalf("create namespace invitation: %d %s", invitation.Code, invitation.Body.String())
+	}
+	var code struct {
+		Code string `json:"code"`
+	}
+	if err = json.Unmarshal(invitation.Body.Bytes(), &code); err != nil || code.Code == "" {
+		t.Fatalf("decode namespace invitation: %v %s", err, invitation.Body.String())
+	}
+	pending := requestJSON(t, owner, http.MethodGet, "/api/v1/namespaces/"+namespace+"/invitations", "")
+	if pending.Code != http.StatusOK || strings.Contains(pending.Body.String(), code.Code) {
+		t.Fatalf("list namespace invitations must not expose codes: %d %s", pending.Code, pending.Body.String())
+	}
+	if err = data.AcceptInvitation(ctx, memberSubject, "Namespace member", "member@example.test", code.Code); err != nil {
+		t.Fatalf("accept namespace invitation: %v", err)
+	}
+
+	member := New(data, integrationVerifier{subject: memberSubject}, auth.DeviceConfig{}, "", slog.Default())
+	if response := requestJSON(t, member, http.MethodGet, "/api/v1/projects", ""); response.Code != http.StatusOK || !strings.Contains(response.Body.String(), firstProject) || !strings.Contains(response.Body.String(), `"role":"read"`) {
+		t.Fatalf("namespace member sees existing project: %d %s", response.Code, response.Body.String())
+	}
+	if response := requestJSON(t, owner, http.MethodPost, "/api/v1/projects", `{"key":"`+secondProject+`","name":"Second project"}`); response.Code != http.StatusCreated {
+		t.Fatalf("create future namespaced project: %d %s", response.Code, response.Body.String())
+	}
+	if response := requestJSON(t, member, http.MethodGet, "/api/v1/tickets?project="+secondProject, ""); response.Code != http.StatusOK {
+		t.Fatalf("namespace member reads future project: %d %s", response.Code, response.Body.String())
+	}
+	if response := requestJSON(t, member, http.MethodPost, "/api/v1/tickets", `{"project":"`+secondProject+`","type":"bug","title":"Not allowed"}`); response.Code != http.StatusForbidden {
+		t.Fatalf("read namespace role writes a ticket: %d %s", response.Code, response.Body.String())
+	}
+}
+
 func requestJSON(t *testing.T, server *Server, method, path, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	request := httptest.NewRequest(method, path, bytes.NewBufferString(body))
@@ -375,6 +439,8 @@ func cleanupIntegrationData(t *testing.T, db *sql.DB, keys, subjects []string) {
 	}
 	for _, subject := range subjects {
 		for _, query := range []string{
+			`DELETE FROM invitations WHERE namespace_name IN (SELECT name FROM namespaces WHERE owner_user_id IN (SELECT id FROM users WHERE zitadel_subject=$1))`,
+			`DELETE FROM namespace_memberships WHERE namespace_name IN (SELECT name FROM namespaces WHERE owner_user_id IN (SELECT id FROM users WHERE zitadel_subject=$1)) OR user_id IN (SELECT id FROM users WHERE zitadel_subject=$1)`,
 			`DELETE FROM namespaces WHERE owner_user_id IN (SELECT id FROM users WHERE zitadel_subject=$1)`,
 			`DELETE FROM credentials WHERE zitadel_subject=$1`,
 			`DELETE FROM users WHERE zitadel_subject=$1`,

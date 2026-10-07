@@ -259,15 +259,15 @@ Use "htb help ticket create" or "htb ticket create --help" for command details.
 	case "request":
 		return "Usage:\n  htb request list [--project KEY]\n  htb request show ID | comments ID\n  htb request comment ID TEXT\n  htb request status ID received|in_progress|needs_info|done|rejected\n  htb request link ID TICKET-REF\n\nClient requests are separate from internal work tickets.\n"
 	case "invite":
-		return "Usage:\n  htb invite create [--project KEY] [--role read|write|admin] [--expires-at RFC3339]\n  htb invite accept CODE\n  htb invite list [--project KEY]\n  htb invite revoke ID [--project KEY]\n"
+		return "Usage:\n  htb invite create [--project KEY | --namespace NAME] [--role read|write|admin] [--expires-at RFC3339]\n  htb invite accept CODE\n  htb invite list [--project KEY | --namespace NAME]\n  htb invite revoke ID [--project KEY | --namespace NAME]\n"
 	case "invite create":
-		return "Usage: htb invite create [--project KEY] [--role read|write|admin] [--expires-at RFC3339]\n\nCreate an invitation for a project. It expires after 7 days by default.\n"
+		return "Usage: htb invite create [--project KEY | --namespace NAME] [--role read|write|admin] [--expires-at RFC3339]\n\nCreate an invitation for a project or every project in a namespace, including projects added later. It expires after 7 days by default.\n"
 	case "invite accept":
-		return "Usage: htb invite accept CODE\n\nAccept a project invitation.\n"
+		return "Usage: htb invite accept CODE\n\nAccept a project or namespace invitation.\n"
 	case "invite list":
-		return "Usage: htb invite list [--project KEY]\n\nList active invitations without exposing their codes.\n"
+		return "Usage: htb invite list [--project KEY | --namespace NAME]\n\nList active invitations without exposing their codes.\n"
 	case "invite revoke":
-		return "Usage: htb invite revoke ID [--project KEY]\n\nRevoke an active invitation.\n"
+		return "Usage: htb invite revoke ID [--project KEY | --namespace NAME]\n\nRevoke an active invitation.\n"
 	default:
 		return fmt.Sprintf("Help is unavailable for \"htb %s\". Run \"htb help\".\n", command)
 	}
@@ -1339,7 +1339,7 @@ func ticketRestore(args []string) error {
 }
 func inviteCommand(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: htb invite {create|accept}")
+		return errors.New("usage: htb invite {create|accept|list|revoke}")
 	}
 	if args[0] == "accept" && len(args) == 2 {
 		if err := call("POST", "/api/v1/invitations/"+args[1]+"/accept", map[string]any{}, &struct{}{}); err != nil {
@@ -1351,12 +1351,16 @@ func inviteCommand(args []string) error {
 	if args[0] == "create" {
 		fs := flag.NewFlagSet("invite create", flag.ContinueOnError)
 		project := fs.String("project", "", "project")
+		namespace := fs.String("namespace", "", "namespace")
 		role := fs.String("role", "read", "role")
 		expires := fs.String("expires-at", "", "RFC3339 expiry")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		if *project == "" {
+		if *project != "" && *namespace != "" {
+			return errors.New("--project and --namespace cannot be used together")
+		}
+		if *project == "" && *namespace == "" {
 			var err error
 			*project, err = currentProject()
 			if err != nil {
@@ -1366,7 +1370,11 @@ func inviteCommand(args []string) error {
 		var response struct {
 			Code string `json:"code"`
 		}
-		if err := call("POST", "/api/v1/invitations", invitationCreateInput(*project, *role, *expires), &response); err != nil {
+		input := invitationCreateInput(*project, *role, *expires)
+		if *namespace != "" {
+			input = namespaceInvitationCreateInput(*namespace, *role, *expires)
+		}
+		if err := call("POST", "/api/v1/invitations", input, &response); err != nil {
 			return err
 		}
 		fmt.Printf("Invitation code created: %s\nShare it with: htb invite accept %s\n", response.Code, response.Code)
@@ -1375,10 +1383,14 @@ func inviteCommand(args []string) error {
 	if args[0] == "list" {
 		fs := flag.NewFlagSet("invite list", flag.ContinueOnError)
 		project := fs.String("project", "", "project")
+		namespace := fs.String("namespace", "", "namespace")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		if *project == "" {
+		if *project != "" && *namespace != "" {
+			return errors.New("--project and --namespace cannot be used together")
+		}
+		if *project == "" && *namespace == "" {
 			var err error
 			*project, err = currentProject()
 			if err != nil {
@@ -1388,7 +1400,11 @@ func inviteCommand(args []string) error {
 		var response struct {
 			Invitations []invitationView `json:"invitations"`
 		}
-		if err := call("GET", "/api/v1/projects/"+*project+"/invitations", nil, &response); err != nil {
+		path := "/api/v1/projects/" + *project + "/invitations"
+		if *namespace != "" {
+			path = "/api/v1/namespaces/" + *namespace + "/invitations"
+		}
+		if err := call("GET", path, nil, &response); err != nil {
 			return err
 		}
 		if len(response.Invitations) == 0 {
@@ -1404,23 +1420,37 @@ func inviteCommand(args []string) error {
 	if args[0] == "revoke" {
 		fs := flag.NewFlagSet("invite revoke", flag.ContinueOnError)
 		project := fs.String("project", "", "project")
-		if err := fs.Parse(args[1:]); err != nil {
+		namespace := fs.String("namespace", "", "namespace")
+		flagArgs := args[1:]
+		// The documented syntax puts the ID first. flag.FlagSet stops parsing at
+		// that positional value, so move it after the options before parsing.
+		if len(flagArgs) > 0 && !strings.HasPrefix(flagArgs[0], "-") {
+			flagArgs = append(flagArgs[1:], flagArgs[0])
+		}
+		if err := fs.Parse(flagArgs); err != nil {
 			return err
 		}
 		if fs.NArg() != 1 {
-			return errors.New("usage: htb invite revoke ID [--project KEY]")
+			return errors.New("usage: htb invite revoke ID [--project KEY | --namespace NAME]")
 		}
 		invitationID, err := strconv.ParseInt(fs.Arg(0), 10, 64)
 		if err != nil || invitationID < 1 {
 			return errors.New("invitation ID must be numeric")
 		}
-		if *project == "" {
+		if *project != "" && *namespace != "" {
+			return errors.New("--project and --namespace cannot be used together")
+		}
+		if *project == "" && *namespace == "" {
 			*project, err = currentProject()
 			if err != nil {
 				return err
 			}
 		}
-		if err = call("DELETE", fmt.Sprintf("/api/v1/projects/%s/invitations/%d", *project, invitationID), nil, &struct{}{}); err != nil {
+		path := fmt.Sprintf("/api/v1/projects/%s/invitations/%d", *project, invitationID)
+		if *namespace != "" {
+			path = fmt.Sprintf("/api/v1/namespaces/%s/invitations/%d", *namespace, invitationID)
+		}
+		if err = call("DELETE", path, nil, &struct{}{}); err != nil {
 			return err
 		}
 		fmt.Printf("Invitation %d revoked.\n", invitationID)
@@ -1431,6 +1461,14 @@ func inviteCommand(args []string) error {
 
 func invitationCreateInput(project, role, expiresAt string) map[string]string {
 	input := map[string]string{"project": project, "role": role}
+	if expiresAt != "" {
+		input["expires_at"] = expiresAt
+	}
+	return input
+}
+
+func namespaceInvitationCreateInput(namespace, role, expiresAt string) map[string]string {
+	input := map[string]string{"namespace": namespace, "role": role}
 	if expiresAt != "" {
 		input["expires_at"] = expiresAt
 	}
