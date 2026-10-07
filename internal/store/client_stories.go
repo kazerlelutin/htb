@@ -92,8 +92,9 @@ func (s *Store) ListClientStories(ctx context.Context, actor Actor, project stri
 }
 
 // ListClientStoriesPage returns a bounded, authorized page and summary values
-// calculated across every story visible to the current actor.
-func (s *Store) ListClientStoriesPage(ctx context.Context, actor Actor, project string, page, perPage int) (ClientStoryPage, error) {
+// calculated across the visible stories matching query. An empty query lists
+// every visible story.
+func (s *Store) ListClientStoriesPage(ctx context.Context, actor Actor, project, query string, page, perPage int) (ClientStoryPage, error) {
 	if page < 1 || perPage < 1 || perPage > 100 {
 		return ClientStoryPage{}, fmt.Errorf("invalid client story page")
 	}
@@ -102,14 +103,21 @@ func (s *Store) ListClientStoriesPage(ctx context.Context, actor Actor, project 
 		return ClientStoryPage{}, err
 	}
 	project = strings.ToUpper(project)
+	query = strings.TrimSpace(query)
 	result := ClientStoryPage{Page: page}
+	filter := ""
+	arguments := []any{project, preview}
+	if query != "" {
+		filter = ` AND (t.title ILIKE '%' || $3 || '%' OR t.description ILIKE '%' || $3 || '%')`
+		arguments = append(arguments, query)
+	}
 	err = s.DB.QueryRowContext(ctx, `SELECT
 		count(*),
 		count(*) FILTER (WHERE t.status='done'),
 		COALESCE(sum((SELECT count(*) FROM tickets child WHERE child.parent_ticket_id=t.id AND child.type='technical_task' AND child.archived_at IS NULL)), 0),
 		COALESCE(sum((SELECT count(*) FROM tickets child WHERE child.parent_ticket_id=t.id AND child.type='technical_task' AND child.status='done' AND child.archived_at IS NULL)), 0)
 		FROM tickets t JOIN projects p ON p.id=t.project_id
-		WHERE t.type='user_story' AND t.archived_at IS NULL AND p.key=$1 AND ($2 OR t.client_visibility='published')`, project, preview).Scan(&result.Total, &result.StoryDone, &result.TaskCount, &result.TaskDone)
+		WHERE t.type='user_story' AND t.archived_at IS NULL AND p.key=$1 AND ($2 OR t.client_visibility='published')`+filter, arguments...).Scan(&result.Total, &result.StoryDone, &result.TaskCount, &result.TaskDone)
 	if err != nil {
 		return ClientStoryPage{}, err
 	}
@@ -121,7 +129,12 @@ func (s *Store) ListClientStoriesPage(ctx context.Context, actor Actor, project 
 		result.Page = result.TotalPages
 	}
 	offset := (result.Page - 1) * perPage
-	rows, err := s.DB.QueryContext(ctx, clientStorySelect+` AND p.key=$1 AND ($2 OR t.client_visibility='published') ORDER BY (t.status='done'),t.number DESC LIMIT $3 OFFSET $4`, project, preview, perPage, offset)
+	limitArgument, offsetArgument := "$3", "$4"
+	if query != "" {
+		limitArgument, offsetArgument = "$4", "$5"
+	}
+	arguments = append(arguments, perPage, offset)
+	rows, err := s.DB.QueryContext(ctx, clientStorySelect+` AND p.key=$1 AND ($2 OR t.client_visibility='published')`+filter+` ORDER BY (t.status='done'),t.number DESC LIMIT `+limitArgument+` OFFSET `+offsetArgument, arguments...)
 	if err != nil {
 		return ClientStoryPage{}, err
 	}

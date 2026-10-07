@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -55,7 +56,7 @@ var downloadCommands = []commandReference{
 	{"Projects", "htb project member remove --user ID [--project KEY]", "Remove a non-owner member from a project."},
 	{"Roadmap", "htb feature create --key KEY --name NAME [--project KEY] [--description TEXT] [--due-date YYYY-MM-DD]", "Create a roadmap feature. It uses the current project unless --project is provided; --due-date is optional."},
 	{"Tickets", "htb ticket create --title TITLE [--type user_story|technical_task|bug|incident] [--project KEY] [--parent REF] [--related REF] [--feature KEY] [--description TEXT] [--priority low|normal|high|urgent] [--label TAG]", "Create a ticket in the current project by default. A technical task must use --parent with a user-story reference; repeat --label to attach several labels."},
-	{"Tickets", "htb ticket list [--project KEY] [--feature KEY] [--status STATUS] [--priority PRIORITY] [--label LABEL] [--query TEXT] [--archived] [--tree] [--json|--csv]", "List active tickets by default, or archived tickets with --archived."},
+	{"Tickets", "htb ticket list [--project KEY | --all-projects] [--feature KEY] [--status STATUS] [--priority PRIORITY] [--label LABEL] [--query TEXT] [--archived] [--tree] [--json|--csv]", "Search the current project by default, another project with --project, or every accessible project with --all-projects."},
 	{"Tickets", "htb ticket show REF", "Display one ticket, including its status, relationships, labels, and current version."},
 	{"Tickets", "htb ticket update --version N [--title TITLE] [--description TEXT] [--status open|in_progress|review|blocked|done] [--priority low|normal|high|urgent] [--feature KEY] REF", "Update a ticket safely. Use the version shown by 'htb ticket show REF' so concurrent changes are not overwritten."},
 	{"Tickets", "htb ticket comment REF TEXT", "Add a comment to a ticket."},
@@ -102,7 +103,7 @@ type clientRequestStore interface {
 
 type clientStoryStore interface {
 	ListClientStories(context.Context, store.Actor, string) ([]store.ClientStory, error)
-	ListClientStoriesPage(context.Context, store.Actor, string, int, int) (store.ClientStoryPage, error)
+	ListClientStoriesPage(context.Context, store.Actor, string, string, int, int) (store.ClientStoryPage, error)
 	GetClientStory(context.Context, store.Actor, string) (store.ClientStory, error)
 	SetClientStoryPublished(context.Context, store.Actor, string, bool) error
 	ListInternalStoryComments(context.Context, store.Actor, string) ([]store.Comment, error)
@@ -535,10 +536,6 @@ func ticketRevisionRestore(path string) (string, string, bool) {
 
 func (s *Server) listTickets(w http.ResponseWriter, r *http.Request) {
 	project := r.URL.Query().Get("project")
-	if project == "" {
-		writeError(w, 400, "invalid_request", "project is required", nil)
-		return
-	}
 	filter := store.TicketFilter{
 		ParentOnly: r.URL.Query().Get("tree") != "true",
 		Archived:   r.URL.Query().Get("archived") == "true",
@@ -548,11 +545,35 @@ func (s *Server) listTickets(w http.ResponseWriter, r *http.Request) {
 		Label:      r.URL.Query().Get("label"),
 		Query:      r.URL.Query().Get("query"),
 	}
-	items, err := s.store.ListTickets(r.Context(), actor(r), project, filter)
+	if project != "" {
+		items, err := s.store.ListTickets(r.Context(), actor(r), project, filter)
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		writeJSON(w, 200, map[string]any{"tickets": items})
+		return
+	}
+	projects, err := s.store.ListProjects(r.Context(), actor(r))
 	if err != nil {
 		writeStoreError(w, err)
 		return
 	}
+	items := make([]store.Ticket, 0)
+	for _, accessibleProject := range projects {
+		projectTickets, err := s.store.ListTickets(r.Context(), actor(r), accessibleProject.Key, filter)
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		items = append(items, projectTickets...)
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].Project == items[j].Project {
+			return items[i].Number > items[j].Number
+		}
+		return items[i].Project < items[j].Project
+	})
 	writeJSON(w, 200, map[string]any{"tickets": items})
 }
 func (s *Server) createTicket(w http.ResponseWriter, r *http.Request) {

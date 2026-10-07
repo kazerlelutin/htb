@@ -16,6 +16,7 @@ type clientStoryStub struct {
 	stories           []store.ClientStory
 	comments          []store.ClientStoryComment
 	project           string
+	search            string
 	internalComments  []store.Comment
 	commented         bool
 	internalCommented bool
@@ -29,12 +30,22 @@ func (stub *clientStoryStub) ListClientStories(_ context.Context, _ store.Actor,
 	return stub.stories, nil
 }
 
-func (stub *clientStoryStub) ListClientStoriesPage(_ context.Context, _ store.Actor, project string, page, perPage int) (store.ClientStoryPage, error) {
+func (stub *clientStoryStub) ListClientStoriesPage(_ context.Context, _ store.Actor, project, search string, page, perPage int) (store.ClientStoryPage, error) {
 	if project != stub.allowedProject() {
 		return store.ClientStoryPage{}, store.ErrForbidden
 	}
-	result := store.ClientStoryPage{Page: page, Total: len(stub.stories)}
-	for _, story := range stub.stories {
+	stub.search = search
+	stories := stub.stories
+	if search != "" {
+		stories = nil
+		for _, story := range stub.stories {
+			if strings.Contains(strings.ToLower(story.Title), strings.ToLower(search)) || strings.Contains(strings.ToLower(story.Description), strings.ToLower(search)) {
+				stories = append(stories, story)
+			}
+		}
+	}
+	result := store.ClientStoryPage{Page: page, Total: len(stories)}
+	for _, story := range stories {
 		result.TaskCount += story.ChildCount
 		result.TaskDone += story.DoneChildren
 		if story.Status == "done" {
@@ -56,7 +67,7 @@ func (stub *clientStoryStub) ListClientStoriesPage(_ context.Context, _ store.Ac
 	if end > result.Total {
 		end = result.Total
 	}
-	result.Stories = append(result.Stories, stub.stories[start:end]...)
+	result.Stories = append(result.Stories, stories[start:end]...)
 	return result, nil
 }
 
@@ -213,6 +224,33 @@ func TestClientStoryDashboardPaginatesStories(t *testing.T) {
 	}
 	if strings.Contains(w.Body.String(), "Story 1") {
 		t.Fatalf("page 2 contains a story from page 1: %s", w.Body.String())
+	}
+}
+
+func TestClientStoryDashboardSearchesVisibleStoriesAndKeepsTheQueryInPagination(t *testing.T) {
+	s, _, _ := portalTestServer()
+	stories := make([]store.ClientStory, 22)
+	for i := range stories {
+		title := "Autre story"
+		if i < 21 {
+			title = "Export " + strconv.Itoa(i+1)
+		}
+		stories[i] = store.ClientStory{Ref: "SITE-" + strconv.Itoa(i+1), Project: "SITE", Title: title, Published: true}
+	}
+	stub := &clientStoryStub{stories: stories}
+	s.stories = stub
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, portalRequest(http.MethodGet, "/portal/projects/SITE?q=export&page=2", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("search dashboard: %d %s", w.Code, w.Body.String())
+	}
+	for _, want := range []string{"Rechercher dans les user stories", `value="export"`, "Export 21", `href="/portal/projects/SITE?page=1&amp;q=export"`} {
+		if !strings.Contains(w.Body.String(), want) {
+			t.Fatalf("search dashboard missing %q: %s", want, w.Body.String())
+		}
+	}
+	if strings.Contains(w.Body.String(), "Autre story") || stub.search != "export" {
+		t.Fatalf("search leaked an unmatched story or lost the query: search=%q body=%s", stub.search, w.Body.String())
 	}
 }
 

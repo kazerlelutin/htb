@@ -204,6 +204,10 @@ func TestTicketLifecycleOverHTTP(t *testing.T) {
 	if shownOther.Code != http.StatusOK || !strings.Contains(shownOther.Body.String(), other.Ref) {
 		t.Fatalf("show second-project ticket: %d %s", shownOther.Code, shownOther.Body.String())
 	}
+	acrossProjects := requestJSON(t, server, http.MethodGet, "/api/v1/tickets?query=another+project", "")
+	if acrossProjects.Code != http.StatusOK || !strings.Contains(acrossProjects.Body.String(), other.Ref) || strings.Contains(acrossProjects.Body.String(), ticket.Ref) {
+		t.Fatalf("search across accessible projects: %d %s", acrossProjects.Code, acrossProjects.Body.String())
+	}
 	childResponse := requestJSON(t, server, http.MethodPost, "/api/v1/tickets", `{"project":"`+otherKey+`","type":"technical_task","parent_ref":"`+other.Ref+`","title":"Child ticket"}`)
 	if childResponse.Code != http.StatusCreated {
 		t.Fatalf("create child ticket: %d %s", childResponse.Code, childResponse.Body.String())

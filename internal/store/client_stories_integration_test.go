@@ -176,6 +176,10 @@ func TestClientStoryPublicationAndPublicConversation(t *testing.T) {
 	if err != nil || len(items) != 3 || items[0].Ref != active.Ref || items[1].Ref != completedLater.Ref || items[2].Ref != story.Ref {
 		t.Fatalf("active stories should precede completed stories: %+v, %v", items, err)
 	}
+	page, err := s.ListClientStoriesPage(ctx, client, "SITE", "prochain", 1, 20)
+	if err != nil || page.Total != 1 || len(page.Stories) != 1 || page.Stories[0].Ref != active.Ref {
+		t.Fatalf("search published stories: %+v, %v", page, err)
+	}
 	if err = s.SetClientStoryPublished(ctx, admin, story.Ref, false); err != nil {
 		t.Fatal(err)
 	}

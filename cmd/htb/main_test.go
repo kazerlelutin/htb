@@ -185,10 +185,17 @@ func TestHelpIsDetailedForEveryCommand(t *testing.T) {
 
 func TestTicketListHelpExplainsDailyWorkFilters(t *testing.T) {
 	help := helpText([]string{"ticket", "list"})
-	for _, flag := range []string{"--status STATUS", "--priority PRIORITY", "--label LABEL", "--query TEXT", "--archived", "--json", "--csv"} {
+	for _, flag := range []string{"--project KEY | --all-projects", "--status STATUS", "--priority PRIORITY", "--label LABEL", "--query TEXT", "--archived", "--json", "--csv"} {
 		if !strings.Contains(help, flag) {
 			t.Fatalf("ticket list help is missing %q: %s", flag, help)
 		}
+	}
+}
+
+func TestTicketListRejectsProjectAndAllProjectsTogether(t *testing.T) {
+	err := ticketList([]string{"--project", "SITE", "--all-projects"})
+	if err == nil || err.Error() != "--project and --all-projects cannot be used together" {
+		t.Fatalf("unexpected conflicting project options error: %v", err)
 	}
 }
 

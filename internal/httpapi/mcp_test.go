@@ -25,18 +25,21 @@ func (stub mcpVerifierStub) Verify(context.Context, string) (auth.Principal, err
 }
 
 type mcpStoreStub struct {
-	actor        store.Actor
-	projects     []store.Project
-	tickets      []store.Ticket
-	ticket       store.Ticket
-	resolveErr   error
-	queryErr     error
-	request      store.ClientRequest
-	requestErr   error
-	project      string
-	title        string
-	body         string
-	requestCalls int
+	actor            store.Actor
+	projects         []store.Project
+	tickets          []store.Ticket
+	ticketsByProject map[string][]store.Ticket
+	ticketProjects   []string
+	ticketFilter     store.TicketFilter
+	ticket           store.Ticket
+	resolveErr       error
+	queryErr         error
+	request          store.ClientRequest
+	requestErr       error
+	project          string
+	title            string
+	body             string
+	requestCalls     int
 }
 
 func (stub *mcpStoreStub) ResolveActor(_ context.Context, subject, _, _ string, _ bool) (store.Actor, error) {
@@ -53,7 +56,12 @@ func (stub *mcpStoreStub) ListProjects(context.Context, store.Actor) ([]store.Pr
 	return stub.projects, stub.queryErr
 }
 
-func (stub *mcpStoreStub) ListTickets(context.Context, store.Actor, string, store.TicketFilter) ([]store.Ticket, error) {
+func (stub *mcpStoreStub) ListTickets(_ context.Context, _ store.Actor, project string, filter store.TicketFilter) ([]store.Ticket, error) {
+	stub.ticketProjects = append(stub.ticketProjects, project)
+	stub.ticketFilter = filter
+	if stub.ticketsByProject != nil {
+		return stub.ticketsByProject[project], stub.queryErr
+	}
 	return stub.tickets, stub.queryErr
 }
 
@@ -250,6 +258,29 @@ func TestMCPReadsOnlyAccessibleTicketData(t *testing.T) {
 	invalid := performMCPRequest(t, server, `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"htb_list_projects","arguments":{"unexpected":true}}}`, "access-token")
 	if invalid.Code != http.StatusOK || !strings.Contains(invalid.Body.String(), `"isError":true`) || strings.Contains(invalid.Body.String(), "unexpected") {
 		t.Fatalf("invalid tool response = %d %s", invalid.Code, invalid.Body.String())
+	}
+}
+
+func TestMCPSearchesAcrossAccessibleProjectsWhenProjectIsOmitted(t *testing.T) {
+	data := &mcpStoreStub{
+		actor:    store.Actor{Subject: "person-1"},
+		projects: []store.Project{{Key: "APP", Name: "Application"}, {Key: "SITE", Name: "Website"}},
+		ticketsByProject: map[string][]store.Ticket{
+			"APP":  {{Ref: "APP-2", Project: "APP", Number: 2, Title: "Fix checkout"}},
+			"SITE": {{Ref: "SITE-3", Project: "SITE", Number: 3, Title: "Document checkout"}},
+		},
+	}
+	server := newMCPTestServer(data)
+
+	response := performMCPRequest(t, server, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"htb_list_tickets","arguments":{"query":"checkout"}}}`, "access-token")
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"APP-2"`) || !strings.Contains(response.Body.String(), `"SITE-3"`) {
+		t.Fatalf("cross-project ticket search = %d %s", response.Code, response.Body.String())
+	}
+	if got, want := strings.Join(data.ticketProjects, ","), "APP,SITE"; got != want {
+		t.Fatalf("searched projects = %q, want %q", got, want)
+	}
+	if data.ticketFilter.Query != "checkout" {
+		t.Fatalf("search query = %q", data.ticketFilter.Query)
 	}
 }
 

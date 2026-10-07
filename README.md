@@ -109,12 +109,15 @@ htb project list
 htb project use SITE
 htb ticket create --title "Publish the homepage" --type user_story
 htb ticket list
+htb ticket list --all-projects --query "export"
 htb ticket show SITE-1
 htb ticket comment SITE-1 "Ready for review"
 ```
 
 The current project is stored in your local CLI configuration. Commands that
-support `--project` can target another project. Ticket references are numbered
+support `--project` can target another project. To search every accessible
+project, use `htb ticket list --all-projects --query TEXT`; without that flag,
+search stays in the current project (or the explicit `--project`). Ticket references are numbered
 per project (`SITE-1`, `SITE-2`, …). You can optionally prefix the project key
 with a namespace (`ALICE/SITE-1`) to allow multiple projects with the same short
 key. Descriptions and comments support Markdown; `htb ticket list --json` and

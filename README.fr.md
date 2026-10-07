@@ -112,12 +112,16 @@ htb project list
 htb project use SITE
 htb ticket create --title "Publier la page d’accueil" --type user_story
 htb ticket list
+htb ticket list --all-projects --query "export"
 htb ticket show SITE-1
 htb ticket comment SITE-1 "Prêt pour la revue"
 ```
 
 Le projet courant est conservé dans la configuration locale de la CLI. Les
-commandes qui acceptent `--project` peuvent cibler un autre projet. Les
+commandes qui acceptent `--project` peuvent cibler un autre projet. Pour
+rechercher dans tous les projets accessibles, utilisez
+`htb ticket list --all-projects --query TEXTE`; sans cette option, la recherche
+reste limitée au projet courant (ou à `--project`). Les
 références sont numérotées par projet (`SITE-1`, `SITE-2`, …). Vous pouvez
 optionnellement préfixer la clé du projet par un namespace (`ALICE/SITE-1`)
 pour permettre plusieurs projets avec la même clé courte. Les descriptions et

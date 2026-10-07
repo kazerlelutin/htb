@@ -1,4 +1,11 @@
 Feature: User stories visible aux clients
+
+  Scenario: Un client recherche les US visibles d’un projet
+    Given un client accède à un projet avec des US publiées et privées
+    When il recherche « export » dans le portail du projet
+    Then le portail affiche les US publiées correspondantes du projet
+    And il ne révèle ni US privée ni ticket technique
+
   Scenario: Le membre connaît son rôle dans le projet
     Given une personne a un rôle de lecture dans un projet
     When elle consulte ce projet dans le portail ou avec la CLI

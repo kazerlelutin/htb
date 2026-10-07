@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/kazerlelutin/htb/internal/auth"
@@ -196,7 +197,7 @@ func mcpTools() []map[string]any {
 	metadata := map[string]any{"securitySchemes": oauth}
 	return []map[string]any{
 		{"name": "htb_list_projects", "title": "List HTB projects", "description": "List the HTB projects that the connected person can access.", "inputSchema": map[string]any{"type": "object", "additionalProperties": false}, "securitySchemes": oauth, "_meta": metadata, "annotations": readOnly},
-		{"name": "htb_list_tickets", "title": "List HTB tickets", "description": "List non-archived tickets in one accessible HTB project. Use a project key from htb_list_projects.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"project": map[string]any{"type": "string", "minLength": 2}, "status": map[string]any{"type": "string", "enum": []string{"open", "in_progress", "review", "blocked", "done"}}, "query": map[string]any{"type": "string", "maxLength": 240}}, "required": []string{"project"}, "additionalProperties": false}, "securitySchemes": oauth, "_meta": metadata, "annotations": readOnly},
+		{"name": "htb_list_tickets", "title": "List HTB tickets", "description": "List matching non-archived tickets in one accessible HTB project, or in every accessible project when project is omitted.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"project": map[string]any{"type": "string", "minLength": 2, "description": "Optional project key from htb_list_projects. Omit to search every accessible project."}, "status": map[string]any{"type": "string", "enum": []string{"open", "in_progress", "review", "blocked", "done"}}, "query": map[string]any{"type": "string", "maxLength": 240}}, "additionalProperties": false}, "securitySchemes": oauth, "_meta": metadata, "annotations": readOnly},
 		{"name": "htb_get_ticket", "title": "Read an HTB ticket", "description": "Read one HTB ticket by reference, for example SITE-12 or ALICE/SITE-12.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"ref": map[string]any{"type": "string", "minLength": 3}}, "required": []string{"ref"}, "additionalProperties": false}, "securitySchemes": oauth, "_meta": metadata, "annotations": readOnly},
 		{"name": "htb_submit_ticket_proposal", "title": "Submit an HTB ticket proposal", "description": "Submit a proposal to HTB's existing request and triage process. It does not create a ticket. Call this only after the connected person explicitly confirms the title and description.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"project": map[string]any{"type": "string", "minLength": 2}, "title": map[string]any{"type": "string", "minLength": 1, "maxLength": 240}, "description": map[string]any{"type": "string", "minLength": 1, "maxLength": 20000}, "confirmed": map[string]any{"type": "boolean", "const": true}}, "required": []string{"project", "title", "description", "confirmed"}, "additionalProperties": false}, "securitySchemes": oauth, "_meta": metadata, "annotations": proposalWrite},
 	}
@@ -223,10 +224,10 @@ func (s *Server) callMCPTool(ctx context.Context, actor store.Actor, raw json.Ra
 			Status  domain.Status `json:"status"`
 			Query   string        `json:"query"`
 		}
-		if err := decodeMCPParams(call.Arguments, &arguments); err != nil || strings.TrimSpace(arguments.Project) == "" || len(arguments.Query) > 240 {
-			return nil, errors.New("project is required and query must be at most 240 characters")
+		if err := decodeMCPParams(call.Arguments, &arguments); err != nil || len([]rune(arguments.Query)) > 240 {
+			return nil, errors.New("query must be at most 240 characters")
 		}
-		return s.mcp.ListTickets(ctx, actor, arguments.Project, store.TicketFilter{Status: arguments.Status, Query: arguments.Query})
+		return s.listMCPTickets(ctx, actor, strings.TrimSpace(arguments.Project), store.TicketFilter{Status: arguments.Status, Query: arguments.Query})
 	case "htb_get_ticket":
 		var arguments struct {
 			Ref string `json:"ref"`
@@ -252,6 +253,31 @@ func (s *Server) callMCPTool(ctx context.Context, actor store.Actor, raw json.Ra
 	default:
 		return nil, errors.New("unknown tool")
 	}
+}
+
+func (s *Server) listMCPTickets(ctx context.Context, actor store.Actor, project string, filter store.TicketFilter) ([]store.Ticket, error) {
+	if project != "" {
+		return s.mcp.ListTickets(ctx, actor, project, filter)
+	}
+	projects, err := s.mcp.ListProjects(ctx, actor)
+	if err != nil {
+		return nil, err
+	}
+	tickets := make([]store.Ticket, 0)
+	for _, accessibleProject := range projects {
+		items, err := s.mcp.ListTickets(ctx, actor, accessibleProject.Key, filter)
+		if err != nil {
+			return nil, err
+		}
+		tickets = append(tickets, items...)
+	}
+	sort.Slice(tickets, func(i, j int) bool {
+		if tickets[i].Project == tickets[j].Project {
+			return tickets[i].Number > tickets[j].Number
+		}
+		return tickets[i].Project < tickets[j].Project
+	})
+	return tickets, nil
 }
 
 func decodeMCPParams(raw json.RawMessage, target any) error {

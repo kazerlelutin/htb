@@ -227,7 +227,7 @@ Use "htb help ticket create" or "htb ticket create --help" for command details.
 	case "ticket create":
 		return "Usage: htb ticket create --title TITLE [--type user_story|technical_task|bug|incident] [--project KEY] [--parent REF] [--related REF] [--feature KEY] [--description TEXT] [--priority low|normal|high|urgent] [--label TAG]\n\nA technical task requires --parent STORY-REF. Repeat --label to add multiple labels.\n"
 	case "ticket list":
-		return "Usage: htb ticket list [--project KEY] [--feature KEY] [--status STATUS] [--priority PRIORITY] [--label LABEL] [--query TEXT] [--archived] [--tree] [--json|--csv]\n\nFilter daily work by status, priority, label, or text in a title or description. Active tickets are shown by default; use --archived to list archived tickets. Terminal output is used by default; use --json or --csv for scripts.\n"
+		return "Usage: htb ticket list [--project KEY | --all-projects] [--feature KEY] [--status STATUS] [--priority PRIORITY] [--label LABEL] [--query TEXT] [--archived] [--tree] [--json|--csv]\n\nFilter daily work by status, priority, label, or text in a title or description. The current project is searched by default; use --project for another project or --all-projects to search every project you can access. Active tickets are shown by default; use --archived to list archived tickets. Terminal output is used by default; use --json or --csv for scripts.\n"
 	case "ticket show":
 		return "Usage: htb ticket show REF\n\nShow a ticket and its current version.\n"
 	case "ticket update":
@@ -1163,6 +1163,7 @@ func ticketCreate(args []string) error {
 func ticketList(args []string) error {
 	fs := flag.NewFlagSet("ticket list", flag.ContinueOnError)
 	project := fs.String("project", "", "project")
+	allProjects := fs.Bool("all-projects", false, "search every accessible project")
 	tree := fs.Bool("tree", false, "include child tickets")
 	archived := fs.Bool("archived", false, "list archived tickets")
 	feature := fs.String("feature", "", "feature key")
@@ -1175,14 +1176,20 @@ func ticketList(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *project == "" {
+	if *allProjects && *project != "" {
+		return errors.New("--project and --all-projects cannot be used together")
+	}
+	if *project == "" && !*allProjects {
 		var err error
 		*project, err = currentProject()
 		if err != nil {
 			return err
 		}
 	}
-	query := url.Values{"project": {*project}, "tree": {fmt.Sprint(*tree)}}
+	query := url.Values{"tree": {fmt.Sprint(*tree)}}
+	if *project != "" {
+		query.Set("project", *project)
+	}
 	if *archived {
 		query.Set("archived", "true")
 	}
@@ -1219,10 +1226,17 @@ func ticketList(args []string) error {
 		return err
 	}
 	if len(response.Tickets) == 0 {
-		fmt.Printf("No tickets in project %s.\n", strings.ToUpper(*project))
+		if *allProjects {
+			fmt.Println("No tickets in accessible projects.")
+		} else {
+			fmt.Printf("No tickets in project %s.\n", strings.ToUpper(*project))
+		}
 		return nil
 	}
 	heading := "Tickets — " + strings.ToUpper(*project)
+	if *allProjects {
+		heading = "Tickets — all accessible projects"
+	}
 	if *feature != "" {
 		heading += " / feature " + *feature
 	}

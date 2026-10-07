@@ -5,6 +5,12 @@ Feature: ChatGPT MCP access
     Then ChatGPT can use the HTB read tools
     And HTB returns only projects and tickets that the person may read
 
+  Scenario: A connected person searches tickets across accessible projects
+    Given a person has read access to several HTB projects
+    When ChatGPT searches tickets without specifying a project
+    Then HTB searches each accessible project with the requested filters
+    And HTB returns no tickets from inaccessible projects
+
   Scenario: ChatGPT discovers authenticated HTB actions
     Given a person has linked their HTB account through Zitadel in ChatGPT
     When ChatGPT starts modern MCP discovery and requests the HTB MCP tool list

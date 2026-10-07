@@ -31,9 +31,10 @@ paths:
       responses: { '200': { description: Project status } }
   /tickets:
     get:
-      summary: List tickets in a project
+      summary: List tickets in one project or across accessible projects
       parameters:
-        - { name: project, in: query, required: true, schema: { type: string } }
+        - { name: project, in: query, required: false, schema: { type: string }, description: Omit to list tickets across every project accessible to the caller }
+        - { name: query, in: query, required: false, schema: { type: string }, description: Case-insensitive text in a ticket title or description }
         - { name: archived, in: query, required: false, schema: { type: boolean, default: false }, description: List archived rather than active tickets }
       responses: { '200': { description: Tickets } }
     post:

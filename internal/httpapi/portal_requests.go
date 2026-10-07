@@ -7,8 +7,11 @@ import (
 	"errors"
 	"html/template"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/kazerlelutin/htb/internal/domain"
 	"github.com/kazerlelutin/htb/internal/store"
@@ -22,14 +25,14 @@ type portalRequestRow struct {
 }
 
 type portalProjectView struct {
-	Name, Key, CSRF, Error, Title, Description string
-	Role                                       string
-	Requests                                   []portalRequestRow
-	Stories                                    []portalStoryRow
-	StoryCount, StoryDone, TaskCount, TaskDone int
-	StoryPercent, TaskPercent                  int
-	StoryPage, StoryPages                      int
-	StoryPrevious, StoryNext                   string
+	Name, Key, CSRF, Error, Title, Description, Search string
+	Role                                               string
+	Requests                                           []portalRequestRow
+	Stories                                            []portalStoryRow
+	StoryCount, StoryDone, TaskCount, TaskDone         int
+	StoryPercent, TaskPercent                          int
+	StoryPage, StoryPages                              int
+	StoryPrevious, StoryNext                           string
 }
 
 type portalCommentView struct {
@@ -47,12 +50,14 @@ type portalRequestView struct {
 	RelatedStoryRef, RelatedStoryTitle string
 }
 
+var errStorySearchTooLong = errors.New("story search query is too long")
+
 var portalProjectTemplate = template.Must(template.New("portal-project").Parse(`<!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{.Name}} — HTB</title><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="stylesheet" href="/assets/public.css"></head><body>
 <a class="skip-link" href="#main">Aller au contenu</a><header class="site-header"><a class="wordmark" href="/portal"><span aria-hidden="true">&gt;</span><span class="cursor" aria-hidden="true">_</span> HTB</a><form action="/logout" method="post"><button class="link-button" type="submit">Se déconnecter</button></form></header>
 <main id="main" class="portal"><p><a href="/portal">← Mes projets</a></p><h1>{{.Name}}</h1><p class="eyebrow">Votre rôle : {{.Role}}</p>
 <section aria-labelledby="progress-title"><h2 id="progress-title">Avancement du projet</h2>{{if .StoryCount}}<label for="stories-progress">US terminées : {{.StoryDone}} / {{.StoryCount}} ({{.StoryPercent}} %)</label><progress id="stories-progress" value="{{.StoryDone}}" max="{{.StoryCount}}">{{.StoryPercent}} %</progress>{{if .TaskCount}}<label for="tasks-progress">Tâches terminées : {{.TaskDone}} / {{.TaskCount}} ({{.TaskPercent}} %)</label><progress id="tasks-progress" value="{{.TaskDone}}" max="{{.TaskCount}}">{{.TaskPercent}} %</progress>{{else}}<p>Les US visibles n’ont pas encore de tâches liées.</p>{{end}}{{else}}<p>Aucune US visible pour le moment.</p>{{end}}</section>
-<section aria-labelledby="stories-title"><h2 id="stories-title">User stories</h2>{{if .Stories}}<ul class="portal-requests">{{range .Stories}}<li><a href="/portal/stories/{{.Ref}}"><strong>{{.Title}}</strong><span>{{.Ref}}&nbsp;·&nbsp;{{.StatusLabel}}{{if not .Published}}&nbsp;·&nbsp;Brouillon{{end}}</span></a>{{if .ChildCount}}<label for="story-{{.Ref}}">Tâches terminées : {{.DoneChildren}} / {{.ChildCount}} ({{.Percent}} %)</label><progress id="story-{{.Ref}}" value="{{.DoneChildren}}" max="{{.ChildCount}}">{{.Percent}} %</progress>{{else}}<span>Aucune tâche liée</span>{{end}}</li>{{end}}</ul>{{if gt .StoryPages 1}}<nav class="portal-pagination" aria-label="Pagination des user stories">{{if .StoryPrevious}}<a href="{{.StoryPrevious}}" rel="prev">← Précédente</a>{{end}}<span aria-current="page">Page {{.StoryPage}} sur {{.StoryPages}}</span>{{if .StoryNext}}<a href="{{.StoryNext}}" rel="next">Suivante →</a>{{end}}</nav>{{end}}{{else}}<p>Aucune US visible pour ce projet.</p>{{end}}</section>
+<section aria-labelledby="stories-title"><h2 id="stories-title">User stories</h2><form class="portal-form" action="/portal/projects/{{.Key}}" method="get" role="search"><label for="story-search">Rechercher dans les user stories</label><input id="story-search" name="q" type="search" maxlength="240" value="{{.Search}}"><button class="button" type="submit">Rechercher</button></form>{{if .Stories}}<ul class="portal-requests">{{range .Stories}}<li><a href="/portal/stories/{{.Ref}}"><strong>{{.Title}}</strong><span>{{.Ref}}&nbsp;·&nbsp;{{.StatusLabel}}{{if not .Published}}&nbsp;·&nbsp;Brouillon{{end}}</span></a>{{if .ChildCount}}<label for="story-{{.Ref}}">Tâches terminées : {{.DoneChildren}} / {{.ChildCount}} ({{.Percent}} %)</label><progress id="story-{{.Ref}}" value="{{.DoneChildren}}" max="{{.ChildCount}}">{{.Percent}} %</progress>{{else}}<span>Aucune tâche liée</span>{{end}}</li>{{end}}</ul>{{if gt .StoryPages 1}}<nav class="portal-pagination" aria-label="Pagination des user stories">{{if .StoryPrevious}}<a href="{{.StoryPrevious}}" rel="prev">← Précédente</a>{{end}}<span aria-current="page">Page {{.StoryPage}} sur {{.StoryPages}}</span>{{if .StoryNext}}<a href="{{.StoryNext}}" rel="next">Suivante →</a>{{end}}</nav>{{end}}{{else}}{{if .Search}}<p>Aucune US ne correspond à cette recherche.</p>{{else}}<p>Aucune US visible pour ce projet.</p>{{end}}{{end}}</section>
 <section aria-labelledby="requests-title"><h2 id="requests-title">Demandes proposées</h2>{{if .Requests}}<ul class="portal-requests">{{range .Requests}}<li><a href="/portal/requests/{{.ID}}"><strong>{{.Title}}</strong><span>{{.StatusLabel}}</span></a><form class="portal-request-delete" action="/portal/requests/{{.ID}}/delete" method="post"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="link-button" type="submit">Supprimer <span class="visually-hidden">la demande « {{.Title}} »</span></button></form></li>{{end}}</ul>{{else}}<p>Aucune demande en attente ou rejetée.</p>{{end}}</section>
 <section aria-labelledby="new-request-title"><h2 id="new-request-title">Proposer une demande</h2><p>Décrivez votre besoin en quelques mots. Vous pourrez suivre la conversation ici.</p>
 {{if .Error}}<p class="portal-error" role="alert">{{.Error}}</p>{{end}}
@@ -110,8 +115,21 @@ func requestedStoryPage(r *http.Request) int {
 	return page
 }
 
+func requestedStorySearch(r *http.Request) (string, error) {
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	if utf8.RuneCountInString(query) > 240 {
+		return "", errStorySearchTooLong
+	}
+	return query, nil
+}
+
 func (s *Server) projectView(r *http.Request, key string) (portalProjectView, error) {
 	view := portalProjectView{Key: key, CSRF: s.portalCSRF(r)}
+	search, err := requestedStorySearch(r)
+	if err != nil {
+		return view, err
+	}
+	view.Search = search
 	projects, err := s.sessions.ListProjects(r.Context(), actor(r))
 	if err != nil {
 		return view, err
@@ -130,18 +148,25 @@ func (s *Server) projectView(r *http.Request, key string) (portalProjectView, er
 	if err != nil {
 		return view, err
 	}
-	storyPage, err := s.stories.ListClientStoriesPage(r.Context(), actor(r), key, requestedStoryPage(r), portalStoriesPerPage)
+	storyPage, err := s.stories.ListClientStoriesPage(r.Context(), actor(r), key, search, requestedStoryPage(r), portalStoriesPerPage)
 	if err != nil {
 		return view, err
 	}
 	view.StoryPage, view.StoryPages = storyPage.Page, storyPage.TotalPages
 	view.StoryCount, view.StoryDone = storyPage.Total, storyPage.StoryDone
 	view.TaskCount, view.TaskDone = storyPage.TaskCount, storyPage.TaskDone
+	storyPageURL := func(page int) string {
+		query := url.Values{"page": {strconv.Itoa(page)}}
+		if search != "" {
+			query.Set("q", search)
+		}
+		return "/portal/projects/" + key + "?" + query.Encode()
+	}
 	if storyPage.Page > 1 {
-		view.StoryPrevious = "/portal/projects/" + key + "?page=" + strconv.Itoa(storyPage.Page-1)
+		view.StoryPrevious = storyPageURL(storyPage.Page - 1)
 	}
 	if storyPage.Page < storyPage.TotalPages {
-		view.StoryNext = "/portal/projects/" + key + "?page=" + strconv.Itoa(storyPage.Page+1)
+		view.StoryNext = storyPageURL(storyPage.Page + 1)
 	}
 	for _, story := range storyPage.Stories {
 		view.Stories = append(view.Stories, portalStoryRow{ClientStory: story, StatusLabel: storyStatusLabel(story.Status), Percent: progressPercent(story.DoneChildren, story.ChildCount)})
@@ -164,6 +189,10 @@ func (s *Server) portalProject(w http.ResponseWriter, r *http.Request) {
 	}
 	view, err := s.projectView(r, key)
 	if err != nil {
+		if errors.Is(err, errStorySearchTooLong) {
+			http.Error(w, "La recherche ne peut pas dépasser 240 caractères.", http.StatusBadRequest)
+			return
+		}
 		s.portalReadError(w, err)
 		return
 	}

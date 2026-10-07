@@ -43,6 +43,18 @@ Feature: CLI experience
     Then the CLI displays only tickets matching every filter
     And the same filters can be used with JSON and CSV output
 
+  Scenario: A person searches all accessible projects from the CLI
+    Given a person can read several projects containing tickets
+    When they run "htb ticket list --all-projects --query checkout"
+    Then the CLI displays only matching tickets from projects they can access
+    And the result identifies the project in every ticket reference
+
+  Scenario: A person searches one explicit project from the CLI
+    Given a person can read several projects containing tickets
+    When they run "htb ticket list --project SITE --query checkout"
+    Then the CLI searches only the "SITE" project
+    And it rejects using "--project" and "--all-projects" together
+
   Scenario: JSON ticket listings report client publication
     Given a project contains a published user story and a private ticket
     When they run "htb ticket list --json"
