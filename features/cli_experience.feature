@@ -11,6 +11,17 @@ Feature: CLI experience
     Then it verifies the archive before installing htb.exe for the current user
     And htb is available in the current and future PowerShell sessions
 
+  Scenario: A person updates the CLI on their operating system
+    Given a newer CLI release for their operating system and architecture
+    When they run "htb update"
+    Then the CLI downloads the matching archive and verifies its SHA-256 checksum
+    And it replaces the installed CLI, after the command exits on Windows
+
+  Scenario: An unsupported operating system is explained before downloading
+    Given the current operating system and architecture have no HTB release
+    When a person runs "htb update"
+    Then the CLI explains that automatic updates are unavailable for that platform
+
   Scenario: Creating a project gives immediately useful feedback
     Given a connected person without a current project
     When they run "htb project create --key SITE --name Ben-to"

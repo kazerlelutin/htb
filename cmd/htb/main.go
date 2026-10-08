@@ -125,6 +125,8 @@ func main() {
 	switch os.Args[1] {
 	case "version":
 		fmt.Println(version)
+	case "update":
+		err = updateCommand()
 	case "config":
 		err = configCommand(os.Args[2:])
 	case "auth":
@@ -174,6 +176,7 @@ Getting started:
 
 Commands:
   version                         Show the CLI version
+  update                          Update the CLI to the latest release
   project list | status | create | use | members | member     Manage projects and access
   namespace claim | list                              Reserve namespace prefixes
   feature create                  Create a roadmap feature
@@ -190,6 +193,8 @@ Use "htb help ticket create" or "htb ticket create --help" for command details.
 `
 	case "version":
 		return "Usage: htb version\n\nShow the installed CLI version.\n"
+	case "update":
+		return "Usage: htb update\n\nDownload, verify, and install the latest CLI release for this operating system and architecture.\n"
 	case "config", "config set-server":
 		return "Usage: htb config set-server URL\n\nChange the HTB server URL. The default is https://htboard.xyz. Example: htb config set-server https://tickets.example.org\n"
 	case "auth":

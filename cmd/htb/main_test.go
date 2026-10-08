@@ -1,7 +1,16 @@
 package main
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -167,7 +176,7 @@ func TestProjectCreationValidationExplainsAndNormalizesKey(t *testing.T) {
 
 func TestHelpIsDetailedForEveryCommand(t *testing.T) {
 	commands := [][]string{
-		{"version"}, {"config", "set-server"}, {"auth", "login"}, {"auth", "status"}, {"namespace"}, {"namespace", "claim"}, {"namespace", "list"},
+		{"version"}, {"update"}, {"config", "set-server"}, {"auth", "login"}, {"auth", "status"}, {"namespace"}, {"namespace", "claim"}, {"namespace", "list"},
 		{"project", "list"}, {"project", "status"}, {"project", "use"}, {"project", "create"}, {"project", "members"}, {"project", "member"}, {"feature", "create"},
 		{"ticket", "create"}, {"ticket", "list"}, {"ticket", "show"}, {"ticket", "update"}, {"ticket", "comment"}, {"ticket", "claim"}, {"ticket", "release"}, {"ticket", "versions"}, {"ticket", "restore"}, {"ticket", "archive"}, {"ticket", "unarchive"}, {"ticket", "delete"},
 		{"invite", "create"}, {"invite", "accept"}, {"invite", "list"}, {"invite", "revoke"},
@@ -180,6 +189,99 @@ func TestHelpIsDetailedForEveryCommand(t *testing.T) {
 	}
 	if help := helpText([]string{"project", "create"}); !strings.Contains(help, "normalized to uppercase") || !strings.Contains(help, "HTB-1") {
 		t.Fatalf("project help lacks key explanation: %s", help)
+	}
+}
+
+func TestUpdateAssetMatchesReleasePlatforms(t *testing.T) {
+	tests := []struct {
+		goos, goarch, archive, binary string
+		zip                           bool
+	}{
+		{"linux", "amd64", "htb_linux_amd64.tar.gz", "htb", false},
+		{"darwin", "amd64", "htb_darwin_amd64.tar.gz", "htb", false},
+		{"darwin", "arm64", "htb_darwin_arm64.tar.gz", "htb", false},
+		{"windows", "amd64", "htb_windows_amd64.zip", "htb.exe", true},
+	}
+	for _, test := range tests {
+		asset, err := updateAssetForPlatform(test.goos, test.goarch)
+		if err != nil {
+			t.Fatalf("%s/%s: %v", test.goos, test.goarch, err)
+		}
+		if asset.archive != test.archive || asset.binary != test.binary || asset.zip != test.zip {
+			t.Fatalf("%s/%s: %#v", test.goos, test.goarch, asset)
+		}
+	}
+	if _, err := updateAssetForPlatform("linux", "arm64"); err == nil || !strings.Contains(err.Error(), "linux/arm64") {
+		t.Fatalf("unsupported platform error = %v", err)
+	}
+}
+
+func TestReleaseChecksumAcceptsStandardChecksumFormats(t *testing.T) {
+	hash := strings.Repeat("a", 64)
+	checksums := []byte(hash + "  htb_linux_amd64.tar.gz\n" + hash + " *htb_windows_amd64.zip\n")
+	for _, archive := range []string{"htb_linux_amd64.tar.gz", "htb_windows_amd64.zip"} {
+		got, err := releaseChecksum(checksums, archive)
+		if err != nil || got != hash {
+			t.Fatalf("checksum for %s = %q, %v", archive, got, err)
+		}
+	}
+	if _, err := releaseChecksum(checksums, "htb_darwin_arm64.tar.gz"); err == nil {
+		t.Fatal("missing checksum was accepted")
+	}
+}
+
+func TestInstallLatestUpdateVerifiesAndReplacesInstalledCLIBinary(t *testing.T) {
+	var archive bytes.Buffer
+	compressed := gzip.NewWriter(&archive)
+	writer := tar.NewWriter(compressed)
+	payload := []byte("new HTB CLI")
+	if err := writer.WriteHeader(&tar.Header{Name: "htb", Mode: 0755, Size: int64(len(payload))}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writer.Write(payload); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := compressed.Close(); err != nil {
+		t.Fatal(err)
+	}
+	archiveBytes := archive.Bytes()
+	checksum := sha256.Sum256(archiveBytes)
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/checksums.txt":
+			_, _ = response.Write([]byte(fmt.Sprintf("%x  htb_linux_amd64.tar.gz\n", checksum)))
+		case "/htb_linux_amd64.tar.gz":
+			_, _ = response.Write(archiveBytes)
+		default:
+			http.NotFound(response, request)
+		}
+	}))
+	defer server.Close()
+
+	previousURL := releaseDownloadURL
+	releaseDownloadURL = server.URL
+	t.Cleanup(func() { releaseDownloadURL = previousURL })
+	executable := filepath.Join(t.TempDir(), "htb")
+	if err := os.WriteFile(executable, []byte("old HTB CLI"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	deferred, err := installLatestUpdate("linux", "amd64", executable, server.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deferred {
+		t.Fatal("Linux update was deferred")
+	}
+	got, err := os.ReadFile(executable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(payload) {
+		t.Fatalf("updated executable = %q, want %q", got, payload)
 	}
 }
 

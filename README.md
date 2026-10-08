@@ -101,6 +101,16 @@ irm https://github.com/kazerlelutin/htb/releases/latest/download/install.ps1 | i
 The Windows release currently targets x86_64. You can also inspect the
 [release files](https://github.com/kazerlelutin/htb/releases) before installing.
 
+Once installed, update the CLI with:
+
+```bash
+htb update
+```
+
+The command selects the latest archive for Linux x86_64, macOS x86_64/ARM64,
+or Windows x86_64, verifies its SHA-256 checksum, and updates the executable in
+place. On Windows, close the command before the replacement completes.
+
 ## Work with tickets
 
 ```bash

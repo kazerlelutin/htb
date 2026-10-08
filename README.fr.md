@@ -104,6 +104,17 @@ La release Windows cible actuellement x86_64. Les
 [fichiers de release](https://github.com/kazerlelutin/htb/releases) peuvent
 aussi être consultés avant l’installation.
 
+Une fois installée, mettez à jour la CLI avec :
+
+```bash
+htb update
+```
+
+La commande choisit la dernière archive adaptée à Linux x86_64, macOS
+x86_64/ARM64 ou Windows x86_64, vérifie sa somme SHA-256 puis remplace
+l’exécutable installé. Sous Windows, le remplacement s’effectue après la fin
+de la commande.
+
 ## Travailler avec les tickets
 
 ```bash
