@@ -50,6 +50,10 @@ type portalRequestView struct {
 	RelatedStoryRef, RelatedStoryTitle string
 }
 
+type portalDeleteConfirmationView struct {
+	ID, Project, Title, StatusLabel, CSRF, Confirmation string
+}
+
 var errStorySearchTooLong = errors.New("story search query is too long")
 
 var portalProjectTemplate = template.Must(template.New("portal-project").Parse(`<!doctype html>
@@ -58,11 +62,16 @@ var portalProjectTemplate = template.Must(template.New("portal-project").Parse(`
 <main id="main" class="portal"><p><a href="/portal">← Mes projets</a></p><h1>{{.Name}}</h1><p class="eyebrow">Votre rôle : {{.Role}}</p>
 <section aria-labelledby="progress-title"><h2 id="progress-title">Avancement du projet</h2>{{if .StoryCount}}<label for="stories-progress">US terminées : {{.StoryDone}} / {{.StoryCount}} ({{.StoryPercent}} %)</label><progress id="stories-progress" value="{{.StoryDone}}" max="{{.StoryCount}}">{{.StoryPercent}} %</progress>{{if .TaskCount}}<label for="tasks-progress">Tâches terminées : {{.TaskDone}} / {{.TaskCount}} ({{.TaskPercent}} %)</label><progress id="tasks-progress" value="{{.TaskDone}}" max="{{.TaskCount}}">{{.TaskPercent}} %</progress>{{else}}<p>Les US visibles n’ont pas encore de tâches liées.</p>{{end}}{{else}}<p>Aucune US visible pour le moment.</p>{{end}}</section>
 <section aria-labelledby="stories-title"><h2 id="stories-title">User stories</h2><form class="portal-form" action="/portal/projects/{{.Key}}" method="get" role="search"><label for="story-search">Rechercher dans les user stories</label><input id="story-search" name="q" type="search" maxlength="240" value="{{.Search}}"><button class="button" type="submit">Rechercher</button></form>{{if .Stories}}<ul class="portal-requests">{{range .Stories}}<li><a href="/portal/stories/{{.Ref}}"><strong>{{.Title}}</strong><span>{{.Ref}}&nbsp;·&nbsp;{{.StatusLabel}}{{if not .Published}}&nbsp;·&nbsp;Brouillon{{end}}</span></a>{{if .ChildCount}}<label for="story-{{.Ref}}">Tâches terminées : {{.DoneChildren}} / {{.ChildCount}} ({{.Percent}} %)</label><progress id="story-{{.Ref}}" value="{{.DoneChildren}}" max="{{.ChildCount}}">{{.Percent}} %</progress>{{else}}<span>Aucune tâche liée</span>{{end}}</li>{{end}}</ul>{{if gt .StoryPages 1}}<nav class="portal-pagination" aria-label="Pagination des user stories">{{if .StoryPrevious}}<a href="{{.StoryPrevious}}" rel="prev">← Précédente</a>{{end}}<span aria-current="page">Page {{.StoryPage}} sur {{.StoryPages}}</span>{{if .StoryNext}}<a href="{{.StoryNext}}" rel="next">Suivante →</a>{{end}}</nav>{{end}}{{else}}{{if .Search}}<p>Aucune US ne correspond à cette recherche.</p>{{else}}<p>Aucune US visible pour ce projet.</p>{{end}}{{end}}</section>
-<section aria-labelledby="requests-title"><h2 id="requests-title">Demandes proposées</h2>{{if .Requests}}<ul class="portal-requests">{{range .Requests}}<li><a href="/portal/requests/{{.ID}}"><strong>{{.Title}}</strong><span>{{.StatusLabel}}</span></a><form class="portal-request-delete" action="/portal/requests/{{.ID}}/delete" method="post"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button class="link-button" type="submit">Supprimer <span class="visually-hidden">la demande « {{.Title}} »</span></button></form></li>{{end}}</ul>{{else}}<p>Aucune demande en attente ou rejetée.</p>{{end}}</section>
+<section aria-labelledby="requests-title"><h2 id="requests-title">Demandes proposées</h2>{{if .Requests}}<ul class="portal-requests">{{range .Requests}}<li><a href="/portal/requests/{{.ID}}"><strong>{{.Title}}</strong><span>{{.StatusLabel}}</span></a><form class="portal-request-delete" action="/portal/requests/{{.ID}}/delete" method="get"><button class="link-button" type="submit">Supprimer <span class="visually-hidden">la demande « {{.Title}} »</span></button></form></li>{{end}}</ul>{{else}}<p>Aucune demande en attente ou rejetée.</p>{{end}}</section>
 <section aria-labelledby="new-request-title"><h2 id="new-request-title">Proposer une demande</h2><p>Décrivez votre besoin en quelques mots. Vous pourrez suivre la conversation ici.</p>
 {{if .Error}}<p class="portal-error" role="alert">{{.Error}}</p>{{end}}
 <form class="portal-form" action="/portal/projects/{{.Key}}/requests" method="post"><input type="hidden" name="csrf" value="{{.CSRF}}"><label for="request-title">Sujet</label><input id="request-title" name="title" maxlength="240" required value="{{.Title}}"><label for="request-body">Description (Markdown accepté)</label><textarea id="request-body" name="body" maxlength="20000" rows="7" required>{{.Description}}</textarea><button class="button" type="submit">Envoyer la demande</button></form></section>
 </main></body></html>`))
+
+var portalDeleteConfirmationTemplate = template.Must(template.New("portal-delete-confirmation").Parse(`<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Supprimer la demande — HTB</title><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="stylesheet" href="/assets/public.css"></head><body>
+<a class="skip-link" href="#main">Aller au contenu</a><header class="site-header"><a class="wordmark" href="/portal"><span aria-hidden="true">&gt;</span><span class="cursor" aria-hidden="true">_</span> HTB</a><form action="/logout" method="post"><button class="link-button" type="submit">Se déconnecter</button></form></header>
+<main id="main" class="portal"><p><a href="/portal/projects/{{.Project}}">← Retour au projet</a></p><p class="eyebrow">DEMANDE #{{.ID}} · {{.StatusLabel}}</p><h1>Supprimer la demande ?</h1><p>Vous êtes sur le point de supprimer définitivement « {{.Title}} ».</p><p>Cette action est irréversible.</p><form class="portal-form" action="/portal/requests/{{.ID}}/delete" method="post"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="confirmation" value="{{.Confirmation}}"><button class="button" type="submit">Oui, supprimer la demande</button></form><p><a class="text-link" href="/portal/projects/{{.Project}}">Annuler</a></p></main></body></html>`))
 
 var portalRequestTemplate = template.Must(template.New("portal-request").Parse(`<!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{.Title}} — HTB</title><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="stylesheet" href="/assets/public.css"></head><body>
@@ -77,6 +86,22 @@ func (s *Server) portalCSRF(r *http.Request) string {
 	mac := hmac.New(sha256.New, s.stateKey)
 	_, _ = mac.Write([]byte("portal-form:" + token))
 	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+}
+
+func (s *Server) portalDeleteConfirmationToken(r *http.Request, id int64) string {
+	token := r.Context().Value(browserSessionTokenKey{}).(string)
+	mac := hmac.New(sha256.New, s.stateKey)
+	_, _ = mac.Write([]byte("portal-delete-confirmation:" + token + ":" + strconv.FormatInt(id, 10)))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+}
+
+func (s *Server) validPortalDeleteConfirmation(r *http.Request, id int64) bool {
+	provided, err := base64.RawURLEncoding.DecodeString(r.PostForm.Get("confirmation"))
+	if err != nil {
+		return false
+	}
+	expected, _ := base64.RawURLEncoding.DecodeString(s.portalDeleteConfirmationToken(r, id))
+	return hmac.Equal(provided, expected)
 }
 
 func (s *Server) validPortalForm(w http.ResponseWriter, r *http.Request) bool {
@@ -277,6 +302,32 @@ func (s *Server) portalRequest(w http.ResponseWriter, r *http.Request) {
 	_ = portalRequestTemplate.Execute(w, view)
 }
 
+func (s *Server) portalDeleteConfirmation(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id < 1 {
+		http.NotFound(w, r)
+		return
+	}
+	item, err := s.requests.GetClientRequest(r.Context(), actor(r), id)
+	if err != nil {
+		s.portalReadError(w, err)
+		return
+	}
+	if item.Status != "received" && item.Status != "rejected" {
+		http.Error(w, "Cette demande ne peut pas être supprimée.", http.StatusForbidden)
+		return
+	}
+	s.portalHeaders(w)
+	_ = portalDeleteConfirmationTemplate.Execute(w, portalDeleteConfirmationView{
+		ID:           strconv.FormatInt(item.ID, 10),
+		Project:      item.Project,
+		Title:        item.Title,
+		StatusLabel:  clientStatusLabel(item.Status),
+		CSRF:         s.portalCSRF(r),
+		Confirmation: s.portalDeleteConfirmationToken(r, item.ID),
+	})
+}
+
 func (s *Server) portalAddComment(w http.ResponseWriter, r *http.Request) {
 	if !s.validPortalForm(w, r) {
 		return
@@ -318,6 +369,10 @@ func (s *Server) portalDeleteRequest(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil || id < 1 {
 		http.NotFound(w, r)
+		return
+	}
+	if !s.validPortalDeleteConfirmation(r, id) {
+		http.Error(w, "Confirmez la suppression depuis la page de confirmation.", http.StatusForbidden)
 		return
 	}
 	item, err := s.requests.GetClientRequest(r.Context(), actor(r), id)

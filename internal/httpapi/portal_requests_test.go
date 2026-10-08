@@ -202,7 +202,7 @@ func TestClientPortalListsAndDeletesPendingOrRejectedRequests(t *testing.T) {
 	w := httptest.NewRecorder()
 	s.Handler().ServeHTTP(w, portalRequest(http.MethodGet, "/portal/projects/SITE", nil))
 	body := w.Body.String()
-	for _, want := range []string{"Demandes proposées", "En attente", "Rejetée", "/portal/requests/7/delete", "/portal/requests/8/delete"} {
+	for _, want := range []string{"Demandes proposées", "En attente", "Rejetée", "/portal/requests/7/delete", "/portal/requests/8/delete", `method="get"`} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("project page does not contain %q: %s", want, body)
 		}
@@ -213,11 +213,38 @@ func TestClientPortalListsAndDeletesPendingOrRejectedRequests(t *testing.T) {
 	if strings.Contains(body, "Demandes en attente") || strings.Contains(body, "Demandes rejetées") {
 		t.Fatalf("project page must rely on request status instead of list headings: %s", body)
 	}
+	w = httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, portalRequest(http.MethodGet, "/portal/requests/8/delete", nil))
+	body = w.Body.String()
+	for _, want := range []string{"Supprimer la demande ?", "Vous êtes sur le point de supprimer définitivement « Rejetée ».", "Cette action est irréversible.", "Oui, supprimer la demande", "Annuler", `action="/portal/requests/8/delete" method="post"`, `name="confirmation"`} {
+		if w.Code != http.StatusOK || !strings.Contains(body, want) {
+			t.Fatalf("delete confirmation does not contain %q: %d %s", want, w.Code, body)
+		}
+	}
+	if requests.deleted {
+		t.Fatal("opening the delete confirmation must not delete the request")
+	}
 	csrf := s.portalCSRF(portalRequest(http.MethodGet, "/portal", nil).WithContext(context.WithValue(context.Background(), browserSessionTokenKey{}, "valid")))
 	w = httptest.NewRecorder()
 	s.Handler().ServeHTTP(w, portalRequest(http.MethodPost, "/portal/requests/8/delete", url.Values{"csrf": {csrf}}))
+	if w.Code != http.StatusForbidden || requests.deleted {
+		t.Fatalf("unconfirmed request deletion: %d %s", w.Code, w.Body.String())
+	}
+	confirmation := s.portalDeleteConfirmationToken(portalRequest(http.MethodGet, "/portal", nil).WithContext(context.WithValue(context.Background(), browserSessionTokenKey{}, "valid")), 8)
+	w = httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, portalRequest(http.MethodPost, "/portal/requests/8/delete", url.Values{"csrf": {csrf}, "confirmation": {confirmation}}))
 	if w.Code != http.StatusSeeOther || w.Header().Get("Location") != "/portal/projects/SITE" || !requests.deleted {
 		t.Fatalf("request deletion: %d %q", w.Code, w.Header().Get("Location"))
+	}
+}
+
+func TestClientPortalDoesNotConfirmDeletionOfHandledRequest(t *testing.T) {
+	s, requests, _ := portalTestServer()
+	requests.items[0].Status = "in_progress"
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, portalRequest(http.MethodGet, "/portal/requests/7/delete", nil))
+	if w.Code != http.StatusForbidden || requests.deleted {
+		t.Fatalf("handled request delete confirmation: %d %s", w.Code, w.Body.String())
 	}
 }
 

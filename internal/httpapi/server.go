@@ -168,6 +168,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /portal/stories/{ref...}", s.browserAuthenticated(http.HandlerFunc(s.portalStory)))
 	mux.Handle("POST /portal/stories/{ref...}", s.browserAuthenticated(http.HandlerFunc(s.portalStoryAction)))
 	mux.Handle("GET /portal/requests/{id}", s.browserAuthenticated(http.HandlerFunc(s.portalRequest)))
+	mux.Handle("GET /portal/requests/{id}/delete", s.browserAuthenticated(http.HandlerFunc(s.portalDeleteConfirmation)))
 	mux.Handle("POST /portal/requests/{id}/comments", s.browserAuthenticated(http.HandlerFunc(s.portalAddComment)))
 	mux.Handle("POST /portal/requests/{id}/delete", s.browserAuthenticated(http.HandlerFunc(s.portalDeleteRequest)))
 	mux.HandleFunc("GET /auth/device-config", s.deviceConfiguration)

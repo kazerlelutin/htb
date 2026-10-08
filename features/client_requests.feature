@@ -21,7 +21,10 @@ Feature: Espace client de demandes
     Given un membre read a proposé une demande en attente et une demande rejetée dans le projet SITE
     When il consulte le projet SITE dans le portail
     Then chaque demande affiche son état « en attente » ou « rejetée »
-    And il peut supprimer ses propres demandes dans ces deux états
+    When il demande la suppression de l’une de ces demandes
+    Then le portail lui demande une confirmation avant de la supprimer
+    And il peut annuler cette confirmation sans supprimer la demande
+    And il peut confirmer la suppression de ses propres demandes dans ces deux états
     Et il ne peut pas supprimer une demande prise en charge
 
   Scenario: L’équipe qualifie la demande sans exposer le ticket interne
