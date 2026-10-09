@@ -285,6 +285,55 @@ func TestInstallLatestUpdateVerifiesAndReplacesInstalledCLIBinary(t *testing.T) 
 	}
 }
 
+func TestLatestReleaseNotesFetchesGitHubMetadata(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodGet || request.Header.Get("Accept") != "application/vnd.github+json" || request.Header.Get("User-Agent") != "htb-cli-updater" {
+			t.Fatalf("unexpected release-notes request: %s %q %q", request.Method, request.Header.Get("Accept"), request.Header.Get("User-Agent"))
+		}
+		_, _ = response.Write([]byte(`{"tag_name":"v1.2.3","body":"## Added\n- Export tickets","html_url":"https://github.example/releases/v1.2.3"}`))
+	}))
+	defer server.Close()
+
+	previousURL := releaseAPIURL
+	releaseAPIURL = server.URL
+	t.Cleanup(func() { releaseAPIURL = previousURL })
+
+	notes, err := latestReleaseNotes(server.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if notes.TagName != "v1.2.3" || notes.HTMLURL != "https://github.example/releases/v1.2.3" || !strings.Contains(notes.Body, "Export tickets") {
+		t.Fatalf("release notes = %#v", notes)
+	}
+}
+
+func TestLatestReleaseNotesRejectsIncompleteMetadata(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		_, _ = response.Write([]byte(`{"tag_name":"v1.2.3"}`))
+	}))
+	defer server.Close()
+
+	previousURL := releaseAPIURL
+	releaseAPIURL = server.URL
+	t.Cleanup(func() { releaseAPIURL = previousURL })
+
+	if _, err := latestReleaseNotes(server.Client()); err == nil || !strings.Contains(err.Error(), "incomplete") {
+		t.Fatalf("incomplete release notes error = %v", err)
+	}
+}
+
+func TestFormatReleaseNotesRendersSafely(t *testing.T) {
+	output := formatReleaseNotes(releaseNotes{TagName: "v1.2.3\x1b]8;;https://evil.example\x1b\\", Body: "## Added\n- **Export** tickets\n\x1b]8;;https://evil.example\x1b\\", HTMLURL: "https://github.example/releases/v1.2.3\x1b]8;;https://evil.example\x1b\\"})
+	for _, text := range []string{"What's new in v1.2.3", "Added", "Export", "Full release notes: https://github.example/releases/v1.2.3"} {
+		if !strings.Contains(output, text) {
+			t.Fatalf("release-notes output is missing %q: %q", text, output)
+		}
+	}
+	if strings.Contains(output, "\x1b") || strings.Contains(output, "evil.example") {
+		t.Fatalf("release-notes output contains terminal control content: %q", output)
+	}
+}
+
 func TestTicketListHelpExplainsDailyWorkFilters(t *testing.T) {
 	help := helpText([]string{"ticket", "list"})
 	for _, flag := range []string{"--project KEY | --all-projects", "--status STATUS", "--priority PRIORITY", "--label LABEL", "--query TEXT", "--archived", "--json", "--csv"} {

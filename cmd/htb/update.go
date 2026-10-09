@@ -5,6 +5,7 @@ import (
 	"archive/zip"
 	"compress/gzip"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -16,12 +17,23 @@ import (
 	"strings"
 )
 
-var releaseDownloadURL = "https://github.com/kazerlelutin/htb/releases/latest/download"
+var (
+	releaseDownloadURL = "https://github.com/kazerlelutin/htb/releases/latest/download"
+	releaseAPIURL      = "https://api.github.com/repos/kazerlelutin/htb/releases/latest"
+)
+
+const maxReleaseNotesRunes = 12000
 
 type updateAsset struct {
 	archive string
 	binary  string
 	zip     bool
+}
+
+type releaseNotes struct {
+	TagName string `json:"tag_name"`
+	Body    string `json:"body"`
+	HTMLURL string `json:"html_url"`
 }
 
 func updateCommand() error {
@@ -37,10 +49,64 @@ func updateCommand() error {
 	}
 	if deferred {
 		fmt.Fprintln(os.Stdout, "The update will replace htb.exe as this command exits.")
+	} else {
+		fmt.Fprintln(os.Stdout, "HTB CLI updated.")
+	}
+
+	notes, err := latestReleaseNotes(http.DefaultClient)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "The CLI was updated, but the release notes could not be displayed: %v\n", err)
 		return nil
 	}
-	fmt.Fprintln(os.Stdout, "HTB CLI updated.")
+	fmt.Fprint(os.Stdout, formatReleaseNotes(notes))
 	return nil
+}
+
+func latestReleaseNotes(client *http.Client) (releaseNotes, error) {
+	if client == nil {
+		return releaseNotes{}, errors.New("no HTTP client is available for release notes")
+	}
+	request, err := http.NewRequest(http.MethodGet, releaseAPIURL, nil)
+	if err != nil {
+		return releaseNotes{}, fmt.Errorf("prepare release notes request: %w", err)
+	}
+	request.Header.Set("Accept", "application/vnd.github+json")
+	request.Header.Set("User-Agent", "htb-cli-updater")
+	response, err := client.Do(request)
+	if err != nil {
+		return releaseNotes{}, fmt.Errorf("download release notes: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return releaseNotes{}, fmt.Errorf("download release notes: GitHub returned %s", response.Status)
+	}
+	var notes releaseNotes
+	if err := json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&notes); err != nil {
+		return releaseNotes{}, fmt.Errorf("read release notes: %w", err)
+	}
+	if strings.TrimSpace(notes.TagName) == "" || strings.TrimSpace(notes.HTMLURL) == "" {
+		return releaseNotes{}, errors.New("GitHub returned incomplete release notes")
+	}
+	return notes, nil
+}
+
+func formatReleaseNotes(notes releaseNotes) string {
+	tagName := sanitizeTerminalText(notes.TagName)
+	url := sanitizeTerminalText(notes.HTMLURL)
+	body := strings.TrimSpace(notes.Body)
+	truncated := false
+	if runes := []rune(body); len(runes) > maxReleaseNotesRunes {
+		body, truncated = string(runes[:maxReleaseNotesRunes]), true
+	}
+	if body == "" {
+		body = "No release summary was published."
+	} else {
+		body = renderMarkdown(body)
+	}
+	if truncated {
+		body += "\n\nRelease notes were shortened in the terminal."
+	}
+	return fmt.Sprintf("\nWhat's new in %s:\n%s\n\nFull release notes: %s\n", tagName, body, url)
 }
 
 // These variables keep platform selection independently testable.
