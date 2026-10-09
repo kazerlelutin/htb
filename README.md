@@ -213,3 +213,5 @@ PostgreSQL integration tests need a **dedicated test database** through
 
 - [Contributing guide](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
+- [Changelog](CHANGELOG.md)
+- [Release process](docs/releasing.md)

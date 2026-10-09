@@ -35,4 +35,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           (cd dist && sha256sum * > checksums.txt)
-          gh release create "${{ github.ref_name }}" dist/* --generate-notes
+          sh scripts/release-notes.sh "${{ github.ref_name }}" > release-notes.md
+          gh release create "${{ github.ref_name }}" dist/* --title "HTB ${{ github.ref_name }}" --notes-file release-notes.md

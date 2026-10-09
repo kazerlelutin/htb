@@ -222,3 +222,5 @@ configuration du serveur.
 
 - [Guide de contribution](CONTRIBUTING.md)
 - [Politique de sécurité](SECURITY.md)
+- [Changelog](CHANGELOG.md)
+- [Processus de release](docs/releasing.md)
