@@ -6,6 +6,8 @@ All notable user-visible changes are documented here. The format follows
 
 ## [Unreleased]
 
+### Summary
+
 ### Added
 
 ### Changed
@@ -18,6 +20,10 @@ All notable user-visible changes are documented here. The format follows
 
 ## [v0.11.0] - 2026-10-08
 
+### Summary
+
+Legacy release; see the complete comparison below.
+
 ### Legacy release
 
 This release predates the structured changelog. Its complete changes are in
@@ -27,9 +33,11 @@ the [GitHub comparison](https://github.com/kazerlelutin/htb/compare/v0.10.0...v0
 
 Before tagging a release, move the user-visible entries from **Unreleased**
 under a dated `## [vX.Y.Z] - YYYY-MM-DD` heading. Keep the category headings:
-**Added**, **Changed**, **Fixed**, **Breaking changes**, and **Security**.
-The release workflow turns that section into the GitHub release notes and adds
-the available platforms and installation methods automatically. This keeps a
+**Summary**, **Added**, **Changed**, **Fixed**, **Breaking changes**, and
+**Security**. The Summary is one or two plain-language sentences for people
+deciding whether to upgrade. The release workflow refuses a version without a
+summary, turns that section into the GitHub release notes, and adds the
+available platforms and installation methods automatically. This keeps a
 complete changelog in the repository while making each GitHub release readable
 without duplicating the work.
 

@@ -8,7 +8,9 @@ publishes a GitHub release.
 
 1. Update [CHANGELOG.md](../CHANGELOG.md): move the user-visible entries from
    `Unreleased` under `## [vX.Y.Z] - YYYY-MM-DD` and keep the category
-   headings. Call out every compatibility change in **Breaking changes**.
+   headings. Write a one- or two-sentence plain-language **Summary** for
+   people deciding whether to upgrade, and call out every compatibility change
+   in **Breaking changes**.
 2. Confirm the supported binaries: Linux `amd64`, macOS `amd64` and `arm64`,
    and Windows `amd64`.
 3. Run the checks in [CONTRIBUTING.md](../CONTRIBUTING.md).
@@ -25,6 +27,6 @@ The workflow extracts that version’s changelog section with
 the archives, `checksums.txt`, and the Linux and Windows installers. It also
 adds the installation commands and a link to the complete changelog.
 
-If the changelog has no heading for the tag, the workflow fails before a
-release is created. Amend the changelog on `main`, then create a new tag; do
-not silently publish unstructured notes.
+If the changelog has no heading or non-empty **Summary** for the tag, the
+workflow fails before a release is created. Amend the changelog on `main`,
+then create a new tag; do not silently publish unstructured notes.

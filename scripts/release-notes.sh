@@ -8,16 +8,31 @@ fi
 
 version=$1
 
-printf '# HTB %s\n\n' "$version"
+notes=$(mktemp)
+trap 'rm -f "$notes"' EXIT HUP INT TERM
+
 if ! awk -v version="$version" '
   $0 ~ "^## \\[" version "\\]" { found = 1; next }
   found && /^## / { exit }
   found { print }
   END { if (!found) exit 1 }
-' CHANGELOG.md; then
+' CHANGELOG.md > "$notes"; then
   echo "release notes for $version are missing from CHANGELOG.md" >&2
   exit 1
 fi
+
+if ! awk '
+  $0 == "### Summary" { summary = 1; next }
+  summary && /^### / { exit }
+  summary && NF { content = 1 }
+  END { exit !content }
+' "$notes"; then
+  echo "release notes for $version need a non-empty Summary in CHANGELOG.md" >&2
+  exit 1
+fi
+
+printf '# HTB %s\n\n' "$version"
+cat "$notes"
 
 cat <<'EOF'
 
