@@ -217,3 +217,8 @@ Les tests d’intégration PostgreSQL demandent une **base de test dédiée** vi
 `HTBD_TEST_DATABASE_URL` ; ne les lancez jamais sur une base de production.
 Consultez le [guide d’auto-hébergement](docs/self-hosting.fr.md) pour la
 configuration du serveur.
+
+## Communauté et sécurité
+
+- [Guide de contribution](CONTRIBUTING.md)
+- [Politique de sécurité](SECURITY.md)

@@ -208,3 +208,8 @@ go build ./cmd/htbd ./cmd/htb
 PostgreSQL integration tests need a **dedicated test database** through
 `HTBD_TEST_DATABASE_URL`; never point them at a production database. See
 [the self-hosting guide](docs/self-hosting.md) for server configuration.
+
+## Community and security
+
+- [Contributing guide](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
