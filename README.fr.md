@@ -7,6 +7,11 @@ les US publiées, leur avancement et leurs échanges dans un portail web léger 
 ils peuvent aussi proposer des demandes. Zitadel gère la connexion, HTB les
 accès aux projets et les tickets.
 
+> **Bêta publique :** HTB est utilisable pour de vrais projets, mais ses
+> commandes, son API et ses intégrations peuvent encore évoluer avant la 1.0.
+> Consultez les notes de version lors des mises à jour, surtout pour les
+> changements incompatibles.
+
 ## Choisir son installation
 
 | | Utiliser la version en ligne | Auto-héberger HTB |

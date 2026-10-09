@@ -165,6 +165,9 @@ func TestPublicPages(t *testing.T) {
 		if path == "/" && !strings.Contains(w.Body.String(), `href="/commands">Lire le guide complet des commandes`) {
 			t.Fatalf("home page does not link to the command guide: %s", w.Body.String())
 		}
+		if path == "/" && !strings.Contains(w.Body.String(), "BÊTA PUBLIQUE") {
+			t.Fatalf("home page does not identify HTB as a public beta: %s", w.Body.String())
+		}
 		if path == "/commands?lang=en" {
 			for _, text := range []string{
 				`lang="en"`, "Command guide", "How to use it", "htb version", "htb config set-server URL", "htb auth login", "htb auth status",
@@ -310,6 +313,23 @@ func TestHomePageExplainsPublishedStoriesAndTechnicalProgress(t *testing.T) {
 		s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, test.path, nil))
 		if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), test.copy) || !strings.Contains(w.Body.String(), "htb ticket publish SITE-1") {
 			t.Fatalf("%s: missing story publication message: %d", test.path, w.Code)
+		}
+	}
+}
+
+func TestHomePageExplainsPublicBetaInBothLanguages(t *testing.T) {
+	s := New(&store.Store{}, nil, auth.DeviceConfig{}, "", slog.Default())
+	for _, test := range []struct {
+		path string
+		copy string
+	}{
+		{"/", "HTB est utilisable pour de vrais projets. Ses commandes, son API et ses intégrations peuvent encore évoluer avant la 1.0"},
+		{"/?lang=en", "HTB is ready for real projects. Commands, the API, and integrations may still evolve before 1.0"},
+	} {
+		w := httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, test.path, nil))
+		if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), test.copy) {
+			t.Fatalf("%s: missing public beta notice: %d", test.path, w.Code)
 		}
 	}
 }
