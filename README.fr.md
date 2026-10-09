@@ -117,8 +117,9 @@ htb update
 
 La commande choisit la dernière archive adaptée à Linux x86_64, macOS
 x86_64/ARM64 ou Windows x86_64, vérifie sa somme SHA-256 puis remplace
-l’exécutable installé. Sous Windows, le remplacement s’effectue après la fin
-de la commande.
+l’exécutable installé. Elle affiche ensuite le résumé de la release et un lien
+vers ses notes complètes. Sous Windows, le remplacement s’effectue après la
+fin de la commande.
 
 ## Travailler avec les tickets
 

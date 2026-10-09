@@ -113,7 +113,8 @@ htb update
 
 The command selects the latest archive for Linux x86_64, macOS x86_64/ARM64,
 or Windows x86_64, verifies its SHA-256 checksum, and updates the executable in
-place. On Windows, close the command before the replacement completes.
+place. It then displays the release summary and a link to the complete notes.
+On Windows, close the command before the replacement completes.
 
 ## Work with tickets
 

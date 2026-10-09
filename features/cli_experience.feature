@@ -16,6 +16,7 @@ Feature: CLI experience
     When they run "htb update"
     Then the CLI downloads the matching archive and verifies its SHA-256 checksum
     And it replaces the installed CLI, after the command exits on Windows
+    And it displays the latest release summary and a link to the complete release notes
 
   Scenario: An unsupported operating system is explained before downloading
     Given the current operating system and architecture have no HTB release

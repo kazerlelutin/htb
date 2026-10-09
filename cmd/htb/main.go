@@ -194,7 +194,7 @@ Use "htb help ticket create" or "htb ticket create --help" for command details.
 	case "version":
 		return "Usage: htb version\n\nShow the installed CLI version.\n"
 	case "update":
-		return "Usage: htb update\n\nDownload, verify, and install the latest CLI release for this operating system and architecture.\n"
+		return "Usage: htb update\n\nDownload, verify, and install the latest CLI release for this operating system and architecture, then show its release notes.\n"
 	case "config", "config set-server":
 		return "Usage: htb config set-server URL\n\nChange the HTB server URL. The default is https://htboard.xyz. Example: htb config set-server https://tickets.example.org\n"
 	case "auth":

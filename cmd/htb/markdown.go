@@ -183,8 +183,13 @@ func sanitizeTerminalText(text string) string {
 		r, size := utf8.DecodeRuneInString(text)
 		text = text[size:]
 		if r == 0x1b {
-			if len(text) > 0 && text[0] == '[' {
-				text = skipANSICSI(text[1:])
+			if len(text) > 0 {
+				switch text[0] {
+				case '[':
+					text = skipANSICSI(text[1:])
+				case ']', 'P', '^', '_':
+					text = skipANSIString(text[1:])
+				}
 			}
 			continue
 		}
@@ -207,6 +212,21 @@ func skipANSICSI(text string) string {
 		if char >= 0x40 && char <= 0x7e {
 			return text
 		}
+	}
+	return text
+}
+
+// skipANSIString removes OSC, DCS, PM, and APC control strings. They end at a
+// BEL byte or the ST sequence (ESC followed by a backslash).
+func skipANSIString(text string) string {
+	for len(text) > 0 {
+		if text[0] == '\a' {
+			return text[1:]
+		}
+		if strings.HasPrefix(text, "\x1b\\") {
+			return text[2:]
+		}
+		text = text[1:]
 	}
 	return text
 }
