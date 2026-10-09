@@ -137,7 +137,11 @@ func (s *Server) privacy(w http.ResponseWriter, r *http.Request) {
 func homeBody(language string) template.HTML {
 	body := homeBodyContent(language)
 	body = template.HTML(strings.ReplaceAll(string(body), `href="/downloads">Read the complete command guide`, `href="/commands">Read the complete command guide`))
-	return template.HTML(strings.ReplaceAll(string(body), `href="/downloads">Lire le guide complet des commandes`, `href="/commands">Lire le guide complet des commandes`))
+	body = template.HTML(strings.ReplaceAll(string(body), `href="/downloads">Lire le guide complet des commandes`, `href="/commands">Lire le guide complet des commandes`))
+	if language == "en" {
+		return template.HTML(strings.Replace(string(body), `<section class="hero">`, `<section class="hero"><p class="eyebrow">PUBLIC BETA</p><p>HTB is ready for real projects. Commands, the API, and integrations may still evolve before 1.0; check release notes when upgrading.</p>`, 1))
+	}
+	return template.HTML(strings.Replace(string(body), `<section class="hero">`, `<section class="hero"><p class="eyebrow">BÊTA PUBLIQUE</p><p>HTB est utilisable pour de vrais projets. Ses commandes, son API et ses intégrations peuvent encore évoluer avant la 1.0 ; consultez les notes de version lors des mises à jour.</p>`, 1))
 }
 
 func homeBodyContent(language string) template.HTML {

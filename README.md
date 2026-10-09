@@ -6,6 +6,10 @@ HTB keeps the team's technical tickets in the CLI. Clients use a small web
 portal to follow published user stories, see progress, comment, and propose
 requests. Zitadel handles sign-in; HTB manages project access and tickets.
 
+> **Public Beta:** HTB is ready for real projects, while its commands, API,
+> and integrations may still evolve before 1.0. Check release notes when you
+> upgrade, especially for breaking changes.
+
 ## Choose your setup
 
 | | Use the hosted service | Self-host HTB |
@@ -208,3 +212,10 @@ go build ./cmd/htbd ./cmd/htb
 PostgreSQL integration tests need a **dedicated test database** through
 `HTBD_TEST_DATABASE_URL`; never point them at a production database. See
 [the self-hosting guide](docs/self-hosting.md) for server configuration.
+
+## Community and security
+
+- [Contributing guide](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
+- [Changelog](CHANGELOG.md)
+- [Release process](docs/releasing.md)

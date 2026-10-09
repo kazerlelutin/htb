@@ -7,6 +7,11 @@ les US publiées, leur avancement et leurs échanges dans un portail web léger 
 ils peuvent aussi proposer des demandes. Zitadel gère la connexion, HTB les
 accès aux projets et les tickets.
 
+> **Bêta publique :** HTB est utilisable pour de vrais projets, mais ses
+> commandes, son API et ses intégrations peuvent encore évoluer avant la 1.0.
+> Consultez les notes de version lors des mises à jour, surtout pour les
+> changements incompatibles.
+
 ## Choisir son installation
 
 | | Utiliser la version en ligne | Auto-héberger HTB |
@@ -217,3 +222,10 @@ Les tests d’intégration PostgreSQL demandent une **base de test dédiée** vi
 `HTBD_TEST_DATABASE_URL` ; ne les lancez jamais sur une base de production.
 Consultez le [guide d’auto-hébergement](docs/self-hosting.fr.md) pour la
 configuration du serveur.
+
+## Communauté et sécurité
+
+- [Guide de contribution](CONTRIBUTING.md)
+- [Politique de sécurité](SECURITY.md)
+- [Changelog](CHANGELOG.md)
+- [Processus de release](docs/releasing.md)

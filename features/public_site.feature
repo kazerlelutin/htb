@@ -24,6 +24,12 @@ Feature: Site public HTB
     And elle comprend que les invitations, droits de projet et changements sont gérés de façon explicite et traçable
     And elle peut consulter les CGU, les mentions légales et la politique de confidentialité
 
+  Scenario: Le site présente HTB comme une bêta publique utilisable
+    Given une personne consulte la page d’accueil HTB en français ou en anglais
+    Then elle voit que HTB est en Public Beta
+    And elle comprend que les commandes, l’API et les intégrations peuvent évoluer avant la version 1.0
+    And elle comprend que HTB est prêt pour de vrais projets
+
   Scenario: Le site distingue les deux modes d'utilisation
     Given une personne consulte la page d’accueil HTB
     Then elle voit une option pour utiliser le serveur hébergé
